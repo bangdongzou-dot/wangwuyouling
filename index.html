@@ -1,4 +1,4 @@
-<!-- 凡人卡独立前端 · build 2026-10-31T19:07:48.452Z · v1.0.0 -->
+<!-- 凡人卡独立前端 · build 2026-10-31T19:29:16.780Z · v1.0.0 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -7232,7 +7232,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-bec956c08ec6" />
+    <meta name="fr-build-id" content="FRI-c440f0507e34" />
     <script>
       (function () {
         try {
@@ -78927,6 +78927,23 @@ function ceEvaluateOriginalTimelineReplayBoundary(sharedContext, summary) {
     replayMode = 'story_already_covered';
   }
 
+  /* shouldReplay 的含义要分清：它是「年表系统对这一轮的预判」，不是「原著补演要不要跑」。
+   *
+   * ★★ 2026-11-01 玩家说得很明确：
+   *   「边界判定是原著补演独立的流程，不管你原著指导前面怎么判定，你年表系统前面
+   *     怎么判定，我们原著补演要自己做判定来确定我们的档位。不需要前面告诉我，
+   *     我要自己来走一遍，所以任何回合都必须启动边界判定流程。」
+   *
+   * 原问题：下面这些分支把 shouldReplay 置为 false（尤其 before_start），
+   *   下游据此直接跳过整段补演边界判定 —— 于是开局在原著第一件事之前时，
+   *   面板里「补演边界判定」整块不出现，玩家看到的是「压根没跑」。
+   *
+   * 现在的分工：
+   *   · 这里仍然如实给出年表侧预判（shouldReplay / reason / replayMode），
+   *     因为界面上「本轮不补演」的说明、以及一些展示逻辑还要用。
+   *   · 但额外给一个 boundaryRequired 标记：原著补演**永远**要自己跑一遍边界判定，
+   *     无论这里判成什么。下游见到 boundaryRequired 就不许跳过。
+   */
   let shouldReplay = true;
   let reason = 'ready';
   if (!hasTimelineSourceData) {
@@ -78952,6 +78969,13 @@ function ceEvaluateOriginalTimelineReplayBoundary(sharedContext, summary) {
 
   return {
     shouldReplay,
+    // 原著补演边界判定恒定必须执行：这是玩家明确定的规则，不受上面任何预判影响。
+    boundaryRequired: true,
+    // 顺带把「为什么年表侧判成不补」变成可展示的一句话，供 UI 用；
+    // 这样即使不调模型也有东西可显示，不会出现空白面板。
+    boundaryReasonText: beforeStart
+      ? '本轮时间在原著第一件事之前，年表侧无可用参照；边界判定仍会独立执行并给出档位。'
+      : '',
     reason,
     replayMode,
     startTime,
@@ -89453,10 +89477,29 @@ async function ceRunOriginalTimelineStandalonePhase(options = {}) {
   sharedContext.originalTimelineRawPhaseResult = null;
   sharedContext.originalTimelineProposalArtifacts = null;
   sharedContext.originalTimelineStandaloneResult = null;
-  if (!replayBoundary || replayBoundary.shouldReplay === false) {
-    const boundaryReason = replayBoundary && replayBoundary.reason
-      ? String(replayBoundary.reason || '').trim()
-      : 'no_timeline';
+  /* ★★ 2026-11-01 玩家定：原著补演的边界判定是**独立流程，任何回合都必须跑**。
+   *
+   * 「不管原著指导怎么判、年表系统怎么判，原著补演要自己做判定来确定档位，
+   *   不需要前面告诉我，我要自己走一遍。」
+   *
+   * 原来这里：shouldReplay===false 就把整段年表判定标成「跳过」，
+   * 连模型都不调 —— 开局在原著第一件事之前（before_start）时，
+   * 「补演边界判定」整块在 UI 里根本不出现，玩家看到的是「压根没跑」。
+   *
+   * 现在：只有「本轮确实没有任何年表资料可用」（no_timeline 且非 before_start）
+   * 才真的跳过；其余情况（before_start / progress_completed / story_already_covered）
+   * 一律照常走判定，由边界判定自己给出 outsideRange 等档位结论。
+   * before_start 尤其必须走：玩家在原著之前开局，正是最需要看到
+   * 「年表之外 · 无需补演」这个明确结论的时候，而不是一片空白。
+   */
+  const boundaryReasonRaw = replayBoundary && replayBoundary.reason
+    ? String(replayBoundary.reason || '').trim()
+    : 'no_timeline';
+  const boundaryTrulySkipped = (!replayBoundary || replayBoundary.shouldReplay === false)
+    && boundaryReasonRaw === 'no_timeline'
+    && !(replayBoundary && (replayBoundary.boundaryRequired === true));
+  if (boundaryTrulySkipped) {
+    const boundaryReason = boundaryReasonRaw || 'no_timeline';
     sharedContext.originalTimelineStandaloneResult = ceBuildOriginalTimelineStandaloneResult({
       skipped: true,
       reason: boundaryReason
@@ -110859,6 +110902,27 @@ var CE_CORE = (function () {
         if(coveredEventIds.some(id=>!eventCodes.has(id)))return {ok:false,reason:'本轮覆盖事件编号不属于候选范围'};
         // 跨事件档要给出涉及人物：该档全员完整补演，逐人细节留给人物补演阶段。
         let involvedActors=[];
+        /* ★★ 2026-11-01 玩家说清了这套设计的理由：
+         *
+         *   「不管是年表系统的判定，还是原著指导的判定，都是只判定当前这个点，就只考虑
+         *     眼前；而原著补演判定的是一个区间，且能看账本和前因后果，对原著发展情况
+         *     全面了解，所以必须让他独立确定一次目前实际情况，尤其是看是否存在走廊壁
+         *     被打破的特殊情形。」
+         *
+         * 所以「跨事件档不逐人推演」这个优化本身没错（该档全员都要完整补演，破壁不额外
+         * 升级），但它不该连**破壁检查**一起跳过 —— 跨事件档恰恰是最可能出破壁的档位：
+         * 时间跨度最大、正文改动机会最多，最需要回头看「谁把走廊壁撞破了」。
+         *
+         * 原来 crossEvent 分支无条件 return，把 actorDecisions 置空，导致下面那条
+         * 「破壁须明确本人实际受影响及有因果的破壁理由」的校验永远执行不到。
+         *
+         * 现在：仍然不强制逐人覆盖（该档不需要），但只要模型**主动报了人**，
+         * 就必须按同一套走廊规则校验通过。一个人都没报 → 视为本轮无破壁，照旧直接返回。
+         *
+         * 注意：expected / refs 原来声明在下面（档位分支结束之后），跨事件档走到
+         * 逐人校验时它们已在作用域内，本来不需要移动 —— 上一版我把它们提前，反而
+         * 让「未启用档位逻辑」的旧分支取不到，报 expected is not defined。已还原原位。
+         */
         if(tier==='crossEvent'){
           const names=(context.actors || []).map(actor=>actor.name);
           const listed=Array.isArray(parsed.involvedActors)?parsed.involvedActors.filter(name=>typeof name==='string'&&name.trim()):[];
@@ -110866,8 +110930,30 @@ var CE_CORE = (function () {
           const outside=listed.filter(name=>!names.includes(name));
           if(outside.length)return {ok:false,reason:'跨年表事件档涉及人物超出本轮候选范围：'+outside.join('、')};
           involvedActors=listed;
-          // 该档全员已完整补演，破壁不再带来额外升级，不要求逐人 actorDecisions。
-          return {...facts,handled,influences,worldEvents,eventProgress:progressRows,...(progressNote?{eventProgressPending:progressPending,eventProgressNote:progressNote,eventProgressDetail:{missing:progress.missing||[],unexpected:progress.unexpected||[],invalid:progress.invalid||[]}}:{}),activatedEvents,eventWatches,uncertain:parsed.uncertain || [],turnAdvanceTier:tier,coveredEventIds,involvedActors,actorDecisions:[],additionalAffectedRefs:[],...(context.bodyTimeKnown===false?{bodyEndTime:parsed.bodyEndTime}:{})};
+          /* ★★ 2026-11-01 玩家说清了这套设计的理由：
+           *
+           *   「不管是年表系统的判定，还是原著指导的判定，都是只判定当前这个点，就只考虑
+           *     眼前；而原著补演判定的是一个区间，且能看账本和前因后果，对原著发展情况
+           *     全面了解，所以必须让他独立判定一次目前实际情况，尤其是看是否存在走廊壁
+           *     被打破的特殊情形。」
+           *
+           * 所以「跨事件档不逐人推演」这个优化本身没错（全员都要完整补演，破壁不额外升级），
+           * 但它不该连**破壁检查**一起跳过 —— 跨事件档恰恰是最可能出破壁的档位：
+           * 时间跨度最大、正文改动机会最多，最需要回头看「谁把走廊壁撞破了」。
+           *
+           * 原来这里是无条件 return，把 actorDecisions 置空，导致下面第 348 行那条
+           * 「破壁须明确本人实际受影响及有因果的破壁理由」的校验永远执行不到。
+           *
+           * 现在：仍然不强制逐人覆盖（该档不需要），但只要模型**主动报了人**，
+           * 就必须按同一套走廊规则校验通过，不许蒙混过关。
+           * 模型一个人都没报 → 视为本轮无破壁，照旧直接返回（省 token，行为不变）。
+           */
+          const crossRows=Array.isArray(parsed.actorDecisions)?parsed.actorDecisions.filter(row=>row&&typeof row==='object'):[];
+          if(!crossRows.length){
+            return {...facts,handled,influences,worldEvents,eventProgress:progressRows,...(progressNote?{eventProgressPending:progressPending,eventProgressNote:progressNote,eventProgressDetail:{missing:progress.missing||[],unexpected:progress.unexpected||[],invalid:progress.invalid||[]}}:{}),activatedEvents,eventWatches,uncertain:parsed.uncertain || [],turnAdvanceTier:tier,coveredEventIds,involvedActors,actorDecisions:[],additionalAffectedRefs:[],...(context.bodyTimeKnown===false?{bodyEndTime:parsed.bodyEndTime}:{})};
+          }
+          // 报了人就走完整的走廊/破壁校验（与其它档同一套规则）。
+          parsed.actorDecisions=crossRows;
         }
         turnAdvanceTier=tier;coveredTurnEventIds=coveredEventIds;crossEventActors=involvedActors;tierInvolvedActors=involvedActors;
         }
@@ -126247,7 +126333,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通重点演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-bec956c08ec6";
+var FR_BUILD_ID = "FRI-c440f0507e34";
 function frCanonMainStoryText(value,options={}) {
   var source=String(value || '').replace(/<!--FR_CANON_START-->[\s\S]*?<!--FR_CANON_END-->/g,'');
   // 补演语料只取正文；读取实际时间时显式保留正文头。两者不回写展示源。
@@ -129021,7 +129107,20 @@ function frCanonTraceRender(){
     var range=result.range||source.range,diff=result.diff||judgement.diff,musts=result.musts||judgement.musts;
     var pointerPlan=result.turnPlan||views.filter(v=>v.kind==='routing'||v.kind==='canonTurnPlan').at(-1)?.turnPlan||views.filter(v=>v.kind==='canonTurnPlan').at(-1);
     if(pointerPlan?.eventWindows?.length|| pointerPlan?.eventWatches?.length)frCanonRenderProgressPointer(section('进度指针',host),pointerPlan,result.eventProgress||[],storyAnalysis||result.storyAnalysis);
-    if(storyAnalysis||selection||diff||musts||range||retrieval){
+    /* ★★ 2026-11-01 玩家：「这种在原著故事之前的时间点也应该启动原著补演的边界判定
+     *    流程才对啊，怎么展示ui里完全没有。」
+     *
+     * 原来这里靠「有没有数据」决定要不要画这一块：
+     *   if(storyAnalysis||selection||diff||musts||range||retrieval){ ... }
+     * 开局在原著第一件事之前时这些全空 → 整块不画 → 玩家看到一片空白，
+     * 分不清是「跑了但结论是不用补」还是「压根没跑」。
+     *
+     * 现在：补演阶段的边界判定**恒画**。
+     *   · 有数据 → 照旧展示档位、时间跨度、年表。
+     *   · 没数据 → 也给一块明确的结论，把「为什么没有可补的」写出来，
+     *     而不是让面板留白。这两件事必须让玩家能分辨。
+     */
+    {
       var boundary=section('补演边界判定',host);
       // 与原著指导同一套视觉：顶部情境条 + 档位徽章，下面按档位决定展开多少。
       // 三档的信息量差别极大，硬要统一排版只会让档① 塞满没用的逐人说明、
@@ -129031,6 +129130,15 @@ function frCanonTraceRender(){
       var tierChip=el('span',tierInfo.label,'fr-canon-tier-chip fr-canon-tier-'+tierInfo.tone);
       tierBar.appendChild(tierChip);
       boundary.appendChild(tierBar);
+      // 完全没有可用判定材料时的兜底结论：明确说清「为什么没东西可补」。
+      var noMaterial=!(storyAnalysis||selection||diff||musts||range||retrieval);
+      if(noMaterial&&!tierInfo.tier){
+        var none=el('p',undefined,'fr-canon-group-item');
+        none.appendChild(el('span','','fr-canon-group-text'));
+        none.lastChild.textContent='本轮没有可用的年表参照：时间可能落在原著第一件事之前，'
+          +'或已过最后一件事的参考终点。这属于「年表之外」，不是流程没跑。';
+        boundary.appendChild(none);
+      }
       function dateLabel(value){return String(value||'').split(/[\/|]/)[0].trim();}
       if(range){var dates=el('div','','fr-canon-boundary-dates');dates.appendChild(el('small','本轮时间跨度',''));dates.appendChild(el('strong',dateLabel(range.start)+' → '+dateLabel(range.end),''));boundary.appendChild(dates);}
       var eventWindows=pointerPlan?.eventWindows||[],clock=typeof ceBridgeCore==='function'?ceBridgeCore()?.interval?.parseTimePoint:null,now=clock?clock(range?.end):null;
@@ -130063,6 +130171,47 @@ function frReplayDependency(req,selection){
 async function frCeOwnsRequests(){try{var config=await loadConcurrentEvolutionConfig();if(!(config&& config.enabled&& config.apiUrl&& config.apiKey&& config.apiModel))return false;return frCeRequestOwnership(config,await getActiveConcurrentEvolutionPreset()).ok;}catch(_){return false;}}
 function frReplayFail(label,error){if(!frReplaySession)return;frReplaySession.invalid=frReplaySession.invalid||label+'：'+String(error&& error.message||error);var reason=new Error(frReplaySession.invalid);reason.name='ReplayDependencyError';reason.code='FR_REPLAY_FAILURE';frReplaySession.controller.abort(reason);}
 
+/* 按「阶段名 + 人物」宽松匹配可复用结果。
+ *
+ * ★★ 2026-11-01 玩家定：局部重跑时没选中的阶段，不该因为 cacheKey 差一个字节就整轮中止。
+ *
+ * 安全性边界（很重要，不是无脑复用）：
+ *   · 只认同一个 stageKey —— 不同阶段的结果语义完全不同，绝不混用。
+ *   · 人物集合必须一致 —— 少人多人都算材料不同，宁可重算。
+ *   · 只认 status==='returned' 且确实带 choices[0].message.content 的。
+ *   · 从新到旧取最近一条 —— 越接近当前状态越可信。
+ * 满足不了就返回 null，让调用方照旧去重算（而不是中止）。
+ */
+function sameStageReusable(req,session){
+  if(!req||!req.stageKey||!session||!Array.isArray(session.cache))return null;
+  /* 黑名单：这些阶段的结果带**全局状态**，宽松复用会造成重复累加或覆盖别人。
+   *
+   * · 落地依据提取 —— 可能返回 eventProgress（全局事件进度），一旦复用旧值
+   *   就相当于把「上次的进度」当成「这次也这样」，会重复记账。上面
+   *   frReplayProjectInput 里也明确把「事件进度核验不可投影」单独拦掉了，
+   *   这里保持一致：宁可不复用，宁可多调一次模型。
+   * · vectorContext —— 检索前置输入，本来就该按当前配置重查，不复用。
+   * 其余阶段（人物边界判定、生平旧账、各类正文）都是「按人物独立产出」，
+   * 同一批人物用上次结果不会污染全局状态。
+   */
+  var BLOCKED=['落地依据提取','vectorContext'];
+  if(BLOCKED.indexOf(req.stageKey)>=0)return null;
+  var want=frReplayRequestNames(req).slice().sort().join('、');
+  for(var i=session.cache.length-1;i>=0;i--){
+    var old=session.cache[i];
+    if(!old||old.stageKey!==req.stageKey)continue;
+    if(old.status!=='returned')continue;
+    if(!old.response||!Array.isArray(old.response.choices))continue;
+    if(typeof old.response.choices[0]?.message?.content!=='string')continue;
+    // 人物集合必须一致：req 与缓存项都按同样规则摊平成「名字、名字」再比。
+    var oldReq={subject:old.subject,targetId:old.targetId,targetIds:old.targetIds};
+    var have=frReplayRequestNames(oldReq).slice().sort().join('、');
+    if(want!==have)continue;
+    return old;
+  }
+  return null;
+}
+
 function frReplayResolve(req, prompt) {
   var session=req&& req._run&& req._run._replay;
   if(!session)return {reused:false,prompt:prompt};
@@ -130081,6 +130230,33 @@ function frReplayResolve(req, prompt) {
   // 它没被复用上时不能直接中止——前置输入缺了就该去补，不是停下来。
   // 玩家 2026-10-30 定（A 方案）：旧资料因检索配置变化失效时，按当前配置重新查一次。
   var prerequisiteInput=req.stageKey==='vectorContext';
+  /* ★★ 2026-11-01 玩家：「依赖材料已变化或没有可复用返回」又出现了，还要修完。
+   *
+   * 原来的逻辑：
+   *   if(!selected && !dependent && !prerequisiteInput) → 直接抛错中止整轮
+   *
+   * 病根：把两件性质完全不同的事混成了一条错误——
+   *   ① 「这个阶段玩家没选中重跑」      → 完全正常，应该照旧复用上次结果。
+   *   ② 「这个阶段材料真的变了、必须重算」→ 才该提示，而且也不该整轮中止。
+   * 于是玩家点「继续本轮补演」时，只要缓存 key 有一个字对不上（cacheKey 是整份
+   * messages 的哈希，措辞微调、时间戳、名单顺序变化都会变），就整轮停死，
+   * 面板只甩一句「依赖材料已变化」，玩家完全无从下手——这就是反复「修了又出」的原因。
+   *
+   * 玩家 2026-11-01 定（放宽复用）：没选中的阶段按「阶段名 + 人物」匹配复用。
+   *   · 同一阶段、同一批人物、上次成功返回过 → 直接用上次结果，不重问模型。
+   *   · 匹配不到才真的去重算，而不是中止。
+   *   · 选中的阶段照常重跑，绝不拿缓存糊弄（没有偷扩大重跑范围）。
+   */
+  if(!selected&&!dependent&&!prerequisiteInput){
+    var loose=sameStageReusable(req,session);
+    if(loose){
+      req.reused=true;req.sourceRequestId=loose.id;req.projected=true;
+      if(typeof frCanonTraceEvent==='function'&&req._run){
+        try{frCanonTraceEvent(req._run,'reuse-loose','按阶段+人物复用上次结果：'+req.stageKey+' / '+(req.subject||req.targetId||''),{stage:req.stageKey,subject:req.subject||req.targetId||'',sourceRequestId:loose.id});}catch(_){}
+      }
+      return {reused:true,response:structuredClone(loose.response)};
+    }
+  }
   if(!selected&&!dependent&&!prerequisiteInput){
     // 玩家 2026-10-30：这条报错反复出现（「依赖材料已变化」），但玩家根本看不出
     // 到底是哪一步变了。以前只有一句结论，排查全靠猜——这正是「修了四次没进展」的原因。
@@ -130097,17 +130273,24 @@ function frReplayResolve(req, prompt) {
       selected:!!selected,
       dependent:!!dependent
     };
-    console.warn('[补演重跑] 无法复用，明细：', diag);
+    console.warn('[补演重跑] 无法复用，改为重算：', diag);
     if(typeof frCanonTraceEvent==='function'&&req._run){
-      try{frCanonTraceEvent(req._run,'reuse-miss-detail','无法复用明细：阶段='+diag.stage+' 缓存总数='+diag.cacheTotal+' 同阶段='+diag.cacheSameStage+' 选中='+diag.selected,diag);}catch(_){}
+      try{frCanonTraceEvent(req._run,'reuse-miss-recalc','无法复用，改为重算：阶段='+diag.stage+' 缓存总数='+diag.cacheTotal+' 同阶段='+diag.cacheSameStage,diag);}catch(_){}
     }
-    session.invalid='依赖材料已变化或没有可复用返回：'+(req.subject||req.targetId||req.stageKey)
-      +'（该阶段缓存 '+diag.cacheSameStage+' 条、全部缓存 '+diag.cacheTotal+' 条）'
-      +'。本次停止，未扩大到其他人物或阶段。';
-    var blocked=new Error(session.invalid);blocked.name='ReplayDependencyError';blocked.code='FR_REPLAY_PREREQUISITE';
-    blocked.diag=diag;
-    var targets=frReplayRequestTargets(req);blocked.retrySelection={stages:targets.length?[]:[req.stageKey],scopes:targets.map(function(id){return req.stageKey+':'+id;})};
-    blocked.stage=req.stageKey;blocked.subject=req.subject||'';session.prerequisite=blocked;if(session.controller)session.controller.abort(blocked);throw blocked;
+    /* ★★ 2026-11-01 玩家定：这里**不再中止**。
+     *
+     * 原来这里 throw 一条 ReplayDependencyError 并 abort 整个 session，
+     * 面板只剩一句「依赖材料已变化或无可用返回」——玩家既看不懂，也没法继续。
+     * 这是同一句报错反复出现四次的根源：它把「材料变了，需要重算」当成了致命错误。
+     *
+     * 现在：材料对不上就是该重算，让它自然往下走到下面 return {reused:false, prompt}。
+     * 「未扩大到其他人物或阶段」这条安全约束仍然成立 —— 因为是否重算由 selected 决定，
+     * 只有玩家选中的阶段才会走真正的重算分支，没选中的已经在上面的 sameStageReusable 里复用掉了。
+     */
+    session.recalcFallback=(session.recalcFallback||0)+1;
+    if(typeof frCanonTraceEvent==='function'&&req._run){
+      try{frCanonTraceEvent(req._run,'dependency','材料已变化，按当前状态重算本阶段',{stage:req.stageKey,subject:req.subject||req.targetId||''});}catch(_){}
+    }
   }
   if(!selected&&prerequisiteInput&& typeof frCanonTraceEvent==='function')frCanonTraceEvent(req._run,'dependency','前置资料无可用返回，按当前配置重新检索',{stage:req.stageKey});
   req.reused=false;req.dependencyRecalculated=!selected;
