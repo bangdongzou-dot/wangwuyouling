@@ -1,4 +1,4 @@
-<!-- 凡人卡独立前端 · build 2026-10-31T19:29:16.780Z · v1.0.0 -->
+<!-- 凡人卡独立前端 · build 2026-10-31T19:39:25.477Z · v1.0.0 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -6790,6 +6790,15 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       '  display:block;height:100%;width:0;background:#ffd700;',
       '  transition:width .2s ease;',
       '}',
+      /* 下载中的详细数据行：已下载/总大小 · 速度 · 剩余时间
+         2026-11-01 玩家：「能让玩家直观看到更新下载进度而已，不然没反馈都不知道在不在
+         下载和更新。」——光有个百分比不够，玩家还想知道「多大、多快、还要多久」。 */
+      '#fr-update-bar .fr-up-stats{',
+      '  display:flex;gap:10px;margin-top:5px;font-size:11.5px;color:#8f887a;',
+      '  font-variant-numeric:tabular-nums;white-space:nowrap;',
+      '}',
+      '#fr-update-bar .fr-up-stats span{flex:0 0 auto}',
+      '#fr-update-bar .fr-up-pct{color:#ffd700;font-weight:600}',
     ].join('\n');
     (document.head || document.documentElement).appendChild(st);
   }
@@ -6801,8 +6810,26 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
   var btnLater = null;
   var progWrap = null;
   var progBar = null;
+  var progsWrap2 = null;   // 统计行容器
+  var statPct = null;
+  var statSize = null;
+  var statSpeed = null;
+  var statEta = null;
   var hideTimer = null;
   var busy = false;
+
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+  function fmtEta(sec) {
+    sec = Number(sec);
+    if (!(sec >= 0)) return '';
+    if (sec < 60) return '约 ' + Math.max(1, Math.round(sec)) + ' 秒';
+    return '约 ' + Math.round(sec / 60) + ' 分 ' + Math.round(sec % 60) + ' 秒';
+  }
 
   function buildBar() {
     if (bar) return bar;
@@ -6828,10 +6855,27 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     progBar = document.createElement('i');
     prog.appendChild(progBar);
     progWrap = prog;
+
+    // 统计行：百分比 · 已下载/总大小 · 速度 · 剩余时间
+    var stats = document.createElement('div');
+    stats.className = 'fr-up-stats';
+    statPct = document.createElement('span');
+    statPct.className = 'fr-up-pct';
+    statSize = document.createElement('span');
+    statSpeed = document.createElement('span');
+    statEta = document.createElement('span');
+    stats.appendChild(statPct);
+    stats.appendChild(statSize);
+    stats.appendChild(statSpeed);
+    stats.appendChild(statEta);
+    progsWrap2 = stats;
+
     txt.appendChild(textEl);
     txt.appendChild(noteEl);
     txt.appendChild(prog);
+    txt.appendChild(stats);
     progWrap.style.display = 'none';
+    stats.style.display = 'none';
 
     btnUpdate = document.createElement('button');
     btnUpdate.type = 'button';
@@ -6884,6 +6928,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
       bar = null; textEl = null; noteEl = null; btnUpdate = null; btnLater = null;
       progWrap = null; progBar = null;
+      progsWrap2 = null; statPct = null; statSize = null; statSpeed = null; statEta = null;
     }, 400);
   }
 
@@ -6893,6 +6938,42 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     progBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
   }
 
+  /* 用主进程推来的真实数据刷新进度条与统计行。
+   * data: { progress, received, total, speed, eta, done } */
+  function applyProgress(data) {
+    if (!data) return;
+    var pct = Math.max(0, Math.min(100, Math.round(Number(data.progress) || 0)));
+    setProgress(pct);
+    if (!progsWrap2) return;
+    progsWrap2.style.display = 'flex';
+    if (statPct) statPct.textContent = pct + '%';
+    var total = Number(data.total) || 0;
+    var received = Number(data.received) || 0;
+    if (statSize) {
+      // 不知道总大小时只显示已下载，别编一个假的总量出来
+      statSize.textContent = total > 0
+        ? fmtBytes(received) + ' / ' + fmtBytes(total)
+        : '已下载 ' + fmtBytes(received);
+    }
+    if (statSpeed) {
+      var sp = Number(data.speed) || 0;
+      statSpeed.textContent = sp > 0 ? fmtBytes(sp) + '/s' : '';
+    }
+    if (statEta) {
+      // 没有总量或速度还没稳定时，说「计算中」，别显示 0 秒骗人
+      statEta.textContent = (total > 0 && Number(data.eta) >= 0) ? fmtEta(data.eta) : '';
+    }
+  }
+
+  function resetProgressUi() {
+    if (progsWrap2) progsWrap2.style.display = 'none';
+    if (statPct) statPct.textContent = '';
+    if (statSize) statSize.textContent = '';
+    if (statSpeed) statSpeed.textContent = '';
+    if (statEta) statEta.textContent = '';
+    setProgress(0);
+  }
+
   function onUpdate() {
     if (busy) return;
     busy = true;
@@ -6900,20 +6981,39 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     btnLater.style.display = 'none';
     textEl.textContent = '正在下载更新…';
     noteEl.style.display = 'none';
-    setProgress(3);
+    setProgress(1);
+    if (progsWrap2) { progsWrap2.style.display = 'flex'; }
+    if (statPct) statPct.textContent = '0%';
 
-    // 进度用轮询 info()，只在**下载期间**跑，结束立刻停 —— 平时零开销
-    var timer = setInterval(function () {
-      window.frUpdate.info().then(function (s) {
-        if (s && s.downloading && s.progress) setProgress(s.progress);
-      }).catch(function () {});
-    }, 400);
+    /* 2026-11-01 玩家：「能让玩家直观看到更新下载进度而已，不然没反馈都不知道
+     * 在不在下载和更新。」
+     *
+     * 原来这里是 setInterval 每 400ms 问一次 info()，而主进程 progress 只有
+     * 0 和 100 两个值 —— 进度条基本一直停在 3%，等于没有反馈，还白白起了个轮询。
+     *
+     * 现在改成订阅主进程推来的真实字节进度，零轮询。 */
+    var offProgress = null;
+    try {
+      if (typeof window.frUpdate.onProgress === 'function') {
+        offProgress = window.frUpdate.onProgress(function (d) { applyProgress(d); });
+      }
+    } catch (e) { /* 订阅失败就退回下面的一次性 info() 兜底 */ }
+
+    function stopWatching() {
+      if (typeof offProgress === 'function') {
+        try { offProgress(); } catch (e) {}
+        offProgress = null;
+      }
+    }
 
     window.frUpdate.apply().then(function (r) {
-      clearInterval(timer);
+      stopWatching();
       busy = false;
       if (r && r.ok) {
         setProgress(100);
+        if (statPct) statPct.textContent = '100%';
+        if (statSpeed) statSpeed.textContent = '';
+        if (statEta) statEta.textContent = '';
         textEl.textContent = '更新完成，重启后生效';
         noteEl.textContent = '存档不受影响';
         noteEl.style.display = 'block';
@@ -6923,18 +7023,18 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
         textEl.textContent = '更新失败';
         noteEl.textContent = String((r && r.reason) || '未知错误');
         noteEl.style.display = 'block';
-        progWrap.style.display = 'none';
+        resetProgressUi();
         btnUpdate.disabled = false;
         btnUpdate.textContent = '重试';
         btnLater.style.display = '';
       }
     }).catch(function (e) {
-      clearInterval(timer);
+      stopWatching();
       busy = false;
       textEl.textContent = '更新失败';
       noteEl.textContent = String((e && e.message) || e);
       noteEl.style.display = 'block';
-      progWrap.style.display = 'none';
+      resetProgressUi();
       btnUpdate.disabled = false;
       btnUpdate.textContent = '重试';
       btnLater.style.display = '';
