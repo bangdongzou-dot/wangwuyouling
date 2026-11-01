@@ -1,9 +1,13 @@
-<!-- 凡人卡独立前端 · build 2026-11-01T04:33:34.432Z · v1.0.1 -->
+<!-- 凡人卡独立前端 · build 2026-11-01T05:43:26.478Z · v1.0.2 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
 <script>
-window.__FR_APP_VERSION__="1.0.1";
+window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
+</script>
+
+<script>
+window.__FR_APP_VERSION__="1.0.2";
 </script>
 
 <script>
@@ -6103,26 +6107,66 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
   /* ---------------------------------------------------------------------
    * 更新日志
    *
-   * 为什么不硬编码在代码里：发版时由 scripts/make-version.mjs 把 CHANGELOG
-   * 写进 version.json，页面从远端拉。这样改日志不用重新打包。
-   * 但远端拉不到时（第一次用、断网、还没配 GitHub）要有个内置兜底，
-   * 否则页面空着很难看。
-   * ------------------------------------------------------------------- */
-  /* ---------------------------------------------------------------------
-   * 更新日志
+   * 【为什么代码里是空的】
+   *   发版时由 scripts/make-version.mjs 把条目累积进 发布包/CHANGELOG.json，
+   *   再写进 version.json 的 changelog；assemble.mjs 构建时又把整份
+   *   CHANGELOG.json 烤成 window.__FR_CHANGELOG_BUILTIN__ 塞进产物。
+   *   所以运行时有三层来源（见 pickChangelog），这里不需要硬编码。
    *
-   * 【为什么是空的】
-   *   玩家口径：「这一版更新内容删了，目前还没有更新过一次，不要写之前的内容」。
-   *   之前把开发期间的修复记录当成「更新日志」列了出来，但这些从没对外发布过，
-   *   玩家一版都没更新过，列出来会让人误以为已经发过好多版。
-   *   → 首发版本不写任何历史条目，页面显示「暂无更新日志」。
-   *
-   * 【以后怎么加】
-   *   发版时由 scripts/make-version.mjs 传第 4 个参数（用 | 分隔多条），
-   *   它会把条目累积进 发布包/CHANGELOG.json，并写进 version.json 的 changelog。
-   *   页面打开时从远端读，改日志不用重新打包。
+   * 【历史更新日志必须永远保留】玩家 2026-11-01：
+   *   「我希望更新日志能永远保留，玩家一直能看到所有历史更新日志，
+   *     但是默认显示最新的一版在更新日志面板那里。」
+   *   → 全部版本都渲染，最新的排最上面并默认展开，旧版本默认折叠。
    * ------------------------------------------------------------------- */
   var BUILTIN_CHANGELOG = [];
+
+  /* 从三层来源里挑最好的一份：
+   *   ① 远端 version.json 的 changelog（最新，含刚发的版本）
+   *   ② 构建时烤进产物的 window.__FR_CHANGELOG_BUILTIN__（离线/浏览器/安卓可用）
+   *   ③ 代码内常量（最后兜底，正常情况为空）
+   * 三者都按版本号从新到旧排序并去重，保证「历史永不丢失」。
+   */
+  function pickChangelog() {
+    var remote = [];
+    if (window.__FR_CHANGELOG__ && window.__FR_CHANGELOG__.length) {
+      remote = window.__FR_CHANGELOG__;
+    } else if (window.__FR_CHANGELOG_BUILTIN__ && window.__FR_CHANGELOG_BUILTIN__.length) {
+      remote = window.__FR_CHANGELOG_BUILTIN__;
+    } else if (BUILTIN_CHANGELOG && BUILTIN_CHANGELOG.length) {
+      remote = BUILTIN_CHANGELOG;
+    }
+
+    // 归一化 + 过滤脏数据（一条坏数据不能把整块渲染搞挂）
+    var list = [];
+    (remote || []).forEach(function (rel) {
+      if (!rel || !rel.version) return;
+      var items = (rel.items || []).map(function (s) { return String(s); });
+      if (!items.length) return;
+      list.push({ version: String(rel.version), date: String(rel.date || ''), items: items });
+    });
+
+    // 按版本号降序（新的在前），同版本去重
+    var seen = {};
+    list = list.filter(function (r) {
+      if (seen[r.version]) return false;
+      seen[r.version] = 1;
+      return true;
+    });
+    list.sort(function (a, b) { return cmpVersion(b.version, a.version); });
+    return list;
+  }
+
+  /* 版本号比较：1.0.10 > 1.0.9（按数字段比，不能直接字符串比） */
+  function cmpVersion(a, b) {
+    var pa = String(a || '').split('.').map(function (x) { return parseInt(x, 10) || 0; });
+    var pb = String(b || '').split('.').map(function (x) { return parseInt(x, 10) || 0; });
+    var n = Math.max(pa.length, pb.length);
+    for (var i = 0; i < n; i++) {
+      var d = (pa[i] || 0) - (pb[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  }
 
   /* 当前版本号。
    *
@@ -6159,41 +6203,64 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       '#fr-version-panel.fr-vp-show{display:flex}',
 
       '#fr-vp-card{',
-      '  width:min(720px,92vw);max-height:88%;',
+      '  position:relative;',
+      '  width:min(760px,92vw);max-height:88%;',
       '  display:flex;flex-direction:column;',
-      '  background:linear-gradient(160deg,#201d18 0%,#171512 100%);',
-      '  border:1px solid rgba(255,215,0,.32);border-radius:16px;',
-      '  box-shadow:0 24px 70px rgba(0,0,0,.72),0 0 0 1px rgba(255,215,0,.06) inset;',
+      '  background:',
+      '    radial-gradient(120% 80% at 50% 0%,rgba(58,48,32,.5) 0%,rgba(0,0,0,0) 58%),',
+      '    linear-gradient(168deg,#242019 0%,#1b1814 46%,#141210 100%);',
+      '  border:1px solid rgba(214,178,102,.42);border-radius:15px;',
+      '  box-shadow:',
+      '    0 28px 80px rgba(0,0,0,.8),',
+      '    0 0 0 1px rgba(226,190,110,.09) inset,',
+      '    0 0 46px rgba(180,142,62,.13),',
+      '    inset 0 1px 0 rgba(255,235,180,.09);',
       '  color:#ece4d4;overflow:hidden;',
+      '}',
+      /* 内嵌一圈细致的金线（回纹框的简化），让卡片有「装裱」感 */
+      '#fr-vp-card::before{',
+      '  content:"";position:absolute;inset:6px;pointer-events:none;z-index:0;',
+      '  border:1px solid rgba(196,160,88,.16);border-radius:10px;',
+      '}',
+      /* 顶部一抹灵光，像玉牌受光照亮 */
+      '#fr-vp-card::after{',
+      '  content:"";position:absolute;left:50%;top:-1px;transform:translateX(-50%);',
+      '  width:58%;height:1px;pointer-events:none;',
+      '  background:linear-gradient(90deg,rgba(226,190,110,0),rgba(255,224,150,.72),rgba(226,190,110,0));',
+      '  box-shadow:0 0 16px rgba(255,214,130,.45);',
       '}',
 
       /* 头部 */
       '#fr-vp-head{',
       '  display:flex;align-items:center;gap:12px;',
-      '  padding:20px 24px 16px;border-bottom:1px solid rgba(255,215,0,.14);',
-      '  flex:0 0 auto;',
+      '  padding:21px 26px 16px;',
+      '  border-bottom:1px solid rgba(200,164,88,.18);',
+      '  flex:0 0 auto;position:relative;z-index:1;',
       '}',
       '#fr-vp-head h3{',
-      '  margin:0;font-size:20px;font-weight:600;color:#ffd700;',
-      '  letter-spacing:.5px;flex:1 1 auto;',
+      '  margin:0;font-size:20px;font-weight:600;color:#f0d489;',
+      '  letter-spacing:3px;flex:1 1 auto;',
+      '  text-shadow:0 0 18px rgba(226,190,110,.32);',
       '}',
       '#fr-vp-close{',
       '  width:32px;height:32px;flex:0 0 auto;cursor:pointer;',
-      '  border-radius:8px;border:1px solid rgba(255,255,255,.12);',
-      '  background:transparent;color:#9c968a;font-size:18px;line-height:1;',
+      '  border-radius:7px;border:1px solid rgba(200,164,88,.24);',
+      '  background:rgba(255,255,255,.02);color:#a89c84;font-size:17px;line-height:1;',
       '  transition:all .18s ease;display:flex;align-items:center;justify-content:center;',
       '}',
-      '#fr-vp-close:hover{background:rgba(255,255,255,.08);color:#fff}',
+      '#fr-vp-close:hover{',
+      '  background:rgba(226,190,110,.14);color:#f0d489;border-color:rgba(226,190,110,.5);',
+      '}',
 
       /* 版本信息区 */
-      '#fr-vp-body{padding:22px 24px;overflow-y:auto;flex:1 1 auto;min-height:0}',
+      '#fr-vp-body{padding:22px 26px 26px;overflow-y:auto;flex:1 1 auto;min-height:0;position:relative;z-index:1}',
       '#fr-vp-ver-row{',
       '  display:flex;align-items:center;gap:14px;flex-wrap:wrap;',
-      '  padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.07);',
+      '  padding-bottom:18px;border-bottom:1px solid rgba(200,164,88,.13);',
       '}',
       '#fr-vp-ver{',
-      '  font-size:30px;font-weight:700;color:#ffd700;',
-      '  text-shadow:0 0 18px rgba(255,215,0,.34);letter-spacing:.5px;',
+      '  font-size:30px;font-weight:700;color:#f0d489;',
+      '  text-shadow:0 0 20px rgba(226,190,110,.38);letter-spacing:1px;',
       '}',
       '#fr-vp-ver-tag{',
       '  font-size:12px;padding:3px 10px;border-radius:20px;',
@@ -6214,34 +6281,153 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       '#fr-vp-status.fr-vp-err{color:#ff8f8f}',
       '#fr-vp-status.fr-vp-err .fr-vp-dot{background:#ff8f8f}',
 
-      /* 更新日志 */
+      /* 更新日志标题：做成「古籍卷首」的样子，两侧云纹收尾 */
       '#fr-vp-log-title{',
-      '  margin:20px 0 12px;font-size:14px;color:#a9a294;',
-      '  display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;',
+      '  margin:22px 0 14px;font-size:14.5px;color:#c8b285;',
+      '  display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;',
+      '  font-family:"KaiTi","STKaiti","Noto Serif SC",serif;',
+      '  letter-spacing:3px;',
       '}',
       '#fr-vp-log-title::after{',
-      '  content:"";flex:1 1 auto;height:1px;background:rgba(255,255,255,.08);',
+      '  content:"";flex:1 1 auto;height:1px;',
+      '  background:linear-gradient(90deg,rgba(200,164,88,.34),rgba(200,164,88,.05) 75%,rgba(200,164,88,0));',
       '}',
       '#fr-vp-log-title .fr-vp-caret{',
-      '  transition:transform .2s ease;font-size:11px;color:#6f6a60;',
+      '  transition:transform .2s ease;font-size:10px;color:#8a7d64;',
       '}',
       '#fr-vp-log-title.fr-vp-collapsed .fr-vp-caret{transform:rotate(-90deg)}',
       '#fr-vp-log{display:flex;flex-direction:column;gap:16px}',
       '#fr-vp-log.fr-vp-collapsed{display:none}',
+
+      /* ── 玉简卡：更新日志的主体，做成一块温润的青玉简 ──────────────────
+       * 玩家 2026-11-01：「ui做好看有质感一些，符合凡人的修仙风格」
+       * 取意：修仙界传讯用「玉简」，青玉为底、金丝为纹。
+       * 用渐变模拟玉的透光感，内阴影做厚度，外描边一圈淡金。
+       * ──────────────────────────────────────────────────────────── */
       '.fr-vp-rel{',
-      '  border-left:2px solid rgba(255,215,0,.3);padding-left:14px;',
+      '  position:relative;border-radius:11px;padding:17px 19px 16px;',
+      '  background:',
+      '    radial-gradient(140% 90% at 18% 0%,rgba(96,124,112,.3) 0%,rgba(48,66,60,.16) 38%,rgba(0,0,0,0) 72%),',
+      '    linear-gradient(158deg,rgba(38,52,48,.96) 0%,rgba(27,38,35,.98) 52%,rgba(20,29,27,1) 100%);',
+      '  border:1px solid rgba(196,166,102,.3);',
+      '  box-shadow:',
+      '    inset 0 1px 0 rgba(255,255,255,.07),',
+      '    inset 0 0 24px rgba(120,160,140,.06),',
+      '    inset 0 -1px 0 rgba(0,0,0,.45),',
+      '    0 3px 16px rgba(0,0,0,.38);',
+      '  overflow:hidden;',
+      '}',
+      /* 玉石上的一层极淡斜光，让平面有「被照亮」的立体感 */
+      '.fr-vp-rel::before{',
+      '  content:"";position:absolute;inset:0;pointer-events:none;',
+      '  background:linear-gradient(118deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,0) 40%);',
+      '}',
+      /* 左上角一抹金光，像玉简上的灵纹 */
+      '.fr-vp-rel::after{',
+      '  content:"";position:absolute;left:0;top:0;width:150px;height:150px;pointer-events:none;',
+      '  background:radial-gradient(circle at 0% 0%,rgba(255,215,0,.13),rgba(255,215,0,0) 64%);',
+      '}',
+      /* 最新一版：金边更亮 + 更强的外发光，一眼锁定「这是当前这版」 */
+      '.fr-vp-rel-latest{',
+      '  border-color:rgba(232,196,116,.58);',
+      '  box-shadow:',
+      '    inset 0 1px 0 rgba(255,238,186,.13),',
+      '    inset 0 0 28px rgba(140,180,158,.08),',
+      '    inset 0 -1px 0 rgba(0,0,0,.45),',
+      '    0 4px 22px rgba(0,0,0,.46),',
+      '    0 0 30px rgba(206,168,84,.14);',
+      '}',
+      /* 历史版本：玉色压暗偏灰，弱化但永远保留 */
+      '.fr-vp-rel-past{',
+      '  background:',
+      '    linear-gradient(158deg,rgba(28,32,30,.92) 0%,rgba(21,25,23,.96) 58%,rgba(16,19,17,.98) 100%);',
+      '  border-color:rgba(150,140,110,.17);',
       '}',
       '.fr-vp-rel-h{',
-      '  display:flex;align-items:baseline;gap:10px;margin-bottom:6px;',
+      '  display:flex;align-items:baseline;gap:10px;margin-bottom:10px;',
+      '  position:relative;z-index:1;',
       '}',
-      '.fr-vp-rel-v{font-size:15px;font-weight:600;color:#ffe680}',
-      '.fr-vp-rel-d{font-size:12px;color:#7d786e}',
-      '.fr-vp-rel ul{margin:0;padding-left:18px}',
+      '.fr-vp-rel-h-clickable{cursor:pointer;user-select:none}',
+      '.fr-vp-rel-h-clickable:hover .fr-vp-rel-v{color:#ffe680}',
+      /* 版本号用楷体，字距拉开，像古籍卷头题签 */
+      '.fr-vp-rel-v{',
+      '  font-family:"KaiTi","STKaiti","Noto Serif SC",serif;',
+      '  font-size:18px;font-weight:700;color:#edcd85;',
+      '  letter-spacing:2.5px;',
+      '  text-shadow:0 0 14px rgba(220,178,92,.3),0 1px 0 rgba(0,0,0,.5);',
+      '}',
+      '.fr-vp-rel-past .fr-vp-rel-v{',
+      '  color:#9c927e;font-size:16px;text-shadow:none;letter-spacing:2px;',
+      '}',
+      /* 「最新」小徽章：做成一枚金印 */
+      '.fr-vp-rel-badge{',
+      '  font-size:10.5px;line-height:1;padding:4px 7px;border-radius:3px;',
+      '  background:linear-gradient(180deg,rgba(226,190,110,.22),rgba(180,145,70,.14));',
+      '  color:#f0d38a;border:1px solid rgba(226,190,110,.5);',
+      '  letter-spacing:1px;box-shadow:0 0 10px rgba(210,172,88,.16);',
+      '}',
+      '.fr-vp-rel-d{font-size:12px;color:#7a7264;letter-spacing:.3px}',
+
+      /* 条目列表：每条前面加一枚小小的菱形灵纹，替代默认圆点 */
+      '.fr-vp-rel ul{',
+      '  margin:0;padding-left:2px;list-style:none;position:relative;z-index:1;',
+      '}',
       '.fr-vp-rel li{',
-      '  font-size:13px;line-height:1.75;color:#c4bdb0;',
-      '  margin-bottom:2px;word-break:break-word;',
+      '  position:relative;padding-left:18px;margin-bottom:8px;',
+      '  font-family:"KaiTi","STKaiti","Noto Serif SC",serif;',
+      '  font-size:14.5px;line-height:1.92;color:#cdc6b6;',
+      '  word-break:break-word;letter-spacing:.4px;',
       '}',
+      '.fr-vp-rel li::before{',
+      '  content:"";position:absolute;left:2px;top:.66em;',
+      '  width:5px;height:5px;transform:rotate(45deg);',
+      '  background:rgba(200,168,92,.62);',
+      '  box-shadow:0 0 5px rgba(200,168,92,.3);',
+      '}',
+      '.fr-vp-rel li:last-child{margin-bottom:0}',
+      '.fr-vp-rel-past li{color:#948d80;font-size:12.8px}',
+      '.fr-vp-rel-past li::before{background:rgba(140,132,112,.45);box-shadow:none}',
       '.fr-vp-empty{font-size:13px;color:#7d786e;padding:10px 0}',
+
+      /* ── 翻页控件：‹ 上一版 | 第 1 版 / 共 3 版 | 下一版 › ─────────────
+       * 做成「竹简/玉牌」感的按钮，不是普通灰色方块。
+       * ──────────────────────────────────────────────────────────── */
+      '.fr-vp-nav{',
+      '  display:flex;align-items:center;justify-content:space-between;gap:12px;',
+      '  margin-top:16px;padding-top:14px;',
+      '  border-top:1px solid rgba(200,168,92,.14);',
+      '}',
+      '.fr-vp-nav-btn{',
+      '  font-family:inherit;font-size:12.5px;line-height:1;letter-spacing:.4px;',
+      '  padding:8px 14px;border-radius:5px;cursor:pointer;',
+      '  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.02));',
+      '  color:#c0ad83;border:1px solid rgba(190,160,95,.28);',
+      '  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 4px rgba(0,0,0,.25);',
+      '  transition:all .18s ease;',
+      '}',
+      '.fr-vp-nav-btn:hover:not(:disabled){',
+      '  background:linear-gradient(180deg,rgba(226,190,110,.18),rgba(200,164,80,.1));',
+      '  color:#f3da9a;border-color:rgba(226,190,110,.6);',
+      '  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 14px rgba(200,164,80,.2);',
+      '}',
+      '.fr-vp-nav-btn:active:not(:disabled){transform:translateY(1px)}',
+      '.fr-vp-nav-btn:disabled,.fr-vp-nav-off{',
+      '  opacity:.26;cursor:default;pointer-events:none;box-shadow:none;',
+      '}',
+      '.fr-vp-nav-counter{',
+      '  font-size:12px;color:#8a8272;flex:1 1 auto;text-align:center;',
+      '  user-select:none;letter-spacing:1.2px;font-variant-numeric:tabular-nums;',
+      '}',
+
+      /* 条目多时给个滚动上限，避免把面板撑到天上去 */
+      '#fr-vp-log{max-height:44vh;overflow-y:auto;padding-right:5px}',
+      '#fr-vp-log::-webkit-scrollbar{width:6px}',
+      '#fr-vp-log::-webkit-scrollbar-track{background:transparent}',
+      '#fr-vp-log::-webkit-scrollbar-thumb{',
+      '  background:linear-gradient(180deg,rgba(200,168,92,.3),rgba(200,168,92,.16));',
+      '  border-radius:3px;',
+      '}',
+      '#fr-vp-log::-webkit-scrollbar-thumb:hover{background:rgba(200,168,92,.45)}',
 
       /* 进度条 */
       '#fr-vp-prog{',
@@ -6421,45 +6607,114 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     els.statusTxt.textContent = text || '';
   }
 
-  function renderLog(list) {
+  /* 更新日志渲染：**一次只显示一版，左右翻页**。
+   *
+   * 玩家 2026-11-01：「应该用上一篇下一篇左右选择这种方式最好吧？」
+   * 理由成立：更新日志每个版本动辄十几条，全部平铺会让面板长到要滚很久，
+   * 玩家真正关心的只有「最新这版改了什么」。所以：
+   *   · 默认落在最新一版（下标 0）
+   *   · 左右按钮翻到更早/更新的版本
+   *   · 中间显示「第 1 版 / 共 3 版」，玩家清楚还有多少历史
+   *   · 所有版本的数据一直留着，只是不同时渲染 —— 历史永不丢失
+   */
+  var logRels = [];     // 排好序的全部版本（新→旧）
+  var logIndex = 0;     // 当前显示第几版
+  var logNav = null;    // 翻页控件缓存
+
+  function renderLogPage() {
     if (!els.log) return;
     els.log.textContent = '';
-    if (!list || !list.length) {
-      // 首发版本没有历史更新，明确说明「这是初始版本」，
-      // 不要留一块空白让人以为加载失败了。
+
+    if (!logRels.length) {
       els.log.appendChild(el('div', 'fr-vp-empty',
-        '这是初始版本，暂无更新记录。以后有新版本时会显示在这里。'));
+        '暂无更新记录。以后有新版本时会显示在这里。'));
+      if (logNav && logNav.wrap) logNav.wrap.style.display = 'none';
       return;
     }
-    list.forEach(function (rel) {
-      var box = el('div', 'fr-vp-rel');
-      var h = el('div', 'fr-vp-rel-h');
-      h.appendChild(el('span', 'fr-vp-rel-v', 'v' + String(rel.version || '')));
-      if (rel.date) h.appendChild(el('span', 'fr-vp-rel-d', String(rel.date)));
-      box.appendChild(h);
-      var ul = el('ul');
-      (rel.items || []).forEach(function (it) {
-        ul.appendChild(el('li', null, String(it)));
-      });
-      box.appendChild(ul);
-      els.log.appendChild(box);
+
+    var rel = logRels[logIndex];
+    var isLatest = logIndex === 0;
+
+    var box = el('div', 'fr-vp-rel' + (isLatest ? ' fr-vp-rel-latest' : ' fr-vp-rel-past'));
+    var h = el('div', 'fr-vp-rel-h');
+    h.appendChild(el('span', 'fr-vp-rel-v', 'v' + String(rel.version || '')));
+    if (isLatest) h.appendChild(el('span', 'fr-vp-rel-badge', '最新'));
+    if (rel.date) h.appendChild(el('span', 'fr-vp-rel-d', String(rel.date)));
+    box.appendChild(h);
+
+    var ul = el('ul');
+    (rel.items || []).forEach(function (it) {
+      ul.appendChild(el('li', null, String(it)));
     });
+    box.appendChild(ul);
+    els.log.appendChild(box);
+
+    if (logNav && logNav.wrap) {
+      logNav.wrap.style.display = logRels.length > 1 ? 'flex' : 'none';
+      logNav.counter.textContent = '第 ' + (logIndex + 1) + ' 版 / 共 ' + logRels.length + ' 版';
+      // 最新一版时「下一版」是禁用的（没有比它更新的）
+      logNav.next.disabled = logIndex <= 0;
+      logNav.prev.disabled = logIndex >= logRels.length - 1;
+      logNav.next.classList.toggle('fr-vp-nav-off', logIndex <= 0);
+      logNav.prev.classList.toggle('fr-vp-nav-off', logIndex >= logRels.length - 1);
+    }
   }
 
-  /* 拉远端更新日志（version.json 里的 changelog）。
-   * 拿不到就用内置兜底，绝不让页面空着。 */
+  /* 建左右翻页控件（只建一次，复用） */
+  function buildLogNav() {
+    if (logNav || !els.log || !els.log.parentNode) return;
+    var wrap = el('div', 'fr-vp-nav');
+
+    var prev = el('button', 'fr-vp-nav-btn fr-vp-nav-prev');
+    prev.type = 'button';
+    prev.textContent = '‹ 上一版';
+    prev.title = '查看更早的版本';
+
+    var counter = el('span', 'fr-vp-nav-counter', '');
+
+    var next = el('button', 'fr-vp-nav-btn fr-vp-nav-next');
+    next.type = 'button';
+    next.textContent = '下一版 ›';
+    next.title = '回到更新的版本';
+
+    prev.addEventListener('click', function () {
+      if (logIndex >= logRels.length - 1) return;
+      logIndex++;
+      renderLogPage();
+    });
+    next.addEventListener('click', function () {
+      if (logIndex <= 0) return;
+      logIndex--;
+      renderLogPage();
+    });
+
+    wrap.appendChild(prev);
+    wrap.appendChild(counter);
+    wrap.appendChild(next);
+    els.log.parentNode.insertBefore(wrap, els.log.nextSibling);
+
+    logNav = { wrap: wrap, prev: prev, next: next, counter: counter };
+  }
+
+  function renderLog(list) {
+    logRels = (list || []).filter(function (r) {
+      return r && r.version && (r.items || []).length;
+    });
+    logIndex = 0;           // **每次打开都回到最新一版**
+    buildLogNav();
+    renderLogPage();
+  }
+
+  /* 把更新日志渲染出来。
+   *
+   * 【为什么不再区分 standalone / PC】
+   *   原来 standalone（浏览器/安卓）直接渲染空的 BUILTIN_CHANGELOG 就返回了，
+   *   PC 端又要等 info() 回来才有日志 —— 玩家看到的就是「一打开什么都没有」。
+   *   现在统一走 pickChangelog()：远端有就用远端，没有就用构建时烤进来的，
+   *   **每次打开面板都立刻有最新一版的内容**，不需要先点「检查更新」。
+   */
   function loadRemoteChangelog() {
-    if (state.standalone) {
-      // 浏览器版/安卓版没有 frUpdate，用内置日志
-      renderLog(BUILTIN_CHANGELOG);
-      return;
-    }
-    // 主进程 check 时会把 changelog 一并带回来，存在这里
-    if (window.__FR_CHANGELOG__ && window.__FR_CHANGELOG__.length) {
-      renderLog(window.__FR_CHANGELOG__);
-    } else {
-      renderLog(BUILTIN_CHANGELOG);
-    }
+    renderLog(pickChangelog());
   }
 
   /* 刷新界面状态 */
@@ -6527,7 +6782,15 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     }
   }
 
-  /* 打开页面：拉一次当前版本信息 */
+  /* 打开页面：先把已有的日志立刻显示出来，再异步补远端信息。
+   *
+   * 【为什么先渲染再等】
+   *   玩家要求「每次打开更新版本界面都自动显示最新的更新日志」。
+   *   原来这里是先 loadRemoteChangelog()（PC 端那时还是空）再等 info()，
+   *   而 info() 只在主进程成功 check 过之后才带 changelog —— 玩家没点过
+   *   「检查更新」就永远看不到日志。现在 pickChangelog() 立刻给内容，
+   *   info() 回来后若有更全的远端日志再换掉。
+   */
   function show() {
     build();
     els.panel.classList.add('fr-vp-show');
@@ -6550,9 +6813,11 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       state.downloading = !!s.downloading;
       state.progress = s.progress || 0;
       state.error = s.error || '';
-      // 远端带了完整更新日志就换成远端的（更全、更新）
-      if (s.changelog && s.changelog.length) {
-        renderLog(s.changelog);
+      /* 远端带了完整更新日志就换成远端的（更全、更新）。
+       * 注意：**没有远端日志时不要清空**，刚才 pickChangelog() 已经
+       * 用构建内置的那份渲染好了 —— 这正是「历史日志永不消失」的关键。 */
+      if (Array.isArray(s.changelog) && s.changelog.length) {
+        renderLog(pickChangelog());
       }
       refresh();
     }).catch(function (e) {
@@ -8041,7 +8306,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-e33200302cd8" />
+    <meta name="fr-build-id" content="FRI-4abb7d594c3a" />
     <script>
       (function () {
         try {
@@ -33575,6 +33840,19 @@ console.warn('[日报API] 尝试恢复剧情上下文失败:', e);
         const WORKSHOP_KEY = 'CULTIVATION_WORKSHOP_KEY_V1';
         const WORKSHOP_CACHE_KEY = 'CULTIVATION_WORKSHOP_CACHE_V1';
         const REROLL_ADDON_CONFIG_KEY = 'CULTIVATION_REROLL_ADDON_CONFIG_V1';
+
+        /* 【玩家性格的实现在 src/player-persona.js，不在这里重复定义】
+         *
+         * 2026-11-01 排查「开局性格没注入提示词」时，一度以为
+         * frPlayerPersonaSave/Get/ToPrompt 是未定义的，差点在这里补一套 ——
+         * 实际它们是 assemble.mjs 单独注入的 src/player-persona.js 提供的，
+         * 那份实现还带了「[性格校验·最高优先级]」提示词模板，比临时补的完整得多。
+         * 在这个文件里再定义一套会**覆盖掉**它（后赋值者胜），所以不这么做。
+         *
+         * 真正的问题只出在「建档时 B1 第 3 列写死 '待定'」这一处，
+         * 已在该处修复（见 playerRow 的 personaForRow）。
+         */
+
 
         // 重roll附加指令配置
         let rerollAddonConfig = {
@@ -127055,17 +127333,35 @@ async function frCanonMaterialsFloors(archiveName){
   if(typeof dbGet!=='function'||typeof db==='undefined'||!db.archives)return [];
   try{
     var archive=await db.archives.get(name);
-    var logs=(archive?.data?.logs||[]).filter(function(log){
+    // 玩家 2026-11-01：「这个层数怎么是一堆乱码啊，对齐快照实际层数。」
+    //
+    // 原来是 `label: '第 ' + String(log.id) + ' 层'` —— 直接把 **UUID** 当层号写进去了，
+    // 面板上显示成「第 1e8f33a1-57f7-4405-950f-c0a94117b286 层」。
+    //
+    // 层号必须相对**全部有效楼层**来算，而不是相对「有资料的楼层」：
+    //   玩家说的「第 N 层」指的是对话里的第 N 楼（和快照、存档列表同一口径）。
+    //   如果只数有资料的楼层，会产生「有资料的 2 层被标成第 1、2 层」，
+    //   但它们在对话里其实是第 7、8 楼 —— 玩家拿去对照时仍然对不上。
+    var allLogs=(archive?.data?.logs||[]).filter(function(log){
       return log&&log.type==='ai'&&!log.isGhost&&!log.isDeepSummary&&!log.isSnapshot;
-    }).reverse();  // 新→旧
+    });
+    // 楼层号：正序第几个（1 起），和「第 N 楼」口径一致
+    var floorNoById={};
+    allLogs.forEach(function(log,i){floorNoById[String(log.id)]=i+1;});
+
+    var logs=allLogs.slice().reverse();  // 新→旧
     var keep=frCanonMaterialsKeep(),out=[];
     for(var i=0;i<logs.length&&out.length<keep;i++){
       var log=logs[i];
       var row=await dbGet(frCanonMaterialsKey(name,log.id)).catch(function(){return null;});
       if(!row||!row.rows||!Object.keys(row.rows).length)continue;  // 没存过资料的楼层不列
+      var floorNo=floorNoById[String(log.id)]||0;
       out.push({
         logId:String(log.id),
-        label:'第 '+String(log.id)+' 层',
+        // 有真实层号用层号；万一取不到（存档结构异常）才退回位置序号，
+        // 无论如何**不再把 UUID 显示给玩家**。
+        label:floorNo?('第 '+floorNo+' 层'):('第 '+(allLogs.length-i)+' 层'),
+        floorNo:floorNo,
         worldTime:frCanonMaterialsWorldTime(log),
         count:Object.keys(row.rows).length,
         updatedAt:Number(row.updatedAt)||0
@@ -127260,7 +127556,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通重点演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-e33200302cd8";
+var FR_BUILD_ID = "FRI-4abb7d594c3a";
 function frCanonMainStoryText(value,options={}) {
   var source=String(value || '').replace(/<!--FR_CANON_START-->[\s\S]*?<!--FR_CANON_END-->/g,'');
   // 补演语料只取正文；读取实际时间时显式保留正文头。两者不回写展示源。
@@ -131791,7 +132087,14 @@ async function frReplayOpenPicker(system,defaults){
     });
     currentFloorId=floors[0].logId;
     floorSelect.value=currentFloorId;
-    floorInfo.textContent='共 '+floors.length+' 层有资料，每层 '+floors[0].count+' 条';
+    // 「每层 N 条」原来取 floors[0].count —— 但玩家切到别的楼层后就对不上了。
+    // 现在按当前选中楼层实时显示，切楼层时同步更新（见下面 change 监听）。
+    function syncFloorInfo(){
+      var cur=floors.find(function(f){return f.logId===floorSelect.value;})||floors[0];
+      floorInfo.textContent='共 '+floors.length+' 层有资料，当前层 '+cur.count+' 条';
+    }
+    syncFloorInfo();
+    floorSelect.onchange=syncFloorInfo;
     // 不再预先把竞态标记成 null —— 那会让 loadFloor 直接命中 null 提前返回。
     // 直接把当前楼层真正读进来，其余楼层按需加载（loadFloor 自己会缓存）。
     await loadFloor(currentFloorId);
@@ -164446,7 +164749,7 @@ snapshotEditorOverlay.classList.add('visible');
                   }> 第二人称 (你)</label>
                   <label><input type="radio" name="pronounSelection" value="第三人称" ${
                     creationState.selectedPronoun === '第三人称' ? 'checked' : ''
-                  }> 第三人称 (\u007b\u007buser}})\u003c/label>\n                \u003c/div>\n              \u003c/div>\n              \u003cbutton id=\"upload-custom-avatar-btn\" class=\"major-action-button\" style=\"margin-top: 15px; width: 100%;\">\n                \u003ci class=\"fas fa-image\">\u003c/i> 上传自定义形象\n              \u003c/button>\n            \u003c/div>\n\n            \u003c!-- 【玩家姓名】玩家 2026-10-30 指出：原卡靠酒馆 name1 取名字，独立版必须自己填 -->\n            \u003cdiv class=\"creation-section-title\">\n              \u003ci class=\"fas fa-signature\">\u003c/i> 你的名字\n            \u003c/div>\n            \u003cdiv class=\"custom-input-group\" style=\"background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px;\">\n              \u003cdiv class=\"creation-options-group\">\n                \u003clabel>\u003ci class=\"fas fa-user\">\u003c/i> 角色姓名:\u003c/label>\n                \u003cinput type=\"text\" id=\"player-name-input\" maxlength=\"24\"\n                  value=\"${String(creationState._playerName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}\"\n                  placeholder=\"例如：韩立\"\n                  style=\"width: 240px; text-align: center;\" />\n              \u003c/div>\n              \u003cp style=\"margin:8px 0 0;font-size:0.82em;color:#8a8070;line-height:1.7;\">\n                这个名字会出现在正文、对话和提示词里（替代「\u007b\u007buser}}」）。留空则沿用「你」。\n              \u003c/p>\n            \u003c/div>\n\n            \u003c!-- 【玩家性格】玩家 2026-10-30 要求：直接并进「人物设定」这一页，不另起一步 -->\n            \u003cdiv class=\"creation-section-title\">\n              \u003ci class=\"fas fa-user-shield\">\u003c/i> 你的性格 \u003csmall>(可选，但强烈建议填)\u003c/small>\n            \u003c/div>\n            \u003cdiv class=\"custom-input-group\" style=\"background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px;\">\n              \u003clabel style=\"display:flex;align-items:center;gap:10px;margin:0 0 12px;cursor:pointer;font-size:0.92em;color:#d9c9a3;\">\n                \u003cinput type=\"checkbox\" id=\"persona-enabled\" ${creationState._personaEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:#d6ac58;cursor:pointer;">
+                  }> 第三人称 (\u007b\u007buser}})\u003c/label>\n                \u003c/div>\n              \u003c/div>\n              \u003cbutton id=\"upload-custom-avatar-btn\" class=\"major-action-button\" style=\"margin-top: 15px; width: 100%;\">\n                \u003ci class=\"fas fa-image\">\u003c/i> 上传自定义形象\n              \u003c/button>\n            \u003c/div>\n\n            \u003c!-- 【玩家姓名】玩家 2026-10-30 指出：原卡靠酒馆 name1 取名字，独立版必须自己填 -->\n            \u003cdiv class=\"creation-section-title\">\n              \u003ci class=\"fas fa-signature\">\u003c/i> 你的名字\n            \u003c/div>\n            \u003cdiv class=\"custom-input-group\" style=\"background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px;\">\n              \u003cdiv class=\"creation-options-group\">\n                \u003clabel>\u003ci class=\"fas fa-user\">\u003c/i> 角色姓名:\u003c/label>\n                \u003cinput type=\"text\" id=\"player-name-input\" maxlength=\"24\"\n                  value=\"${String(creationState._playerName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}\"\n                  placeholder=\"例如：韩立\"\n                  style=\"width: 240px; text-align: center;\" />\n              \u003c/div>\n              \u003cp style=\"margin:8px 0 0;font-size:0.82em;color:#8a8070;line-height:1.7;\">\n                这个名字会出现在正文、对话和提示词里（替代「\u007b\u007buser}}」）。留空则沿用「你」。\n              \u003c/p>\n            \u003c/div>\n\n            \u003c!-- 【玩家性格】玩家 2026-10-30 要求：直接并进「人物设定」这一页，不另起一步 -->\n            \u003cdiv class=\"creation-section-title\">\n              \u003ci class=\"fas fa-user-shield\">\u003c/i> 你的性格 \u003csmall>(可选，但强烈建议填)\u003c/small>\n            \u003c/div>            \u003cdiv class=\"custom-input-group\" style=\"background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px;\">\n              \u003clabel style=\"display:flex;align-items:center;gap:10px;margin:0 0 12px;cursor:pointer;font-size:0.92em;color:#d9c9a3;\">\n                \u003cinput type=\"checkbox\" id=\"persona-enabled\" ${creationState._personaEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:#d6ac58;cursor:pointer;">
                 <span>启用性格注入（推荐）</span>
               </label>
               <textarea id="persona-text" rows="6"
@@ -165679,11 +165982,34 @@ ${
             }|寿元:100|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
               creationState.avatarAppearance
             }|isExtreme:${creationState.isExtreme}|warehouse:[]|deathCount:0`;
+
+            /* 【玩家性格 → B1 第 3 列】玩家 2026-11-01 反馈：
+             * 「开局的性格没有注入到提示词里，玩家性格这里还是待定。」
+             *
+             * 原来这里第 3 列硬编码 '待定'，玩家在「你的性格」里写的东西
+             * 只存在 creationState._personaText，建档后彻底丢失。
+             * 现在按优先级取：本次创建填的 → 本地已存的人格设定 → 空。
+             * 若玩家取消勾选「启用性格注入」，则不写入（保持空白，交给模型自行处理）。
+             */
+            const personaForRow = (function () {
+              const enabledNow = creationState._personaEnabled !== false;
+              if (!enabledNow) return '';
+              const typed = String(creationState._personaText || '').trim();
+              if (typed) return typed;
+              // 没在这次创建流程里填，但以前存过（老玩家／重开一档）→ 沿用
+              try {
+                if (typeof frPlayerPersonaToPrompt === 'function') {
+                  return String(frPlayerPersonaToPrompt() || '').trim();
+                }
+              } catch (e) { console.warn('[性格] 建档读取失败:', e); }
+              return '';
+            })();
+
             const playerRow = {
               0: 'B1',
               1: `${finalPlayerName}|${creationState.selectedGender}`,
               2: `凡人|${birthName}`,
-              3: '待定',
+              3: personaForRow,   // 原来写死 '待定'，见上方注释
               4: '一切正常',
               5: '待定',
               6: '待定',
