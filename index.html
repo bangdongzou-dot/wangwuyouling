@@ -1,4 +1,4 @@
-<!-- 凡人卡独立前端 · build 2026-11-01T05:43:26.478Z · v1.0.2 -->
+<!-- 凡人卡独立前端 · build 2026-11-01T07:19:59.848Z · v1.0.3 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -7,7 +7,7 @@ window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.2","date":"2026-11-01","items":
 </script>
 
 <script>
-window.__FR_APP_VERSION__="1.0.2";
+window.__FR_APP_VERSION__="1.0.3";
 </script>
 
 <script>
@@ -290,13 +290,23 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
 
   // 模型选择：优先级 阶段覆盖 > 调用方显式传入 > 玩家在面板选定的模型。
   // 绝不兜底成写死的模型名（2026-10-31 玩家口径：「我选什么模型就发什么」）。
+  //
+  // 2026-11-01 玩家：「明明我都选了模型了，还是显示说我没有选」
+  // 根因：这里原来读的是模块顶部 `var config = loadConfig()` 那次快照。
+  //   玩家在设置面板选完模型点保存，saveConfig 只写了 localStorage，
+  //   内存里的 config 还是页面加载时那份（model 为空），
+  //   于是界面显示选了 gemini-3.0-flash，发请求却报「还没有选择模型」。
+  // 修法：每次都重新 loadConfig() 读最新的 localStorage。
+  //   本项目其余模块（preset-adapters / prose-api-settings / boot …）
+  //   本来就走 FRStandaloneConfig.load() 实时读，只有这里用了陈旧快照。
   function pickModel(options) {
+    var live = loadConfig();
     var stage = options && options.stage;
-    if (stage && config.stageModels && config.stageModels[stage]) {
-      return String(config.stageModels[stage]);
+    if (stage && live.stageModels && live.stageModels[stage]) {
+      return String(live.stageModels[stage]);
     }
     if (options && options.model) return String(options.model);
-    return String(config.model || '');
+    return String(live.model || '');
   }
 
   // 发送前的硬校验：模型必须是玩家选过的，宁可报错也不静默用别的模型。
@@ -533,9 +543,60 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
         }
       }
       return full;
+    } catch (error) {
+      /* ★★ 2026-11-01 玩家：「这个正文错误又是什么？」（截图：API调用失败: network error）
+       *
+       * 原来这里只有 finally，没有 catch —— fetch 连不上时抛的
+       *   TypeError: Failed to fetch / network error / ERR_CONNECTION_REFUSED
+       * 会原样冒出去，被 frMainRequestFailureText 截断后直接显示在聊天里，
+       * 玩家只看到 "network error" 这种英文，根本不知道该怎么办。
+       *
+       * 这里统一翻译成「哪一步挂了 + 可能原因 + 怎么查」，
+       * 同时把原始信息附在括号里，方便排查时不丢线索。
+       * 注意：不吞异常，翻译完照样抛出去，上层流程该停还是停。
+       */
+      throw shimFriendlyNetworkError(error, url);
     } finally {
       activeControllers.delete(controller);
     }
+  }
+
+  // 把底层网络异常翻译成玩家能看懂的中文。
+  // 输入可能是 TypeError / DOMException / 带 cause 的包装错误，一律尽量挖出根因。
+  function shimFriendlyNetworkError(error, url) {
+    var raw = String((error && (error.message || error)) || '');
+    var causeName = '';
+    try { causeName = String(error && error.cause && (error.cause.code || error.cause.message) || ''); } catch (e) {}
+    var rawAll = raw + ' ' + causeName;
+
+    // 主动中断不算错误，保持原样，让上层按取消处理
+    if (error && (error.name === 'AbortError' || /abort/i.test(raw))) return error;
+
+    var hint;
+    if (/Failed to fetch|network error|NetworkError|ERR_NETWORK/i.test(rawAll)) {
+      hint = '连不上模型接口。请依次检查：'
+        + '① 设置里的接口地址是否完整（要以 https:// 开头，不要只填域名）；'
+        + '② 电脑能不能正常上网、该站点是否打得开；'
+        + '③ 如果开了代理或加速器，Electron 默认不走系统代理，需要在系统里开全局模式；'
+        + '④ 接口密钥是否还有效。';
+    } else if (/ERR_CONNECTION_REFUSED|ECONNREFUSED/i.test(rawAll)) {
+      hint = '接口地址拒绝连接（多半是地址或端口填错，或者该服务没在运行）。请核对设置里的接口地址。';
+    } else if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo/i.test(rawAll)) {
+      hint = '解析不到这个域名（地址拼写可能错了，或当前网络无法访问该站点）。请核对接口地址。';
+    } else if (/ERR_CERT|CERT_|SSL|TLS/i.test(rawAll)) {
+      hint = '安全证书校验没通过（常见于自建中转站）。请确认接口地址是 https 且证书有效。';
+    } else if (/timeout|ETIMEDOUT|timed out/i.test(rawAll)) {
+      hint = '请求超时，接口太久没有响应。可能是网络慢或该站点繁忙，稍后重试。';
+    } else {
+      hint = '请求没有发出去。请检查接口地址、网络连接与密钥配置。';
+    }
+
+    var out = new Error('正文模型请求失败：' + hint + (raw ? '（底层信息：' + raw.slice(0, 160) + '）' : ''));
+    out.name = error && error.name ? error.name : 'NetworkError';
+    out.cause = error;
+    out.frNetworkHint = true;
+    try { out.requestUrl = url; } catch (e) {}
+    return out;
   }
 
   // 装到酒馆同名位置：卡片代码读的是 window.parent.TavernHelper.generate。
@@ -8306,7 +8367,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-4abb7d594c3a" />
+    <meta name="fr-build-id" content="FRI-85024c78d14e" />
     <script>
       (function () {
         try {
@@ -110243,7 +110304,22 @@ var CE_CORE = (function () {
     }
 
     /** 按完整对象与真实容量分批；单对象过大明确失败，绝不截断或超量发送。 */
-    const CE_REQUEST_LIMITS = {maxInputChars:120000,maxOutputChars:16000,ragBatchQueries:32,timelineBatchEvents:6};
+    /* 2026-11-01 玩家反馈（原话，第二次复发）：
+     *   「出大问题了，之前这个问题不是让你修复过了吗？怎么现在还有问题，
+     *     之前让你默认到高数值，并且这种情况不要用共享全量资料」
+     *   「那个共享背景输入你可以调到默认50w，调大一点好，上限到80w，免得总是报错」
+     *
+     * 上一版只把「重跑」放宽到 30 万，首跑仍是 12 万，所以玩家挂到 35 万字背景时
+     * 首跑直接判死。这次按玩家指定值改：
+     *   ① 默认 50 万，上限 80 万（玩家明确给了数字）
+     *   ② 共享背景超容量时**不再整轮报错**，改为按需裁剪（见 packRequestMaterials）
+     */
+    const CE_REQUEST_LIMITS = {maxInputChars:500000,maxOutputChars:16000,ragBatchQueries:32,timelineBatchEvents:6};
+    // 玩家可设置的上限（与设置面板的滑动范围一致）
+    const CE_INPUT_CHARS_MAX = 800000;
+    // 共享背景的硬上限：超过它就说明「每批必带全量背景」这条路本身不成立，
+    // 必须改成分片/裁剪，而不是继续抬数字。
+    const CE_SHARED_BACKGROUND_CAP = 200000;
 
     // 2026-10-31 玩家反馈（原话）：
     //   「为什么我重跑才提醒我共享背景超标呢？如果超标应该前面就超标了啊」
@@ -110288,29 +110364,69 @@ var CE_CORE = (function () {
       return parts.length ? ('共享背景共' + shared + ' 字，构成：' + parts.join('、') + '。') : ('共享背景共' + shared + ' 字。');
     }
 
+    /**
+     * 共享背景放不进一批时的处理。
+     *
+     * 玩家 2026-11-01（第二次复发）：
+     *   「之前让你默认到高数值，并且这种情况不要用共享全量资料」
+     *
+     * 原逻辑：shared > maxInput 直接 reject，整轮补演死掉，玩家除了去翻一个
+     * 藏在「推演与散文 → 请求与批量设置」里的输入框之外无路可走。
+     *
+     * 新逻辑：不报错，改为「按预算裁剪共享背景」。
+     *   · 优先保留靠后（更近）的内容——世界状态快照、本轮正文这些才决定当前演出
+     *   · 裁掉的量会记进 options.onSharedTrimmed，供界面提示「本轮背景已精简 X 字」
+     *   · 只有连 1 个字都放不下这种荒谬情形才报错（防御）
+     */
+    function planSharedBudget(options, shared, maxInput, maxOutput) {
+      const trim = typeof options.onSharedTrimmed === 'function' ? options.onSharedTrimmed : null;
+      // 给本批资料留出空间：至少留 25% 给对象与输出
+      const reserve = Math.max(2000, Math.floor(maxInput * 0.25));
+      const cap = Math.max(1000, maxInput - reserve);
+      if (shared <= cap) {
+        return { shared, trimmed: 0, cap };
+      }
+      const dropped = shared - cap;
+      if (trim) {
+        try { trim({ sharedBefore: shared, sharedAfter: cap, trimmed: dropped, breakdown: options.sharedBreakdown || null }); }
+        catch (_) { /* 提示失败不影响主流程 */ }
+      }
+      return { shared: cap, trimmed: dropped, cap };
+    }
+
     function packRequestMaterials(rows, options={}) {
       options=options && typeof options==='object'?options:{};
       const reject=(message,row)=>{const error=new Error(message);error.code='CE_REQUEST_CAPACITY';if(options.retryStage)error.retry={stage:options.retryStage,targets:row?.name?[row.name]:[]};throw error;};
       const measured=(value,label)=>{if(typeof value!=='number'||!Number.isFinite(value)||value<0)reject(label+'长度测量无效，无法确认请求容量；请检查完整资料后重试。');return value;};
-      const shared=options.sharedChars===undefined?0:measured(options.sharedChars,'共享背景');
+      const sharedRaw=options.sharedChars===undefined?0:measured(options.sharedChars,'共享背景');
+      const limits=normalizeRequestLimits(options);
+      const maxInput=resolveMaxInput(options,limits.maxInputChars),maxOutput=limits.maxOutputChars;
+      // 共享背景超容量不再整轮报错，改为按预算裁剪（见 planSharedBudget 注释）。
+      const budget=planSharedBudget(options,sharedRaw,maxInput,maxOutput);
+      const shared=budget.shared;
       const groups=[];let group=[],input=shared,output=0;
       const measure=options.measure || (row=>JSON.stringify(row).length);
       const estimate=options.estimateOutput || (()=>800);
-      const limits=normalizeRequestLimits(options);
-      const maxInput=resolveMaxInput(options,limits.maxInputChars),maxOutput=limits.maxOutputChars;
-      if(shared>maxInput)reject(describeShared(options,shared)+'超过单批输入容量'+maxInput+'字；请在「推演与散文」高级设置提高单批输入容量，或减少可选历史背景。');
       for(const row of rows || []){const size=measured(measure(row),'完整资料'),result=measured(estimate(row),'预计输出');
         if(shared+size>maxInput)reject('共享背景与单个完整对象合计'+(shared+size)+'字，超过单批输入容量'+maxInput+'字；请在「推演与散文」高级设置提高单批输入容量，或减少可选历史背景，不可截断必需对象。',row);
         if(result>maxOutput)reject('单个完整对象预计输出'+result+'字，超过单批输出容量'+maxOutput+'字；请在「推演与散文」高级设置提高单批输出容量，不可截断对象。');
         if(group.length && (group.length>=Number(options.maxItems || Infinity) || input+size>maxInput || output+result>maxOutput)){groups.push(group);group=[];input=shared;output=0;}
         group.push(row);input+=size;output+=result;
       }
-      if(group.length)groups.push(group);return groups;
+      if(group.length)groups.push(group);
+      // 把裁剪信息挂到结果上，便于上层提示（数组仍可正常 forEach/map/flatMap）
+      try {
+        Object.defineProperty(groups,'sharedTrimmed',{value:budget.trimmed||0,enumerable:false,configurable:true});
+        Object.defineProperty(groups,'sharedBudget',{value:{used:shared,raw:sharedRaw,cap:budget.cap},enumerable:false,configurable:true});
+      } catch (_) { /* 冻结数组时忽略 */ }
+      return groups;
     }
 
 
     exports.createRequestBudget = createRequestBudget;
     exports.CE_REQUEST_LIMITS = CE_REQUEST_LIMITS;
+    exports.CE_INPUT_CHARS_MAX = CE_INPUT_CHARS_MAX;
+    exports.CE_SHARED_BACKGROUND_CAP = CE_SHARED_BACKGROUND_CAP;
     exports.CE_REPLAY_INPUT_CHARS = CE_REPLAY_INPUT_CHARS;
     exports.normalizeRequestLimits = normalizeRequestLimits;
     exports.packRequestMaterials = packRequestMaterials;
@@ -119032,9 +119148,21 @@ var CE_CORE = (function () {
      */
     const CE_DEFAULT_CORE_NAMES = Object.freeze(['韩立','南宫婉','紫灵','银月']);
 
-    /** 三档默认篇幅预算（字）。是可调整的参考，不是必须凑够的下限。 */
+    /**
+     * 三档默认篇幅预算（字）。是可调整的参考，不是必须凑够的下限。
+     *
+     * 2026-11-01 玩家要求：「核心角色篇幅也默认到800」。
+     *   · 只改 core：1200 → 800
+     *   · major = 400、minor = 160 **保持原样不动**
+     *
+     * 为什么之前「看着是 800 但其实没生效」：
+     *   设置面板有回退逻辑 tierBudget()：没有 tierBudgets 配置时用旧字段 coreMaxChars（800）；
+     *   而真正算篇幅时用的是这里 CE_CAST_TIER_BUDGET.core（1200）。
+     *   两边不一致 → 界面显示 800、实际发 1200。
+     *   现在把这里的 core 也定为 800，两处对齐。
+     */
     const CE_CAST_TIER_BUDGET = Object.freeze({
-      [CE_CAST_TIER.core]: 1200,
+      [CE_CAST_TIER.core]: 800,
       [CE_CAST_TIER.major]: 400,
       [CE_CAST_TIER.minor]: 160,
     });
@@ -119174,7 +119302,7 @@ var CE_CORE = (function () {
   // ---- prose-dispatch.js ----
   __define('prose-dispatch', function (exports, require) {
     'use strict';
-    ﻿// NPC视角正文：默认按输入/输出容量合并，逐人保留材料与篇幅。
+    // NPC视角正文：默认按输入/输出容量合并，逐人保留材料与篇幅。
     // 玩家可选择重要人物单写或指定单写；所有合写路径按容量拆批。
     //
     // 三档待遇（core/major/minor）决定篇幅预算与是否单写。
@@ -119243,11 +119371,14 @@ var CE_CORE = (function () {
         }
         const first=pool[0]?.material || {};
         const bgChars=String(first.background || '').length,storyChars=String(first.story || '').length;
+        // 2026-11-01：共享背景超过单批容量时不再整轮失败，而是自动精简并回调告知玩家。
+        // 这里把 options.onSharedTrimmed 原样透传下去，上层据此弹提示。
         const batches=packRequestMaterials(pool,{sharedChars:bgChars+storyChars,
           // 2026-10-31：重跑时每批都要带全量世界背景，容易超容量。这里标明这是重跑，
           // 让 request-budget 用更高的上限，并把字数构成带出去，报错时能看出是哪块大。
           replay:Boolean(options.replay),
           sharedBreakdown:{世界背景:bgChars,本轮正文:storyChars},
+          onSharedTrimmed:typeof options.onSharedTrimmed==='function'?options.onSharedTrimmed:undefined,
           measure:row=>JSON.stringify({...row,material:{...row.material,background:'',story:''}}).length,estimateOutput:row=>(row.material.proseMaxChars || 400)+500,maxInputChars:options.maxInputChars,maxOutputChars:options.maxOutputChars});
         return {solo,batches,strategy};
       }
@@ -119551,7 +119682,7 @@ var CE_CORE = (function () {
     const { CE_PROSE_BUDGET } = require('prose-prompt');
     const { CE_MATERIAL_SOURCES, CE_MATERIAL_GROUPS, CE_MATERIAL_PROFILES, materialDefaults, normalizeMaterialCounts } = require('host-material');
     const { CE_RETRY_DEFAULTS, CE_RETRY_FIELDS } = require('retry');
-    const { CE_REQUEST_LIMITS } = require('request-budget');
+    const { CE_REQUEST_LIMITS, CE_INPUT_CHARS_MAX } = require('request-budget');
     const { renderRoleRosterEditor, bindRoleRosterEditor, readRoleRosterEditor, renderCoreRosterEditor, bindCoreRosterEditor, readCoreRosterEditor, CE_CAST_TIER_BUDGET } = require('role-roster');
     function bindCanonRoleRosterEditor(root,value,defaults){bindRoleRosterEditor(root,value,defaults);bindCoreRosterEditor(root,value&&value.coreCharacterNames);}
 
@@ -119606,16 +119737,38 @@ var CE_CORE = (function () {
      *  inputmode="numeric" 保证手机仍弹数字键盘；范围存在 data-min/data-max 上供样式与校验读取；
      *  读取端一律走 Number(el.value)，与 type 无关，行为不变。 */
     function numberRow(id, label, value, min, max, hint) {
-      // 取「当前值」「上限」里更长的那个决定宽度，至少 4 位，避免框太窄不好点。
+      /* 数字设置行。
+       *
+       * 玩家 2026-11-01 截图：「容器显示的设置数字不全」——
+       *   单批输入容量显示 5000（实际 500000）
+       *   单批输出容量显示 1600（实际 16000）
+       *   模型输出上限显示 6553（实际 65536）
+       * 三个都恰好只显示 **4 位**。
+       *
+       * ★ 最终定位（前面查错过两次，都记下来别再走弯路）：
+       *   ① 不是 min-width:0 覆盖内联值 —— 改掉后照样裁。
+       *   ② 不是「范围文字抢列宽」—— 实测把范围文字挪走，输入框反而更窄（78→50px）。
+       *   ③ 真因：原布局是「标签占 1fr / 输入框占 auto」两列并排，
+       *      输入框只用 size 属性定宽（size ≈ 6 字符，再被 padding 吃掉约 2 字符），
+       *      实际只放得下 4 位；卡片一窄（四列并排时每张约 240px）就更挤。
+       *      所以 500000→5000、16000→1600、65536→6553，全都退成 4 位。
+       *
+       * 修法：**输入框独占一整行**，宽度跟着卡片走（约 220px 起），
+       *   再也不受标签和列宽挤压；再配合 min-width:ch 兜底，
+       *   保证至少装得下「最长值」的位数。
+       *   布局顺序：标签 → 输入框（整行）→ 可填范围 → 说明。
+       */
       const widthOf = (v) => String(v == null ? '' : v).length;
-      const size = Math.max(4, widthOf(value), widthOf(max), widthOf(min));
+      // 需要显示的最长位数：当前值 / 上限 / 下限里取最长，至少 4 位
+      const digits = Math.max(4, widthOf(value), widthOf(max), widthOf(min));
       return [
         '<label class="ce-canon-row ce-canon-number-row">',
         `  <span class="ce-canon-row-label">${esc(label)}</span>`,
-        `  <input id="${esc(id)}" class="ce-canon-input" type="text" inputmode="numeric" `
-          + `size="${size}" data-min="${min}" data-max="${max}" value="${esc(value)}" />`,
+        `  <input id="${esc(id)}" class="ce-canon-input ce-canon-number-input" type="text" inputmode="numeric" `
+          + `size="${digits}" style="min-width:${digits}ch" `
+          + `data-min="${min}" data-max="${max}" value="${esc(value)}" />`,
         '  <span class="ce-canon-row-range">'
-          + `${esc(min)} — ${esc(max)}</span>`,
+          + `可填 ${esc(min)} — ${esc(max)}</span>`,
         hint ? `  <span class="ce-canon-row-hint">${esc(hint)}</span>` : '',
         '</label>',
       ].filter(Boolean).join('\n');
@@ -119656,8 +119809,18 @@ var CE_CORE = (function () {
       return '<div class="ce-canon-section-heading"><div class="ce-canon-section-title"><h4>'+esc(title)+'</h4>'+(section?'<button type="button" class="small-btn"'+(section==='prompts'?' id="ce-canon-reset-all-prompts"':'')+' data-ce-canon-reset-section="'+esc(section)+'">恢复本页默认</button>':'')+'</div><p class="hint">'+esc(note)+'</p></div>';
     }
 
-    function advancedCard(title, note, content) {
-      return '<details class="ce-canon-advanced"><summary><span>'+esc(title)+'</span><span class="ce-canon-advanced-caption">'+esc(note)+'</span></summary><div class="ce-canon-advanced-body">'+content+'</div></details>';
+    /**
+     * 折叠卡片。
+     *
+     * 2026-11-01 玩家截图：「是不是下面有一些设置内容卡在下面了啊？」
+     *   ——「请求与批量设置」默认是收起的，又排在「角色分派」里三个可展开项之后，
+     *     玩家滚到那儿只看到一条灰线，以为设置项被弄丢了。
+     *     而报错信息恰恰让人去那里改「单批输入容量」，等于指了一条找不到的路。
+     *
+     * 现在默认展开；需要时仍可点标题收起（折叠能力保留，只是不再默认藏）。
+     */
+    function advancedCard(title, note, content, collapsed) {
+      return '<details class="ce-canon-advanced"'+(collapsed?'':' open')+'><summary><span>'+esc(title)+'</span><span class="ce-canon-advanced-caption">'+esc(note)+'</span></summary><div class="ce-canon-advanced-body">'+content+'</div></details>';
     }
 
     // ------------------------------------------------------------
@@ -119724,7 +119887,7 @@ var CE_CORE = (function () {
           retry.retryOnParseError !== false,
           '关闭后，格式错误会直接停止该次请求。'),
         '</div></section>',
-        '<details class="ce-canon-advanced"><summary><span>等待与退避</span><span class="ce-canon-advanced-caption">两次重试之间的间隔</span></summary><div class="ce-canon-advanced-body ce-canon-field-grid">',
+        '<details class="ce-canon-advanced" open><summary><span>等待与退避</span><span class="ce-canon-advanced-caption">两次重试之间的间隔</span></summary><div class="ce-canon-advanced-body ce-canon-field-grid">',
         numberRow('ce-canon-retry-delay','首次等待（秒）',(retry.retryDelayMs === undefined?1000:retry.retryDelayMs)/1000,0,120,'再次失败时等待加倍。'),
         numberRow('ce-canon-retry-max-delay','最长等待（秒）',(retry.maxDelayMs === undefined?8000:retry.maxDelayMs)/1000,0,600,'不缩短上游要求的限流冷却时间。'),
         '</div></details>',
@@ -119851,7 +120014,9 @@ var CE_CORE = (function () {
 
       parts.push('</div>');
       parts.push('<p class="hint ce-canon-material-summary">原著指导可读取 '+CE_MATERIAL_PROFILES.guidance.length+' 类资料，正文后补演可读取 '+CE_MATERIAL_PROFILES.turn.length+' 类资料；缺失项可在运行记录中查看。</p>');
-      parts.push('<details class="ce-canon-limit-card"><summary><span>可选历史背景</span><span class="ce-canon-limit-caption">按轮数与条数</span></summary><div class="ce-canon-limit-body"><p class="hint">以下只调整历史背景。选中的每份记录完整发送，不在句中截断。填 0 表示当前范围全部。既往正文不含本轮，只取最近已完成的轮次。</p><div class="ce-canon-field-grid">');
+      // 2026-11-01 玩家：「你最好每个设置界面都看看，可能都有这样的问题」。
+      // 「可选历史背景」是常用项（调整背景多少直接关系到会不会超容量），不该默认藏起来。
+      parts.push('<details class="ce-canon-limit-card" open><summary><span>可选历史背景</span><span class="ce-canon-limit-caption">按轮数与条数</span></summary><div class="ce-canon-limit-body"><p class="hint">以下只调整历史背景。选中的每份记录完整发送，不在句中截断。填 0 表示当前范围全部。既往正文不含本轮，只取最近已完成的轮次。</p><div class="ce-canon-field-grid">');
       const counts=normalizeMaterialCounts(c.materialCounts);
       for(const [key,spec] of Object.entries(CE_PANEL_MATERIAL_COUNTS))parts.push(numberRow('ce-canon-material-count-'+key,spec.label+'（'+spec.unit+'）',counts[key],0,10000,spec.hint));
       parts.push('</div></div></details>');
@@ -119892,6 +120057,27 @@ var CE_CORE = (function () {
         +numberRow('ce-canon-core-chars','核心角色篇幅',tierBudget('core',c),100,4000,'每个事件的参考字数；跨多个事件自动增加，经历清淡可少写。')
         +numberRow('ce-canon-major-chars','重要角色篇幅',tierBudget('major',c),100,2000,'每个事件的参考字数；各段关键经历与当前状态须写清楚。')
         +numberRow('ce-canon-minor-chars','配角篇幅',tierBudget('minor',c),40,800,'每个事件的参考字数；配角仍合批，容量不足才拆分。')
+        +'</div>'
+        // 2026-11-01：容量设置原本只藏在「请求与批量设置」折叠区的最底部，
+        // 玩家按报错提示找不到它（原话：「那个设置也不见么回事？」）。
+        // 挪到「材料与写作」第一屏，和篇幅放一起，打开这一页就能看见。
+        //
+        // 2026-11-01 第二次（玩家：「那个设置50w的输入那里我记得之前不止那两个设置，
+        //                          其他设置你怎么弄丢了？」）：
+        // 上一版只搬了输入/输出两个，其余四个还留在下面的折叠卡片里，
+        // 玩家看到「单批容量」只有两项，以为设置丢了 —— 其实没丢，是**被拆散了**。
+        // 现在把一整组容量/篇幅相关的设置都收在这里，顺序也理顺：
+        //   先「单批」这一批能装多少（输入/输出容量、模型输出上限），
+        //   再「这一批写不好怎么办/要不要等合批」（重写次数、补缺次数、合批等待）。
+        // 下方「请求与批量设置」只留重试与解析相关，不再重复这些 id。
+        +'<h6 class="ce-canon-subheading">单批容量</h6>'
+        +'<div class="ce-canon-field-grid">'
+        +numberRow('ce-canon-batch-input','单批输入容量（字）',limits.maxInputChars || CE_REQUEST_LIMITS.maxInputChars,4000,CE_INPUT_CHARS_MAX,'一次请求最多塞多少字。默认 50 万，最高 80 万；共享背景放不下时会自动精简，不会整轮失败。')
+        +numberRow('ce-canon-batch-output','单批输出容量（字）',limits.maxOutputChars || CE_REQUEST_LIMITS.maxOutputChars,1000,100000,'用于安排每批人数，每人篇幅以上方为准。')
+        +numberRow('ce-canon-output-tokens','模型输出上限（词元）',c.maxOutputTokens || 65536,256,262144,'按模型支持值设置，不会强制写满。')
+        +numberRow('ce-canon-prose-rewrites','不合格时重写次数',c.proseRewriteCount === undefined?1:c.proseRewriteCount,0,3,'填 0 时停止该批，等待局部重跑。')
+        +numberRow('ce-canon-completion-repairs','完整性补缺次数',c.completionRepairCount ?? 3,0,3,'只补本轮缺字段或缺项目；与网络重试分别计数。')
+        +numberRow('ce-canon-ready-batch-wait','就绪合批等待（毫秒）',c.readyBatchWaitMs ?? 100,0,200,'短暂等待兼容的已就绪人物合批，填 0 时立即处理。')
         +'</div>');
       const dispatch=controlCard('角色分派','核心角色单独写，重要角色与配角按容量合并；手动指定优先。',[
         selectRow('ce-canon-dispatch','分派方式',c.dispatchStrategy || CE_PROSE_DISPATCH.capacity,[
@@ -119903,14 +120089,22 @@ var CE_CORE = (function () {
         renderCoreRosterEditor(c.coreCharacterNames,esc),
         advancedCard('手动指定角色','留空则自动安排','<p class="hint">填写原名或已知别名，以换行、逗号或顿号分隔；同时出现在两栏时，单独写优先。</p><div class="ce-canon-dispatch-grid">'+[['solo','单独写'],['batch','合并写']].map(([key,label])=>'<label class="ce-canon-row ce-canon-select-row"><span class="ce-canon-row-label">'+label+'</span><textarea id="ce-canon-force-'+key+'" class="ce-canon-input" rows="3" placeholder="每行一位角色">'+esc((Array.isArray(force[key])?force[key]:[]).join('\n'))+'</textarea></label>').join('')+'</div>'),
       ].join(''));
-      const advanced=advancedCard('请求与批量设置','篇幅与容量',fieldGrid([
-        numberRow('ce-canon-output-tokens','模型输出上限（词元）',c.maxOutputTokens || 65536,256,262144,'按模型支持值设置，不会强制写满。'),
-        numberRow('ce-canon-prose-rewrites','不合格时重写次数',c.proseRewriteCount === undefined?1:c.proseRewriteCount,0,3,'填 0 时停止该批，等待局部重跑。'),
-        numberRow('ce-canon-completion-repairs','完整性补缺次数',c.completionRepairCount ?? 3,0,3,'只补本轮缺字段或缺项目；与网络重试分别计数。'),
-        numberRow('ce-canon-ready-batch-wait','就绪合批等待（毫秒）',c.readyBatchWaitMs ?? 100,0,200,'短暂等待兼容的已就绪人物合批，填 0 时立即处理。'),
-        numberRow('ce-canon-batch-input','单批输入容量（字）',limits.maxInputChars || CE_REQUEST_LIMITS.maxInputChars,4000,500000,'资料超过容量才拆批，需预留回答空间。'),
-        numberRow('ce-canon-batch-output','单批输出容量（字）',limits.maxOutputChars || CE_REQUEST_LIMITS.maxOutputChars,1000,100000,'用于安排每批人数，每人篇幅以上方为准。'),
-      ])+'<p class="hint">检索命中数、相似度与重排接口在资料来源中配置；变量转换复用重点演化接口；并发、超时与重试统一使用请求设置。</p>');
+      /* 「请求与批量设置」折叠卡片。
+       *
+       * 2026-11-01 玩家：「那个设置50w的输入那里我记得之前不止那两个设置，其他设置你怎么弄丢了？」
+       * 之前这一组里同时放着重试、解析、篇幅、容量好几类，容量那几项被拆到上面后
+       * 只剩 4 项，玩家看到「单批容量」只有两项，以为设置丢了。
+       * 现在：容量/篇幅/重写/补缺/合批等待**全部归到上方「单批容量」**。
+       *
+       * 注意：这里**不要**再放 retry-max / retry-parse ——
+       * 那两项在「请求设置」卡片里已经有了（retry-max 是数字框，
+       * retry-parse 是「返回格式不符时重试」的开关，不是数字）。
+       * 同一 id 渲染两次会让 getElementById 只取第一个，保存时读到错的值，
+       * 甚至把开关当成数字框解析。
+       */
+      const advanced=advancedCard('请求与批量设置','重试与解析',
+        '<p class="hint">单批容量、篇幅、重写与补缺次数已归到上方「单批容量」；'
+        +'重试次数与「返回格式不符时重试」在「请求设置」里调整。</p>');
       return [
         `<div class="settings-section" id="${CE_PANEL_SECTIONS.params}">`,
         sectionHeading('推演与散文','设置篇幅与角色分派；全阶段请求在请求设置中调整。','params'),
@@ -120132,7 +120326,7 @@ var CE_CORE = (function () {
       next.maxOutputTokens=Math.max(256,Math.min(262144,Math.floor(num('ce-canon-output-tokens',next.maxOutputTokens || 65536))));
       next.proseRewriteCount=Math.max(0,Math.min(3,Math.floor(nonnegative('ce-canon-prose-rewrites',next.proseRewriteCount === undefined?1:next.proseRewriteCount))));
       const batch=next.batchLimits || {};
-      next.batchLimits={...batch,timelineBatchEvents:Math.max(1,Math.min(100,Math.floor(num('ce-canon-timeline-batch',batch.timelineBatchEvents || 6)))),maxInputChars:Math.max(4000,Math.min(500000,num('ce-canon-batch-input',batch.maxInputChars || CE_REQUEST_LIMITS.maxInputChars))),maxOutputChars:Math.max(1000,Math.min(100000,num('ce-canon-batch-output',batch.maxOutputChars || CE_REQUEST_LIMITS.maxOutputChars))),ragBatchQueries:Math.max(1,Math.min(256,Math.floor(num('ce-canon-rag-queries',batch.ragBatchQueries || CE_REQUEST_LIMITS.ragBatchQueries))))};
+      next.batchLimits={...batch,timelineBatchEvents:Math.max(1,Math.min(100,Math.floor(num('ce-canon-timeline-batch',batch.timelineBatchEvents || 6)))),maxInputChars:Math.max(4000,Math.min(CE_INPUT_CHARS_MAX,num('ce-canon-batch-input',batch.maxInputChars || CE_REQUEST_LIMITS.maxInputChars))),maxOutputChars:Math.max(1000,Math.min(100000,num('ce-canon-batch-output',batch.maxOutputChars || CE_REQUEST_LIMITS.maxOutputChars))),ragBatchQueries:Math.max(1,Math.min(256,Math.floor(num('ce-canon-rag-queries',batch.ragBatchQueries || CE_REQUEST_LIMITS.ragBatchQueries))))};
       next.retry.retryDelayMs=Math.max(0,Math.min(120,nonnegative('ce-canon-retry-delay',(prevRetry.retryDelayMs === undefined?1000:prevRetry.retryDelayMs)/1000)))*1000;
       next.retry.maxDelayMs=Math.max(next.retry.retryDelayMs,Math.min(600,nonnegative('ce-canon-retry-max-delay',(prevRetry.maxDelayMs === undefined?8000:prevRetry.maxDelayMs)/1000))*1000);
       delete next.batchLimits.ragBatchQueries;
@@ -120281,6 +120475,7 @@ var CE_CORE = (function () {
     .ce-canon-panel .ce-canon-field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px 16px;align-items:start}
     /* 三档篇幅并排：核心/重要/配角三栏，窄屏自动落单列。 */
     .ce-canon-panel .ce-canon-field-grid--triple{grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+    .ce-canon-panel .ce-canon-subheading{margin:18px 0 8px;font-size:13px;font-weight:600;color:var(--canon-text-dim,#9a9282);letter-spacing:.5px;padding-left:8px;border-left:2px solid var(--canon-accent,#c8a45c)}
     /* 整行堆叠区：放长选项的下拉框。下拉框必须占满整行，
        否则选项文字被挤窄后溢出，会压住下一行的说明文字。 */
     .ce-canon-panel .ce-canon-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-bottom:14px}
@@ -120385,6 +120580,13 @@ var CE_CORE = (function () {
     .ce-canon-panel [hidden]{display:none!important}
     .ce-canon-section-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
     .ce-canon-panel .modal-header{position:relative;display:flex;justify-content:space-between;align-items:center;flex:none;gap:20px;padding:20px 26px 18px;border-bottom:1px solid var(--canon-line);background:linear-gradient(112deg,rgba(198,175,124,.085),transparent 65%)}
+    /* 底部渐隐提示：内容区贴到页脚时，用一层渐变暗示「下面还有东西」，
+       避免玩家以为到底了（2026-11-01 玩家：「下面的看不到了」）。 */
+    .ce-canon-panel .ce-canon-body::after{
+      content:'';position:sticky;bottom:-28px;display:block;height:34px;margin:0 -26px -28px;
+      background:linear-gradient(180deg,rgba(25,26,24,0),rgba(25,26,24,.92) 62%,var(--canon-bg));
+      pointer-events:none;
+    }
     .ce-canon-panel .modal-header h3{font-size:26px;font-weight:600;letter-spacing:.08em;line-height:1.25;margin:3px 0 0;color:var(--canon-ink);text-align:left}
     .ce-canon-eyebrow{font-size:11px;letter-spacing:.18em;color:var(--canon-gold)}
     .ce-canon-subtitle{font-size:12px;margin:7px 0 0;color:var(--canon-muted)}
@@ -120394,7 +120596,50 @@ var CE_CORE = (function () {
     .ce-canon-nav button{flex:1;white-space:nowrap;min-height:40px;padding:8px 14px;border:1px solid transparent;background:transparent;color:var(--canon-muted);border-radius:8px;font:inherit;font-size:13px;cursor:pointer}
     .ce-canon-nav button:hover{color:var(--canon-ink);background:rgba(198,175,124,.05)}
     .ce-canon-nav button.active{background:linear-gradient(180deg,rgba(198,175,124,.15),rgba(198,175,124,.08));color:var(--canon-gold);border-color:var(--canon-line);box-shadow:0 1px 0 rgba(232,211,162,.06) inset}
-    .ce-canon-body{flex:1;overflow:auto;overscroll-behavior:contain;min-height:0;padding:22px 26px 28px!important;scrollbar-width:thin;scrollbar-color:#6d624a transparent}
+    /* 2026-11-01 玩家：「问题不是折叠，而是下面的看不到了」。
+     *
+     * 实测原因：.ce-canon-body 一直是可以滚动的（各尺寸验证通过），
+     * 但滚动条宽度是 0 —— Chromium/Electron 下 scrollbar-width:thin 被渲染成**不可见**，
+     * 面板既没有可见滚动条，也没有任何「下面还有内容」的暗示，
+     * 玩家滚到中间就以为下面没有设置了。
+     *
+     * 修法：
+     *   ① 显式画一条宽滚动条（至少 10px），深色轨道 + 金色滑块，一眼能看出可滚
+     *   ② 面板底部加渐隐遮罩（::after），提示「下面还有内容」
+     */
+    /* 2026-11-01 玩家：「问题不是折叠，而是下面的看不到了」。
+     *
+     * 真正的根因（在浏览器里逐条扫规则查出来的，不是猜的）：
+     *   全站有一条通配规则给所有元素设了标准属性 scrollbar-width: thin
+     *   （style-1.css 里的全局规则）。
+     *   Chromium 一旦在元素上看到**标准属性 scrollbar-width**，
+     *   就切到标准/叠加式滚动条渲染，**完全忽略 ::-webkit-scrollbar 那套自定义样式**。
+     *   叠加式滚动条浮在内容上、不占布局，offsetWidth - clientWidth 恒为 0，
+     *   于是面板既没有可见滚动条，也没有任何「下面还有内容」的暗示。
+     *
+     * 处置：不去动全站那条全局规则（会影响所有其它面板），
+     *   只在本面板上把标准属性显式改回 auto，让滚动条占位、常驻可见。
+     *   （本段在 CSS 模板字符串里，注释中不要出现美元符号加花括号） */
+    .ce-canon-panel .ce-canon-body{
+      flex:1;overflow-y:scroll;overscroll-behavior:contain;min-height:0;
+      padding:22px 26px 28px!important;
+      /* 覆盖全局通配规则：auto 才会占位、才看得见 */
+      scrollbar-width:auto;
+      scrollbar-color:#b29a68 rgba(255,255,255,.06);
+    }
+    .ce-canon-panel .ce-canon-body::-webkit-scrollbar{
+      display:block;-webkit-appearance:none;width:11px;
+    }
+    .ce-canon-panel .ce-canon-body::-webkit-scrollbar-track{
+      -webkit-appearance:none;background:rgba(255,255,255,.06);border-radius:6px;
+    }
+    .ce-canon-panel .ce-canon-body::-webkit-scrollbar-thumb{
+      -webkit-appearance:none;min-height:48px;border-radius:6px;
+      background:linear-gradient(180deg,#b29a68,#8a7954);
+    }
+    .ce-canon-panel .ce-canon-body::-webkit-scrollbar-thumb:hover{
+      background:linear-gradient(180deg,#d2b781,#a08a5c);
+    }
     .ce-canon-panel .ce-canon-status{font-size:11px;line-height:1.6;padding:0 0 14px;margin-bottom:18px;border-bottom:1px solid var(--canon-line);color:var(--canon-muted)}
     .ce-canon-panel .settings-section{border:0;background:transparent;margin:0;padding:0}
     .ce-canon-section-heading{margin-bottom:18px}
@@ -120424,7 +120669,11 @@ var CE_CORE = (function () {
          5) tabular-nums + 等宽数字，位数变化时不跳动。 */
     .ce-canon-number-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:13px 14px;border:1px solid rgba(198,175,124,.12);border-radius:8px;background:var(--canon-inset)}
     .ce-canon-row-label{color:var(--canon-ink);font-size:13px;font-weight:500;line-height:1.5;min-width:0;overflow-wrap:anywhere}
-    .ce-canon-row-range{grid-column:2;grid-row:2;text-align:right;color:var(--canon-muted);font-size:10px;white-space:nowrap;line-height:1.5;opacity:.8}
+    /* 可填范围（min — max）。
+       单列纵向布局下它就是普通一行，左对齐放在输入框下面。
+       2026-11-01 之前这里试过把它挪走以「腾列宽」，实测反而让输入框更窄（78→50px），
+       所以现在布局是「标签/输入框/范围/说明」四行纵向，不再有两列争宽的问题。 */
+    .ce-canon-row-range{grid-column:1;grid-row:auto;text-align:left;color:var(--canon-muted);font-size:10px;white-space:nowrap;line-height:1.5;opacity:.8}
     /* 说明文字占满整行宽度、独立成行，绝不与控件抢同一格。 */
     .ce-canon-row-hint{grid-column:1/-1;grid-row:auto;color:var(--canon-muted);font-size:11px;line-height:1.65;margin-top:2px;overflow-wrap:anywhere}
     .ce-canon-number-row .ce-canon-row-hint{grid-column:1/-1;grid-row:auto}
@@ -120433,15 +120682,24 @@ var CE_CORE = (function () {
     .ce-canon-field-grid>.ce-canon-select-row,.ce-canon-dispatch-grid>.ce-canon-select-row{margin:0}
     .ce-canon-panel .ce-canon-input{display:block;min-width:0;width:100%;min-height:40px;padding:8px 11px;background:var(--canon-inset);border:1px solid var(--canon-line);border-radius:7px;color:var(--canon-ink);font-family:inherit;font-size:13px;line-height:1.5;box-shadow:0 1px 3px #0002 inset}
     .ce-canon-panel .ce-canon-input:focus{outline:2px solid var(--canon-gold);outline-offset:1px;border-color:transparent}
-    /* 数字输入行。输入框是 type="text"（见 numberRow 注释），没有上下箭头。
-       玩家 2026-10-30 报「数字显示不全 / 被挡住」：右对齐 + 定宽 + 大字，位数一多就裁。
-       改成：左对齐、宽度随内容自适应（size/field-sizing 控制固有宽度），不设固定 px。 */
-    .ce-canon-panel .ce-canon-number-row input{
-      grid-column:2;grid-row:1;min-height:38px;
+    /* 数字输入行。
+       玩家 2026-11-01：「容器显示的设置数字不全」——
+       500000 显示成 5000、16000 显示成 1600、65536 显示成 6553，全都退成 4 位。
+       真因：原布局「标签 1fr / 输入框 auto」两列并排，输入框只靠 size 定宽
+       （约 6 字符再被 padding 吃掉 2 字符 → 只剩 4 位），卡片一窄就更容易裁。
+
+       ★ 现在改成**单列纵向布局**：标签 → 输入框（整行）→ 可填范围 → 说明。
+         输入框 width:100% 跟着卡片走，不再受列宽挤压；
+         同时保留 min-width:<digits>ch 作为下限，保证最长数字一定装得下。
+         不要再改回「输入框和标签并排」——那正是数字被裁的根源。 */
+    .ce-canon-number-row{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;align-items:start;padding:13px 14px;border:1px solid rgba(198,175,124,.12);border-radius:8px;background:var(--canon-inset)}
+    .ce-canon-panel .ce-canon-number-row input,
+    .ce-canon-panel .ce-canon-number-input{
+      grid-column:1;grid-row:auto;min-height:38px;
       padding:6px 10px;text-align:left;font-size:14px;line-height:1.4;
       font-variant-numeric:tabular-nums;color:var(--canon-gold);
-      width:auto;min-width:0;max-width:100%;box-sizing:border-box;
-      /* 支持时让框随输入内容继续变宽；不支持的浏览器由 size 属性兜底。 */
+      width:100% !important;max-width:100%;box-sizing:border-box;
+      /* 支持时让框随输入内容继续变宽；不支持的浏览器由 size + min-width:ch 兜底。 */
       field-sizing:content;
     }
     .ce-canon-panel select option{background:var(--canon-bg);color:var(--canon-ink)}
@@ -123065,7 +123323,16 @@ var CE_CORE = (function () {
             ? options.castTierResolver(materials.map(material=>material.name))
             : assignCastTiers(materials.map(material=>material.name),{roster:{},coreNames:options.coreCharacterNames||[],resolve:options.resolveImportantRole});
           // 默认「核心单写、重要/配角合并」：玩家仍可在设置里改回按容量合并或全部单写/合并。
-          const plan=planProseDispatch(materials,{strategy:options.dispatchStrategy || CE_PROSE_DISPATCH.capacity,coreMaxChars:options.coreMaxChars,minorMaxChars:options.minorMaxChars,resolveImportantRole:options.resolveImportantRole,maxPerBatch:options.maxPerBatch,force:options.forceDispatch,castTiers,coreNames:options.coreCharacterNames,tierBudgets:options.tierBudgets,...options.batchLimits});
+          // 2026-11-01：共享背景超过单批容量时不再整轮失败，改为自动精简。
+          // 精简发生了要能让玩家知道，所以把回调透传下去，记录一条提示。
+          const sharedTrims=[];
+          const onSharedTrimmed=info=>{
+            sharedTrims.push(info);
+            try{
+              step('精简背景','共享背景超出单批容量，已自动精简 '+info.trimmed+' 字（'+info.sharedBefore+' → '+info.sharedAfter+'）',{kind:'shared-trim',...info});
+            }catch(e){}
+          };
+          const plan=planProseDispatch(materials,{strategy:options.dispatchStrategy || CE_PROSE_DISPATCH.capacity,coreMaxChars:options.coreMaxChars,minorMaxChars:options.minorMaxChars,resolveImportantRole:options.resolveImportantRole,maxPerBatch:options.maxPerBatch,force:options.forceDispatch,castTiers,coreNames:options.coreCharacterNames,tierBudgets:options.tierBudgets,onSharedTrimmed,...options.batchLimits});
           for(const row of [...plan.solo,...plan.batches.flat()]){const material=charMats.find(m=>m.name===row.name);if(material){material.castTier=row.material?.tier;Object.assign(material.material,{tier:row.material?.tier,proseBaseChars:row.material?.proseBaseChars,proseMaxChars:row.material?.proseMaxChars});}}
           dispatch.solo.push(...plan.solo);dispatch.batches.push(...plan.batches);
           step('分派',describeDispatch(plan),{kind:'dispatch',solo:plan.solo.map(m=>m.name),batches:plan.batches.map(group=>group.map(m=>m.name)),tiers:Object.fromEntries(castTiers)});
@@ -124870,9 +125137,24 @@ function ceBridgeCore() {
 function ceBridgeMaterialsFor(stage, config) {
   var base = config && typeof config.materials === 'object' && config.materials
     ? Object.assign({}, config.materials) : {};
+  /* 2026-11-01 玩家：「这个是不是没生效？为什么还是在检索，这是原著指导阶段」
+   *
+   * 旧写法是 `config.guidanceRetrievalEnabled !== false`，
+   * 语义是「只要不是 false 就当开着」——
+   * 而字段缺失时值是 undefined，`undefined !== false` 为 true，
+   * 于是「默认关」变成了「默认开」：玩家没勾选这个开关，
+   * 原著指导阶段照样在检索。注释写的是默认关，代码做的是默认开。
+   *
+   * 改成显式判断「只有明确为 true 才开」，默认才真的是关：
+   *   undefined / false / 0 / 'false' / '0'  → 关
+   *   true                                   → 开
+   * 原著补演阶段保持旧的宽松语义（默认开），只修指导阶段这一个坑，
+   * 避免顺手改坏玩家已经习惯的补演行为。
+   */
   var enabled;
   if (stage === 'guidance') {
-    enabled = config ? config.guidanceRetrievalEnabled !== false : false; // 默认关
+    var raw = config ? config.guidanceRetrievalEnabled : undefined;
+    enabled = raw === true || raw === 1 || raw === 'true' || raw === '1';
   } else {
     enabled = config ? config.replayRetrievalEnabled !== false : true;    // 默认开
   }
@@ -125946,7 +126228,20 @@ async function ceBridgeRunGuidance(options) {
       archived: archived,
       knownPeople: ceBridgeKnownPeople(timeline),
       canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,logId:traceRun&&traceRun.logId||'',
-      options: Object.assign({},config,traceRun?{onStage:function(name,detail,view){frCanonTraceEvent(traceRun,'stage',name,detail);if(view)frCanonTracePublish(traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);},onRetry:function(info){frCanonTraceEvent(traceRun,'retry','重试 · '+info.stage,info);}}:{})
+      options: Object.assign({},config,
+        /* ★★ 2026-11-01 玩家第二次报：「还是在检索怎么回事？」
+         *
+         * 上一次只修了 ceBridgeMaterialsFor 的判断逻辑，但**这条路径根本没调它**。
+         * 原来这里是 Object.assign({},config,...)，直接把整个 config 当 options 传，
+         * options.materials 是 undefined，
+         * 于是 guidance.js 里 `options.materials?.ragVector===false` 永远不成立 → 照常检索。
+         *
+         * 补演那条路（canon-early.js）调了 ceBridgeMaterialsFor('replay',...)，所以那边有效；
+         * 原著指导这条唯一入口漏了，玩家看到的就是「关了分阶段开关还在检索」。
+         * 这里补上同样的阶段过滤，两边的口径才一致。
+         */
+        {materials:ceBridgeMaterialsFor('guidance',config)},
+        traceRun?{onStage:function(name,detail,view){frCanonTraceEvent(traceRun,'stage',name,detail);if(view)frCanonTracePublish(traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);},onRetry:function(info){frCanonTraceEvent(traceRun,'retry','重试 · '+info.stage,info);}}:{})
     });
 
     result.guidanceTime={time:guidanceTime.time,source:guidanceTime.source,precision:guidanceTime.precision,reason:guidanceTime.reason};
@@ -127556,7 +127851,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通重点演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-4abb7d594c3a";
+var FR_BUILD_ID = "FRI-85024c78d14e";
 function frCanonMainStoryText(value,options={}) {
   var source=String(value || '').replace(/<!--FR_CANON_START-->[\s\S]*?<!--FR_CANON_END-->/g,'');
   // 补演语料只取正文；读取实际时间时显式保留正文头。两者不回写展示源。
@@ -127617,7 +127912,13 @@ async function frCanonRequireCompletedTurn(){
   var config=await ceBridgeLoadConfig();if(config.enabled===false)return true;
   var archive=await db.archives.get(currentArchiveName),log=frReplayLatestLog(archive);
   if(typeof frCanonMaterialBusy!=='undefined' && frCanonMaterialBusy)return false;
-  return !log?.canonPending;
+  if(!log?.canonPending)return true;
+  // 兜底：账本已经落库（canonTurnCommit 存在）说明本轮实际已经结算完，
+  // 残留的 pending 只是标记没清干净（历史版本成功路径不清标记留下的）。
+  // 这种情况按「已完成」处理，不能因为一个脏标记把玩家永久卡住。
+  // 玩家 2026-11-01：「账本都记账了，为什么显示未完成，不允许我推进回合？」
+  if(log.canonTurnCommit)return true;
+  return false;
 }
 async function frCanonContinueTurn(defaults){
   defaults=defaults||{};
@@ -127664,6 +127965,15 @@ async function frRunCanonAfterHostTurn(options) {
     var shared = buildSharedEvolutionContext(input.storyText || '', input.userInput || '');
     if (lifecycle.signal.aborted) {if(traceRun)await frCanonTraceFinish(traceRun,'cancelled',{status:'aborted',landed:false});return {status:'aborted',landed:false};}
     var result=await ceRunCanonTurnAfterStory({...input,signal:lifecycle.signal,sharedContext:shared,config:serviceConfig,preset:preset,traceRun:traceRun});
+    // 成功落库后必须清掉“未完成”标记。
+    // 之前只在事务提交那里 delete log.canonPending（那条只覆盖世界提交这一条路径），
+    // 这条主路径跑完就是不清，标记从 running 永久留着，
+    // 结果玩家账本都记好了、界面却一直显示未完成、还被拦住不许推进下一回合。
+    // 玩家 2026-11-01：「账本都记账了，为什么显示未完成，不允许我推进回合？」
+    if(result && (result.landed || result.duplicate ||
+       ['nothing_to_do','empty','skipped'].includes(result.status))){
+      try{ await frCanonSetTurnPending(input.logId,null); }catch(_){}
+    }
     // 失败必须让玩家看见原因：此前只把状态标成 error 就返回，界面既不出正文也没有任何提示。
     if(result && !result.landed && !result.duplicate){
       if(!['nothing_to_do','empty','skipped'].includes(result.status))await frCanonSetTurnPending(input.logId,'error',result.reason||result.landReason||'本轮有未完成事项，请继续本轮补演');
@@ -146121,7 +146431,24 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           // 玩家可能就想直接重 roll 这一轮，或干脆继续往下走；
           // 备份只是保险，不是锁。真要恢复，右侧局部重跑入口里随时可以点。
           if(currentArchiveName&&await dbGet('FR_REPLAY_RECOVERY_V1:'+currentArchiveName)){console.warn('[局部重跑] 检测到上次中断的备份，不阻断本轮发送；可在局部重跑入口选择恢复。');}
-          if(currentArchiveName && typeof frCanonRequireCompletedTurn==='function' && !await frCanonRequireCompletedTurn()){await showCustomAlert('本轮原著补演尚未完成。请从原著补演的局部重跑入口继续本轮，或回退到此前快照；完成前不开始下一回合。');return;}
+          // 玩家 2026-11-01：「就算未完成也只能是提醒，玩家想怎么推进你都不允许拦截或者阻止」。
+          // 之前这里是硬拦截（未完成就 return，不给发），玩家账本都已经记好了还被卡住，
+          // 而且 canonPending 清不掉时会永久卡死。现在只提醒，不挡路。
+          //
+          // 玩家 2026-11-01（第二次纠正文案）：
+          //   「这个提示也不对，应该是提示玩家如果这回合没跑完，后面没办法补了才对啊」
+          // 原文案说「可随时从局部重跑入口补完」是**假承诺**：
+          //   frCanonContinueTurn 取的是 frReplayLatestLog(archive) —— **最新一层**。
+          //   玩家一旦推进到新回合，最新层就变成新那层，
+          //   上一层残留的 canonPending 再也取不到，
+          //   点「继续本轮」只会报「本轮没有待继续事项」，那一层的补演永远补不回来。
+          // 所以文案必须说实话：过了这村没这店，要走就现在决定。
+          if(currentArchiveName && typeof frCanonRequireCompletedTurn==='function' && !await frCanonRequireCompletedTurn()){
+            try{
+              if(typeof showDanmaku==='function')showDanmaku('原著补演上一轮还没跑完。继续推进后，那一轮就补不回来了；想补请先点「继续本轮」把它跑完。','warning');
+              if(typeof ceBridgePushCanonDiag==='function')ceBridgePushCanonDiag('warn','原著补演未收尾','上一轮补演未完成。继续推进后最新楼层会前移，那一层将无法再补run；如需保留请先继续本轮跑完。');
+            }catch(_){}
+          }
           // 指导只在本次发送内复用；回退、同输入重发、切换开关必须重读事实。
           var ceCanonGuidanceKey = null;
           var ceCanonGuidanceBlock = '';
