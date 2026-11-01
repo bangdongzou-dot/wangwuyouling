@@ -1,9 +1,9 @@
-<!-- 凡人卡独立前端 · build 2026-11-01T07:19:59.848Z · v1.0.3 -->
+<!-- 凡人卡独立前端 · build 2026-11-01T07:26:40.469Z · v1.0.3 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
 <script>
-window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
+window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
 </script>
 
 <script>
@@ -6162,6 +6162,10 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     downloading: false,
     progress: 0,
     error: '',
+    /* 主进程 info() 带回来的远端更新日志。
+     * 2026-11-01 新增：原来没有这个字段，导致远端日志拿到了也留不住，
+     * 面板永远显示构建时烤进来的旧日志（本地已是 1.0.3 却看不到 1.0.3）。 */
+    remoteChangelog: null,
     standalone: !(window.frUpdate && typeof window.frUpdate.info === 'function'),
   };
 
@@ -6186,27 +6190,43 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
    *   ② 构建时烤进产物的 window.__FR_CHANGELOG_BUILTIN__（离线/浏览器/安卓可用）
    *   ③ 代码内常量（最后兜底，正常情况为空）
    * 三者都按版本号从新到旧排序并去重，保证「历史永不丢失」。
+   *
+   * ★ 2026-11-01 玩家报「本地已经是 1.0.3 了，更新日志里却没有 1.0.3」：
+   *   根因 1（本条修的）：远端日志原先只在 show() 的 info() 回调里判断了一下
+   *     `Array.isArray(s.changelog)` 就重渲染，但**没有把它存回任何地方** ——
+   *     进而 pickChangelog() 里读的 window.__FR_CHANGELOG__ 谁都没赋过值，
+   *     永远走到 ② 那份构建时烤进来的旧日志（比当前版本落后一版）。
+   *   根因 2（assemble.mjs 那条修的）：构建顺序是
+   *     assemble（烤日志）→ make-dist → make-version（才写入本版日志），
+   *     所以烤进去的那份天生少了正在发的这一版。
+   *   两层都修：这里把远端日志存进 state.remoteChangelog 并参与合并，
+   *     assemble 那边保证烤进去的含本版。
    */
   function pickChangelog() {
-    var remote = [];
-    if (window.__FR_CHANGELOG__ && window.__FR_CHANGELOG__.length) {
-      remote = window.__FR_CHANGELOG__;
-    } else if (window.__FR_CHANGELOG_BUILTIN__ && window.__FR_CHANGELOG_BUILTIN__.length) {
-      remote = window.__FR_CHANGELOG_BUILTIN__;
-    } else if (BUILTIN_CHANGELOG && BUILTIN_CHANGELOG.length) {
-      remote = BUILTIN_CHANGELOG;
-    }
+    /* 合并顺序：远端 > 构建内置 > 代码常量。
+     * 不是「取第一个非空」，而是**取最全的**：
+     * 远端通常最新，但若内置那份包含了远端还没有的版本（离线新增/回滚），
+     * 两边的版本都要保留，按版本号排序去重即可。 */
+    var sources = [
+      window.__FR_CHANGELOG__,              // 远端（运行时拉或主进程 info 带回来）
+      state && state.remoteChangelog,       // 主进程 info() 返回的远端日志
+      window.__FR_CHANGELOG_BUILTIN__,      // 构建时烤进产物
+      BUILTIN_CHANGELOG,                    // 代码常量兜底
+    ];
 
     // 归一化 + 过滤脏数据（一条坏数据不能把整块渲染搞挂）
     var list = [];
-    (remote || []).forEach(function (rel) {
-      if (!rel || !rel.version) return;
-      var items = (rel.items || []).map(function (s) { return String(s); });
-      if (!items.length) return;
-      list.push({ version: String(rel.version), date: String(rel.date || ''), items: items });
+    sources.forEach(function (src) {
+      if (!Array.isArray(src)) return;
+      src.forEach(function (rel) {
+        if (!rel || !rel.version) return;
+        var items = (rel.items || []).map(function (s) { return String(s); });
+        if (!items.length) return;
+        list.push({ version: String(rel.version), date: String(rel.date || ''), items: items });
+      });
     });
 
-    // 按版本号降序（新的在前），同版本去重
+    // 按版本号降序（新的在前），同版本去重（先出现的优先 = 远端优先）
     var seen = {};
     list = list.filter(function (r) {
       if (seen[r.version]) return false;
@@ -6874,10 +6894,17 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
       state.downloading = !!s.downloading;
       state.progress = s.progress || 0;
       state.error = s.error || '';
-      /* 远端带了完整更新日志就换成远端的（更全、更新）。
+      /* 远端带了完整更新日志就存起来并重渲染（更全、更新）。
+       * ★ 2026-11-01 修：原来这里只判断了一下就重渲染，
+       *   但**没把 s.changelog 存到任何地方** —— pickChangelog() 读的
+       *   window.__FR_CHANGELOG__ 谁都没赋过值，所以永远显示构建内置那份旧日志。
+       *   现在存进 state.remoteChangelog，并同步挂到 window.__FR_CHANGELOG__，
+       *   让后续任何一次 pickChangelog()（重新打开面板等）都能拿到。
        * 注意：**没有远端日志时不要清空**，刚才 pickChangelog() 已经
-       * 用构建内置的那份渲染好了 —— 这正是「历史日志永不消失」的关键。 */
+       *   用构建内置的那份渲染好了 —— 这正是「历史日志永不消失」的关键。 */
       if (Array.isArray(s.changelog) && s.changelog.length) {
+        state.remoteChangelog = s.changelog;
+        try { window.__FR_CHANGELOG__ = s.changelog; } catch (_) { /* 只读环境忽略 */ }
         renderLog(pickChangelog());
       }
       refresh();
