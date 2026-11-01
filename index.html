@@ -1,13 +1,13 @@
-<!-- 凡人卡独立前端 · build 2026-11-01T15:00:24.361Z · v1.0.4 -->
+<!-- 凡人卡独立前端 · build 2026-11-01T15:38:07.258Z · v1.0.5 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
 <script>
-window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
+window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.0.4","date":"2026-11-01","items":["【修复】补演正文把韩立的 NPC 视角写成了玩家，人称错乱；已彻底移除补演阶段混入的玩家变量与快照信息","【修复】一个小道具没匹配上就判整轮失败，还要手动点继续补演；现在不再拦","【修复】局部重跑被「合批包含未选人物」整轮中止；现在能安全拆分的会拆开、只重跑勾选的那几个","【修复】PC 端双击不再缩放，只有 Ctrl+滚轮可以；缩放复位按钮也不容易再被误触","【优化】两个阶段的资料采集全面梳理：必要的保留、作用不大的默认关闭、完全没用的直接删除。默认关闭不等于移除，随时可以开回来","【修复】补演阶段不再注入玩家的变量和快照，玩家与 NPC 的变量交互由重点演化接管","【优化】删掉「在场人物」、灵兽不再显示为「我的」、人物档案加回玩家、补演阶段去掉小地图、地图默认开启","【删除】「随身物品与装备」在两个阶段都移除，快照里已经包含","【优化】资料分区与提示词：每份资料都写清是什么、有什么用、该怎么用；设定集检索优先调用凡人卡自身占位符","【修复】世界信息共享、个人信息独享，按人拆开资料，不再被迫把共享背景调到 50 万字","【修复】检索阶段就分好类：人物设定按 NPC 独享，非人物设定先放共享","【重做】设置面板排版：结构错位、尺寸死板、排版冲突全部重做；资料来源按原著指导、原著补演分上下两栏独立设置","【修复】补演报错不再是一句空话，分别说明是引用不在名单、重复、枚举写错、还是理由留空；理由留空不再判失败","【修复】「无推进」等同义写法会自动识别纠正，不会因为一个词的写法把整轮卡死；真正编错的仍然拦","【修复】重试按钮不再被「这条记录属于其他楼层」永久锁死，只要那次楼层还在存档里就放行","【修复】「每批最多处理几条」以前是摆设，现在真正生效，和单批输入输出上限组成两道闸，超容量自动减人","【修复】补演请求数异常增多，恢复按人数合批","【修复】老存档单批输入容量从 12 万自动升到 50 万，不覆盖玩家自己填过的数字","【修复】设置项排查，补齐后端在用但界面上没有的开关；清理掉填了也不生效的冗余输入框"]},{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
 </script>
 
 <script>
-window.__FR_APP_VERSION__="1.0.4";
+window.__FR_APP_VERSION__="1.0.5";
 </script>
 
 <script>
@@ -8403,7 +8403,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-f079f422c783" />
+    <meta name="fr-build-id" content="FRI-7739a8bf3d06" />
     <script>
       (function () {
         try {
@@ -129284,7 +129284,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通重点演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-f079f422c783";
+var FR_BUILD_ID = "FRI-7739a8bf3d06";
 function frCanonMainStoryText(value,options={}) {
   var source=String(value || '').replace(/<!--FR_CANON_START-->[\s\S]*?<!--FR_CANON_END-->/g,'');
   // 补演语料只取正文；读取实际时间时显式保留正文头。两者不回写展示源。
@@ -131657,7 +131657,23 @@ function frCanonTracePublish(run,label,data){
 }
 function frCanonTraceTurns(){
   var groups=new Map();
-  frCanonTraceHistory.filter(function(r){return r.archiveName===currentArchiveName && !r.branchHidden;}).forEach(function(run){
+  /* ★★ 2026-11-01 玩家：「我这轮是原著指导出了之后重roll正文的」
+   *           「然后都跑到这了，原著补演下面的内容都不展示了」
+   *
+   * 原来这里用 `!r.branchHidden` 把作废楼层的记录**直接过滤掉**。
+   * 重roll正文会让旧楼层作废，绑在该楼层的补演记录全被标 branchHidden，
+   * 于是一整个回合的记录从面板上凭空消失 —— 玩家看到「跑完了内容没了」，
+   * 既不知道是被重roll覆盖了，也翻不回原内容。
+   *
+   * 玩家早就批评过这种思路：「不要隐藏，而不是先隐藏再想办法找回来」。
+   * 所以现在**不再过滤**：作废的记录照样留在它原本的回合里，
+   * 由渲染层用「本轮已被重roll覆盖」的标注把它们显式标出来。
+   * 玩家要能在历史回合里翻到，也要能一眼看出它不是当前有效结果。
+   *
+   * 保留 !branchHidden 的语义只用于「是否还属于当前有效分支」的判断，
+   * 不再用它决定「这条记录要不要存在」。
+   */
+  frCanonTraceHistory.filter(function(r){return r.archiveName===currentArchiveName;}).forEach(function(run){
     var key=run.logId?'floor:'+run.logId:run.turnId||run.id;
     if(!groups.has(key))groups.set(key,{id:key,startedAt:run.startedAt,runs:[]});
     var group=groups.get(key);group.runs.push(run);group.startedAt=Math.min(group.startedAt,run.startedAt);
@@ -132012,6 +132028,29 @@ function frCanonTraceRender(){
   button('导出本轮记录',function(){if(!turn)return;var blob=new Blob([JSON.stringify(turn.runs.map(function(r){return frCanonTraceExport(r);}),null,2)],{type:'application/json'});var url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='原著补演-'+turn.id.replace(/[^\w-]/g,'_')+'.json';a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);},bar).disabled=!turn;
   container.appendChild(bar);
   if(!turn){container.appendChild(el('p','暂无运行记录。下一轮的原著指导、补演故事和生效结果会依次显示在这里。','fr-canon-empty'));return;}
+  /* ★★ 2026-11-01 玩家：「我这轮是原著指导出了之后重roll正文的」
+   *           「然后都跑到这了，原著补演下面的内容都不展示了」
+   *
+   * 静默丢弃的反面：这一段回合里如果有记录因为楼层被重roll而作废
+   * （branchHidden），必须在面板上**明说**，而不是让内容凭空消失。
+   *
+   * 玩家要能分清两件事：
+   *   · 「流程根本没跑」   → 面板该显示「没有记录」
+   *   · 「跑了但被覆盖了」 → 面板该显示这段说明 + 原内容仍可查
+   * 这两件事以前混在一起，现在分开表达。
+   */
+  var supersededRuns=turn.runs.filter(function(r){return r.branchHidden===true;});
+  if(supersededRuns.length){
+    var notice=el('div',undefined,'fr-canon-superseded');
+    notice.appendChild(el('span','本轮已被重roll覆盖','fr-canon-superseded-badge'));
+    var keptPhases=Array.from(new Set(supersededRuns.map(function(r){return r.phase;}))).join('、');
+    var restCount=turn.runs.length-supersededRuns.length;
+    notice.appendChild(el('span',
+      '这段回合有 '+supersededRuns.length+' 条记录因正文被重roll而作废'+(keptPhases?'（'+keptPhases+'）':'')+'，已保留在下方供你翻阅，但不再是当前生效结果。'
+      +(restCount>0?'其余 '+restCount+' 条记录仍然有效。':'该回合没有仍然有效的记录。'),
+      'fr-canon-superseded-text'));
+    container.appendChild(notice);
+  }
   var allRuns=turn.runs.filter(function(r){return r.phase!=='重点演化';}).sort(function(a,b){return a.startedAt-b.startedAt;});
   var latest=new Map();allRuns.forEach(function(r){if(r.result?.rolledBack===true&& latest.has(r.phase))return;latest.set(r.phase,r);});var runs=Array.from(latest.values()).sort(function(a,b){return a.startedAt-b.startedAt;});
   var previous=allRuns.filter(function(r){return latest.get(r.phase)!==r;});
@@ -132022,6 +132061,13 @@ function frCanonTraceRender(){
     var parsed=events.filter(function(e){return e.label==='补演解析与账本计划'&& e.data;}).slice(-1)[0];
     var result=Object.assign({},parsed&& parsed.data||{},final),active=run.status==='running',committed=final.rolledBack!==true&&(final.landed===true||final.committed===true||events.some(function(e){return e.type==='committed';}));
     var host=el('div',undefined,'fr-canon-flow-part');host.dataset.runId=run.id;container.appendChild(host);
+    /* 被重roll覆盖的记录：整段打上淡出标记 + 顶部一行小字说明，
+       让玩家一眼看出「这一段是旧的、不是当前生效结果」，
+       而不是分不清它和有效记录的区别。 */
+    if(run.branchHidden===true){
+      host.classList.add('is-superseded');
+      host.appendChild(el('div','已被重roll覆盖 · 以下为历史记录，不再当前生效','fr-canon-superseded-tag'));
+    }
     var phase=run.phase==='正文后补演'?'原著补演':run.phase;
     function directAction(parent,label,selection){
       var group=el('div',undefined,'fr-canon-action-group');parent.appendChild(group);parent=group;
@@ -132186,11 +132232,21 @@ function frCanonTraceRender(){
       // 完全没有可用判定材料时的兜底结论：明确说清「为什么没东西可补」。
       var noMaterial=!(storyAnalysis||selection||diff||musts||range||retrieval);
       if(noMaterial&&!tierInfo.tier){
-        var none=el('p',undefined,'fr-canon-group-item');
-        none.appendChild(el('span','','fr-canon-group-text'));
-        none.lastChild.textContent='本轮没有可用的年表参照：时间可能落在原著第一件事之前，'
+        /* ★★ 2026-11-01 玩家截图：边界判定跑的时候，这段说明被挤成每行一个字的竖条。
+         *
+         * 根因：原来这里复用了 .fr-canon-group-item —— 那是「序号 + 正文」的两列网格
+         *   grid-template-columns:24px minmax(0,1fr)
+         * 而这里只塞了一个 span、没有序号，它落进了第一列（宽 24px），
+         * 于是每个字被迫换行，竖成一条。
+         *
+         * 这不是「样式没写好」，是**用错了容器**：没有序号的行不该套带序号的网格。
+         * 所以不再复用 group-item，改用专门的无序号说明行 fr-canon-note。
+         * 容器修好的同时给个兜底 min-width，防止以后再被类似的窄列挤住。
+         */
+        var note=el('p',undefined,'fr-canon-note');
+        note.textContent='本轮没有可用的年表参照：时间可能落在原著第一件事之前，'
           +'或已过最后一件事的参考终点。这属于「年表之外」，不是流程没跑。';
-        boundary.appendChild(none);
+        boundary.appendChild(note);
       }
       function dateLabel(value){return String(value||'').split(/[\/|]/)[0].trim();}
       if(range){var dates=el('div','','fr-canon-boundary-dates');dates.appendChild(el('small','本轮时间跨度',''));dates.appendChild(el('strong',dateLabel(range.start)+' → '+dateLabel(range.end),''));boundary.appendChild(dates);}
@@ -132703,6 +132759,22 @@ function frCanonInitUI(){
 .fr-canon-group-item:last-child{border-bottom:0;padding-bottom:2px}
 .fr-canon-group-index{font-variant-numeric:tabular-nums;text-align:right;font-size:12px;line-height:1.72;color:rgba(213,188,131,.72);font-weight:600}
 .fr-canon-group-text{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+/* 无序号说明行：单列、整行可换行。
+   2026-11-01 玩家截图报「每行一个字」——原来这种行误用了带序号的
+   两列网格(.fr-canon-group-item，第一列只有 24px)，正文被塞进 24px 里竖成一条。
+   这里明确单列 + 足够宽度，不再继承序号列。 */
+.fr-canon-note{display:block;min-width:0;margin:0;padding:7px 0;border-bottom:1px solid rgba(140,120,83,.1);font-size:13px;line-height:1.72;color:var(--text-primary,#e0dccf);overflow-wrap:anywhere;white-space:pre-wrap}
+.fr-canon-note:last-child{border-bottom:0;padding-bottom:2px}
+/* 回合被重roll覆盖的提示条。
+   2026-11-01 玩家：「然后都跑到这了，原著补演下面的内容都不展示了」——
+   记录不再静默消失，改成显式说明，并且原内容仍留在下方可查。 */
+.fr-canon-superseded{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin:8px 0 4px;padding:9px 12px;border-radius:8px;background:rgba(196,132,58,.10);border:1px solid rgba(196,132,58,.34);min-width:0}
+.fr-canon-superseded-badge{flex:0 0 auto;padding:2px 9px;border-radius:999px;font-size:12px;line-height:1.5;color:#f0cf95;background:rgba(196,132,58,.22);border:1px solid rgba(196,132,58,.45)}
+.fr-canon-superseded-text{flex:1 1 auto;min-width:0;font-size:12.5px;line-height:1.66;color:var(--text-secondary,#b8b0a0);overflow-wrap:anywhere}
+/* 单条被覆盖记录：降饱和 + 左侧竖线，和有效记录形成明确区分。 */
+.fr-canon-flow-part.is-superseded{opacity:.72;border-left:2px solid rgba(196,132,58,.42);padding-left:10px}
+.fr-canon-flow-part.is-superseded:hover{opacity:.92}
+.fr-canon-superseded-tag{margin:2px 0 6px;font-size:12px;line-height:1.55;color:#e0bd88;letter-spacing:.2px}
 /* 分工条目：人名加粗单列，理由缩进换行，避免「人名 + 长理由」挤成一行难以扫读。 */
 .fr-canon-group-actor{display:block;font-weight:600;color:var(--text-primary,#e8e3d6);font-size:13px;line-height:1.5}
 .fr-canon-group-reason{display:block;margin-top:2px;font-size:12px;line-height:1.62;color:var(--text-secondary,#a9a294);overflow-wrap:anywhere}
