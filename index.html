@@ -1,9 +1,9 @@
-<!-- 凡人卡独立前端 · build 2026-10-31T19:39:25.477Z · v1.0.0 -->
+<!-- 凡人卡独立前端 · build 2026-11-01T04:33:34.432Z · v1.0.1 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
 <script>
-window.__FR_APP_VERSION__="1.0.0";
+window.__FR_APP_VERSION__="1.0.1";
 </script>
 
 <script>
@@ -7055,6 +7055,715 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
 </script>
 
 <script>
+/* ==== 全站自适应层 ==== */
+(function(){
+/* ============================================================
+ * 全站自适应层（mobile-adaptive.js）
+ *
+ * 设计目标（玩家原话）：
+ *   「任何情况，打开任何窗口，不管横屏还是竖屏，
+ *     永远要以最舒适最合适的方式显示内容。」
+ *
+ * 为什么不用「逐个弹窗打补丁」：
+ *   全站有 95+ 个 position:fixed 浮层，且大量是脚本动态创建的。
+ *   逐个写 max-width 既写不完，也会不断漏。
+ *
+ * 所以这里做**两层**，合在一个模块里：
+ *   第一层 CSS   ：按结构特征用宽选择器统一兜底（不认具体类名）
+ *   第二层 运行时：持续监测，发现溢出就当场纠正；转屏/新建弹窗自动接管
+ *
+ * 安全边界（很重要）：
+ *   · CSS 规则全部限定在「触屏 / 小屏 / 矮屏」，桌面端零影响。
+ *   · 运行时只做「收窄到装得下」，绝不放大、不改颜色、不改字体语义。
+ *   · 出错静默（try/catch），绝不因为适配而影响游戏本身。
+ * ============================================================ */
+(function () {
+  'use strict';
+  if (window.__frMobileAdaptiveInstalled) return;
+  window.__frMobileAdaptiveInstalled = true;
+
+  /* ══════════════════════════════════════════════════════════════════
+   * 第 0 层：手机端缺失 API 兜底（实机致命问题）
+   *
+   * 玩家实机报错「创建存档失败: crypto.randomUUID is not a function」。
+   * 原因：crypto.randomUUID / crypto.subtle / navigator.clipboard 这些
+   *      **只在安全上下文**（https / localhost）可用；
+   *      安卓 WebView 以 file:// 或 http:// 加载页面时它们是 undefined。
+   *      而 main.js 有 61 处直接调用 crypto.randomUUID()，
+   *      创建存档第一步就抛异常，整个流程中断。
+   *
+   * 只补缺失的方法，绝不覆盖原生实现。
+   * ══════════════════════════════════════════════════════════════════ */
+  (function patchMissingApis() {
+    /* ---- 1. crypto.randomUUID ---- */
+    try {
+      var c = window.crypto || (window.crypto = {});
+      if (typeof c.randomUUID !== 'function') {
+        var uuidv4 = function () {
+          var bytes = null;
+          try {
+            if (typeof c.getRandomValues === 'function') {
+              bytes = new Uint8Array(16);
+              c.getRandomValues(bytes);
+            }
+          } catch (e) { bytes = null; }
+
+          if (!bytes) {
+            // 极端兜底：无任何 CSPRNG 时也让流程能跑完（仅用于本地存档 id）
+            bytes = new Uint8Array(16);
+            for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+          }
+
+          // RFC 4122：置版本位 v4 与变体位
+          bytes[6] = (bytes[6] & 0x0f) | 0x40;
+          bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+          var hex = [];
+          for (var j = 0; j < 16; j++) hex.push((bytes[j] + 0x100).toString(16).slice(1));
+          return hex.slice(0, 4).join('') + '-' + hex.slice(4, 6).join('') + '-' +
+                 hex.slice(6, 8).join('') + '-' + hex.slice(8, 10).join('') + '-' +
+                 hex.slice(10, 16).join('');
+        };
+        try {
+          Object.defineProperty(c, 'randomUUID', {
+            value: uuidv4, writable: true, configurable: true, enumerable: false,
+          });
+        } catch (e) { c.randomUUID = uuidv4; }
+      }
+    } catch (e) {}
+
+    /* ---- 2. navigator.clipboard（复制按钮在手机上会静默失效）---- */
+    try {
+      if (!navigator.clipboard) {
+        var legacyCopy = function (text) {
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = text == null ? '' : String(text);
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+            (document.body || document.documentElement).appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+            ta.remove();
+            return ok;
+          } catch (e3) { return false; }
+        };
+        var readTextFallback = function () {
+          return new Promise(function (resolve, reject) {
+            try {
+              var ta = document.createElement('textarea');
+              ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+              (document.body || document.documentElement).appendChild(ta);
+              ta.focus();
+              ta.select();
+              var ok = false;
+              try { ok = document.execCommand('paste'); } catch (e4) { ok = false; }
+              var val = ta.value;
+              ta.remove();
+              if (ok && val) resolve(val);
+              else reject(new Error('paste not supported'));
+            } catch (e5) { reject(e5); }
+          });
+        };
+        try {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {
+              writeText: function (t) { return Promise.resolve(legacyCopy(t)); },
+              readText: readTextFallback,
+            },
+          });
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    /* ---- 3. structuredClone（老 WebView 无，深拷贝用得上）---- */
+    try {
+      if (typeof window.structuredClone !== 'function') {
+        window.structuredClone = function (obj) {
+          try { return JSON.parse(JSON.stringify(obj)); } catch (e) { return obj; }
+        };
+      }
+    } catch (e) {}
+
+    /* ---- 4. Object.hasOwn / Array.prototype.at / findLast（老内核兜底）---- */
+    try {
+      if (typeof Object.hasOwn !== 'function') {
+        Object.hasOwn = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+      }
+      if (typeof Array.prototype.at !== 'function') {
+        Object.defineProperty(Array.prototype, 'at', {
+          value: function (n) {
+            n = Math.trunc(n) || 0;
+            if (n < 0) n += this.length;
+            return (n < 0 || n >= this.length) ? undefined : this[n];
+          },
+          writable: true, configurable: true,
+        });
+      }
+      if (typeof Array.prototype.findLast !== 'function') {
+        Object.defineProperty(Array.prototype, 'findLast', {
+          value: function (fn, thisArg) {
+            for (var i = this.length - 1; i >= 0; i--) {
+              if (fn.call(thisArg, this[i], i, this)) return this[i];
+            }
+            return undefined;
+          },
+          writable: true, configurable: true,
+        });
+      }
+    } catch (e) {}
+  })();
+
+  /* ──────────────────────────────────────────────────────────────
+   * 第一层：注入自适应 CSS
+   * ────────────────────────────────────────────────────────────── */
+  var CSS = [
+/* ===== 触屏通用（不区分方向）===== */
+'@media (pointer: coarse){',
+  '.overlay,[id$="-overlay"],[class*="overlay"]{',
+    'overflow-y:auto!important;overflow-x:hidden!important;',
+    '-webkit-overflow-scrolling:touch;overscroll-behavior:contain}',
+  '.overlay,[id$="-overlay"]{align-items:flex-start!important;',
+    'padding:max(8px,env(safe-area-inset-top,0px)) 8px max(8px,env(safe-area-inset-bottom,0px)) 8px!important;',
+    'box-sizing:border-box}',
+  '.modal,.modal-content,.modal-beautified,[class*="-modal"],[class*="-dialog"]{',
+    'max-width:min(96vw,100%)!important;max-height:92dvh;max-height:92vh!important;',
+    'overflow-y:auto!important;box-sizing:border-box}',
+  'button,[role="button"],.splash-btn,.major-action-button,.small-btn,.modal-btn,',
+    'input[type="button"],input[type="submit"]{min-height:40px}',
+  'input,textarea,select{font-size:max(16px,1em);max-width:100%;box-sizing:border-box}',
+  'h1,h2,h3,h4,h5,.modal-title,[class*="-title"],[class*="-header"]{',
+    'word-break:break-word;overflow-wrap:anywhere}',
+  'table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}',
+  'img,video,canvas,svg{max-width:100%;height:auto}',
+  '*{overflow-wrap:break-word}',
+
+  /* ── 创建流程：卡片网格 & 头部（玩家反馈「性别与种族页文字重叠」）──
+   * 这条必须放在「触屏通用」里，横竖屏都要命中。
+   *
+   * 实测数据（393×851 竖屏，创建流程第 3 步「性别与种族」）：
+   *   .creation-grid  rect y=-90  高 443px
+   *   gridTemplateRows = 119.781px × 4 行 + gap 15×3 = 524px（内容实际需要 524px）
+   *   → grid 被父级 flex 压矮了 81px，且 overflow:visible，
+   *     第 4 张卡「扶她」的下半截溢出，压住下方「初始年龄」区块：
+   *     「体质特殊，可能引来觊觎」y=394 vs「初始年龄:」y=397 → 重叠 79%。
+   *
+   * 病根：.creation-content 是 flex 子项（flex-shrink:1）+ max-height:100%，
+   *       会把内部块级子元素一起压扁；而 grid / card 本身不该参与这个收缩。
+   * 修法：grid 与 card 设为 flex:none + height:auto，按内容撑开，
+   *       溢出统一交给 .creation-content 的 overflow-y:auto 滚动。 */
+  '.creation-grid{grid-template-columns:1fr!important;gap:15px!important;width:100%!important;',
+    'display:grid!important;flex:0 0 auto!important;height:auto!important;max-height:none!important;',
+    'overflow:visible!important;align-content:start!important}',
+  '.creation-grid > .creation-card{min-width:0!important;height:auto!important;',
+    'max-height:none!important;flex:0 0 auto!important;align-self:start!important;',
+    'overflow:visible!important;padding:14px!important;gap:6px!important;box-sizing:border-box!important}',
+  '.creation-card h4{margin:0!important;line-height:1.35!important}',
+  '.creation-card p{margin:0!important;line-height:1.5!important;overflow-wrap:anywhere!important}',
+  '.creation-card .bonus,.creation-card .penalty{line-height:1.45!important}',
+  '.creation-content .custom-input-group{padding:12px!important;margin-top:14px!important;',
+    'margin-bottom:14px!important;box-sizing:border-box!important;width:100%!important;',
+    'flex:0 0 auto!important;height:auto!important;max-height:none!important}',
+  '.creation-options-group{gap:8px!important;margin-top:8px!important}',
+  '.creation-options-group:first-child{margin-top:0!important}',
+
+  /* ── 创建流程头部：标题与右侧「剩余点数」角标争空间 ──
+   * .creation-step-header 是 flex，标题 div 被 .points-badge 挤到 189px 宽后换行成两行，
+   * 与 68px 高的角标贴在一起，视觉上就是"文字压字"。
+   * 修法：窄屏下换行排布，标题占满一行、角标另起一行右对齐。 */
+  '.creation-step-header{flex-wrap:wrap!important;gap:8px!important;align-items:flex-start!important}',
+  '.creation-step-header > div:not(.points-badge){flex:1 1 auto!important;min-width:0!important}',
+  '.creation-step-header .points-badge,',
+  '.creation-step-header [class*="badge"]{flex:0 0 auto!important;margin-left:auto!important;',
+    'min-width:0!important;max-width:100%!important;white-space:nowrap!important}',
+  '.points-badge{font-size:0.9em!important;padding:6px 12px!important;gap:6px!important;',
+    'box-sizing:border-box!important}',
+  '.points-badge .cost{white-space:nowrap!important}',
+
+  /* ── 地图弹窗头部按钮防挤压（玩家反馈"放大缩小关闭按钮挤在一起"）──
+   * 根因：.modal-close-btn 是 position:absolute; top:20px; right:20px，
+   * 而 .map-zoom-controls 又有 margin-right:20px —— 两者都往右上角挤，
+   * 窄屏/横屏下直接叠在一起；#mini-map-toggle-container 还是绝对定位悬浮。
+   * 修法：header 内所有控件改为正常 flex 流式排布，关闭键不再绝对定位。 */
+  '.map-modal-header{display:flex!important;align-items:center!important;gap:8px!important;',
+    'flex-wrap:nowrap!important;position:relative!important;padding-right:0!important;',
+    'min-height:38px!important}',
+  '.map-modal-header h4{flex:1 1 auto!important;min-width:0!important;text-align:left!important;',
+    'margin:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}',
+  '.map-zoom-controls{flex:0 0 auto!important;margin:0!important;gap:6px!important;display:flex!important}',
+  '.map-modal-header .modal-close-btn{position:static!important;flex:0 0 auto!important;',
+    'top:auto!important;right:auto!important;margin:0!important}',
+  '#mini-map-toggle-container{position:static!important;left:auto!important;flex:0 0 auto!important;',
+    'display:flex!important;align-items:center!important;gap:6px!important}',
+  '.map-zoom-btn{width:34px!important;height:34px!important;font-size:17px!important;flex:0 0 auto!important}',
+  '.map-modal-header .modal-close-btn{width:34px!important;height:34px!important}',
+'}',
+
+/* ===== 竖屏窄屏 ===== */
+'@media (max-width:820px){',
+  /* 全局放开滚动 —— 桌面版是「恒等于视口永不滚动」，小屏必须允许滚 */
+  'html{overflow-y:auto!important;overflow-x:hidden!important;',
+    '-webkit-text-size-adjust:100%;text-size-adjust:100%}',
+  'body{overflow:visible!important;height:auto!important;min-height:100%}',
+
+  /* 注意：这里**不再**用 [class*="-layout"] / [class*="-body"] 这类宽泛选择器
+   * 去强制 flex-direction:column。教训：它们会命中 .creation-content 之类
+   * 的既有 flex 容器，把子项高度压成十几像素，标题直接被裁掉。
+   * 只处理明确知道的、确实需要堆叠的那几个（白名单），其余交给
+   * 第二层运行时引擎按实际溢出情况处理，更安全。 */
+  '.fr-replay-body{grid-template-columns:1fr!important;min-width:0!important}',
+
+  /* 固定列网格降列 —— 只认明确 id，安全 */
+  '#weapon-grid,#armor-grid,#technique-grid,#treasure-grid,#player-traits-grid{',
+    'grid-template-columns:repeat(auto-fill,minmax(62px,1fr))!important;gap:8px!important}',
+  '.status-grid,.status-grid.npc-grid{',
+    'grid-template-columns:repeat(auto-fit,minmax(110px,1fr))!important;width:100%!important}',
+  '.status-pill{min-width:0!important;max-width:100%!important;padding:6px 10px!important}',
+  '.item-slot{min-width:0!important}',
+
+  /* 欢迎页 */
+  '#splash-screen{justify-content:flex-start;overflow-y:auto!important;',
+    'padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px));box-sizing:border-box}',
+  '#splash-content{margin:auto 0;padding:20px 16px;width:100%;max-width:560px;box-sizing:border-box}',
+  '#splash-title{font-size:clamp(26px,min(8.6vw,11vh),52px);line-height:1.18;word-break:keep-all}',
+  '#splash-info{font-size:12.5px;line-height:1.6}',
+  '#splash-buttons{display:grid!important;',
+    'grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;width:100%;margin-top:20px}',
+  '.splash-btn{width:100%;box-sizing:border-box;padding:11px 8px;',
+    'font-size:15px;line-height:1.35;white-space:nowrap}',
+  '.splash-corner-btn{width:44px!important;height:44px!important;font-size:1.15em!important}',
+
+  /* 补演工作台：左右两栏 → 上下堆叠（明确 id，安全） */
+  '#fr-replay-overlay .fr-replay-body{display:flex!important;flex-direction:column!important;',
+    'overflow-y:auto!important;min-height:0}',
+  '#fr-replay-overlay .fr-replay-stages{flex:none!important;max-height:34vh;',
+    'overflow-y:auto!important;border-right:0!important;border-bottom:1px solid #4b4232;padding:12px 14px}',
+  '#fr-replay-overlay .fr-replay-targets{flex:1 1 auto!important;min-height:0;overflow-y:auto!important}',
+  '#fr-replay-overlay .fr-replay-panel{width:96vw!important;height:94dvh;height:94vh}',
+  '#fr-replay-overlay .fr-replay-selection-tools{flex-wrap:wrap}',
+  '#fr-replay-overlay .fr-replay-target-tools{grid-template-columns:1fr!important}',
+
+  /* ── 大画面窗口必须给足面积（玩家反馈「地图窗口特别小」）──
+   * 根因（实测数据）：
+   *   1) 同一个小屏媒体查询里有通用规则
+   *        .modal:not(.character-detail-modal):not(.creation-container){
+   *          width:95vw!important; max-width:500px!important; max-height:80vh!important }
+   *      把**所有**弹窗钉死在 500px 宽 → 横屏地图只有 475px 宽。
+   *   2) 地图画布尺寸由 JS 按容器 rect 实时计算
+   *        canvas.width = rect.width * dpr  (main.js:82374)
+   *      所以「容器多高，地图就多大」。而 .map-container 只是 flex:1 撑剩余空间，
+   *      弹窗本身高度又由内容决定 → 竖屏画布仅 285×143，横屏仅 245×123。
+   *
+   * 修法：把这类窗口的高度直接钉到视口高度（不是 height:auto，
+   *       那样会退回内容高度反而更小 —— 我第一版就踩了这个坑），
+   *       画布容器 flex:1 自然吃满剩余空间。 */
+  '#world-map-modal,#map-selection-modal,#map-editor-modal,#map-management-modal,',
+  '#character-detail-modal,#fr-replay-overlay .fr-replay-panel,',
+  '#traits-overlay .modal,#linggen-overlay .modal,#world-factor-overlay .modal{',
+    'max-width:min(1200px,98vw)!important;width:98vw!important;',
+    'height:94dvh!important;height:94vh!important;max-height:94dvh!important;max-height:94vh!important}',
+  /* 图片/地图类弹窗内部分栏：竖排 + 画布吃满剩余高度 */
+  '#world-map-modal,#map-selection-modal{display:flex!important;flex-direction:column!important;',
+    'gap:8px!important;padding:12px!important}',
+  /* 关键（实测）：canvas 是 position:absolute 且原本没有宽高，
+   * 而 main.js:82371 用 canvas.getBoundingClientRect() 算画布尺寸，
+   * 于是永远读到旧的 300×150 —— 弹窗变大了地图也不变。
+   * 必须让 canvas 铺满容器，rect 才有正确值，JS 重绘后地图才会跟着变大。 */
+  '#map-container,#world-map-container{flex:1 1 auto!important;min-height:200px!important;',
+    'width:100%!important;position:relative!important}',
+  '#map-canvas,#world-map-canvas{position:absolute!important;top:0!important;left:0!important;',
+    'width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important}',
+  '.map-modal-header,.map-modal-controls{flex:0 0 auto!important}',
+  '#map-info-panel,#world-map-info-panel{flex:0 0 auto!important;max-height:34vh;overflow-y:auto!important}',
+'}',
+
+/* ===== 横屏矮屏（高度只有 380~430px）===== */
+/* 原则：横屏只放开滚动 + 让弹窗吃满高度，绝不动内部 flex 结构。 */
+'@media (orientation:landscape) and (max-height:540px){',
+  'html{overflow-y:auto!important;overflow-x:hidden!important}',
+  'body{height:auto!important;min-height:100%;overflow:visible!important}',
+  '.overlay,[id$="-overlay"]{align-items:flex-start!important;',
+    'padding:max(4px,env(safe-area-inset-top,0px)) 6px max(4px,env(safe-area-inset-bottom,0px)) 6px!important}',
+  '.modal,.modal-content,.modal-beautified,[class*="-modal"],[class*="-dialog"]{',
+    'max-height:96dvh;max-height:96vh!important;max-width:98vw!important}',
+
+  /* ── 角色创建界面（开辟鸿蒙）在横屏下的塌陷修复 ──
+   * 原样：.creation-container{height:100%} + padding:30px，横屏只有 393px 高，
+   * 减去 padding 与 header 后，.creation-content 的 flex 高度被压到 15px，
+   * 标题、难度卡全被裁掉（玩家看到的"文字重叠"就是这个）。
+   * 修法：横屏下不再锁死 100% 高度，让容器随内容撑开、页面整体可滚。 */
+  '.creation-container{height:auto!important;max-height:none!important;padding:14px!important;',
+    'gap:10px!important;width:100%!important;max-width:100vw!important;border-radius:0!important}',
+  '.creation-content{overflow:visible!important;min-height:auto!important;padding-right:0!important}',
+  '.creation-step-header{margin-bottom:12px!important;padding-bottom:8px!important}',
+  '.creation-step-title{line-height:1.3!important}',
+
+  /* ── 横屏下大画面窗口也必须给足面积 ──
+   * 注意：横屏 851×393 时宽度 851 > 820，所以上面那个 max-width:820px 的块
+   * **根本不会命中**（第一版就漏了这点，横屏地图一直没变）。
+   * 横屏最缺的是"高度"：总高才 393px，地图容器只剩 125px 高。
+   * 所以这里让弹窗吃满整个视口高度，画布随之撑开。 */
+  '#world-map-modal,#map-selection-modal,#map-editor-modal,#map-management-modal,',
+  '#character-detail-modal,#fr-replay-overlay .fr-replay-panel{',
+    'width:98vw!important;max-width:98vw!important;',
+    'height:96dvh!important;height:96vh!important;max-height:96dvh!important;max-height:96vh!important;',
+    'padding:8px!important;gap:6px!important}',
+  '#world-map-modal,#map-selection-modal{display:flex!important;flex-direction:column!important}',
+  '#map-container,#world-map-container{flex:1 1 auto!important;min-height:120px!important;',
+    'width:100%!important;position:relative!important}',
+  '#map-canvas,#world-map-canvas{position:absolute!important;top:0!important;left:0!important;',
+    'width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important}',
+  '.map-modal-header{flex:0 0 auto!important;margin-bottom:4px!important}',
+  '#map-info-panel,#world-map-info-panel{flex:0 0 auto!important;max-height:26vh;overflow-y:auto!important}',
+
+  /* ── 地图弹窗头部按钮防挤压（玩家反馈"放大缩小关闭按钮挤在一起"）──
+   * 根因：.modal-close-btn 是 position:absolute; top:20px; right:20px，
+   * 而 .map-zoom-controls 又有 margin-right:20px —— 两者都往右上角挤，
+   * 窄屏/横屏下直接叠在一起；#mini-map-toggle-container 还是绝对定位悬浮，
+   * 再挤掉一块空间。
+   * 修法：header 内所有控件改为正常 flex 流式排布，关闭键不再绝对定位。 */
+  '.map-modal-header{display:flex!important;align-items:center!important;gap:8px!important;',
+    'flex-wrap:nowrap!important;position:relative!important;padding-right:0!important;',
+    'min-height:38px!important}',
+  '.map-modal-header h4{flex:1 1 auto!important;min-width:0!important;text-align:left!important;',
+    'margin:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}',
+  '.map-zoom-controls{flex:0 0 auto!important;margin:0!important;gap:6px!important;display:flex!important}',
+  '.map-modal-header .modal-close-btn{position:static!important;flex:0 0 auto!important;',
+    'top:auto!important;right:auto!important;margin:0!important}',
+  '#mini-map-toggle-container{position:static!important;left:auto!important;flex:0 0 auto!important;',
+    'display:flex!important;align-items:center!important;gap:6px!important}',
+  /* 触屏放大点击热区 */
+  '.map-zoom-btn{width:34px!important;height:34px!important;font-size:17px!important;flex:0 0 auto!important}',
+  '.map-modal-header .modal-close-btn{width:34px!important;height:34px!important}',
+
+  /* ── 角色创建头部：标题与右侧「剩余点数」角标互相挤压（玩家反馈的重叠）──
+   * 实测病根：
+   *   .creation-step-header 是 flex，左侧标题 div 被 .points-badge 挤到仅 189px 宽，
+   *   「属性与出身」+ 下方描述被迫换行成两行（高度 62px）；
+   *   而 .points-badge 高 68px、align-items:center，两者贴在一起看着像重叠。
+   * 修法：窄屏下把 header 改成上下两段——标题占满一整行，角标另起一行右对齐，
+   *       彻底消除争抢横向空间；角标本身允许收缩、数字不换行。 */
+  '.creation-step-header{flex-wrap:wrap!important;gap:8px!important;align-items:flex-start!important}',
+  '.creation-step-header > div:not(.points-badge){flex:1 1 auto!important;min-width:0!important}',
+  '.creation-step-header .points-badge,',
+  '.creation-step-header [class*="badge"]{flex:0 0 auto!important;margin-left:auto!important;',
+    'min-width:0!important;max-width:100%!important;white-space:nowrap!important}',
+  '.points-badge{font-size:0.9em!important;padding:6px 12px!important;gap:6px!important;',
+    'box-sizing:border-box!important}',
+  '.points-badge .cost{white-space:nowrap!important}',
+
+  /* ── 创建流程卡片网格（玩家反馈「性别与种族页文字重叠」的真凶）──
+   * 实测数据（393×851 竖屏）：
+   *   .creation-grid  rect y=-90 高 443px
+   *   gridRows = 119.781px × 4 行 + gap 15×3 = 524px  ← 内容实际需要 524px
+   *   即 grid 容器被父级 flex 压到 443px（矮了 81px），而 overflow 是 visible，
+   *   于是第 4 张卡片「扶她」的下半截直接溢出，压住下方「初始年龄」区块 ——
+   *   「体质特殊，可能引来觊觎」y=394 与「初始年龄:」y=397 重叠 79%。
+   * 病根：.creation-content 是 flex 子项（flex-shrink:1）且 max-height:100%，
+   *       会把内部块级子元素一起压缩；grid 本身不该参与收缩。
+   * 修法：grid 及卡片设为 flex:none / height:auto，让它们按内容撑开，
+   *       溢出交给 .creation-content 自己的 overflow-y:auto 去滚动。 */
+  '.creation-grid{grid-template-columns:1fr!important;gap:15px!important;width:100%!important;',
+    'flex:0 0 auto!important;height:auto!important;max-height:none!important;',
+    'overflow:visible!important;align-content:start!important}',
+  '.creation-grid > .creation-card{min-width:0!important;height:auto!important;',
+    'max-height:none!important;flex:0 0 auto!important;align-self:start!important;',
+    'overflow:visible!important;padding:14px!important;gap:6px!important;box-sizing:border-box!important}',
+  '.creation-card h4{margin:0!important;line-height:1.35!important}',
+  '.creation-card p{margin:0!important;line-height:1.5!important;overflow-wrap:anywhere!important}',
+  '.creation-card .bonus,.creation-card .penalty{line-height:1.45!important}',
+  /* 卡片下方那块「初始年龄 / 法相外观 / 人称」的自定义输入组 */
+  '.creation-content .custom-input-group{padding:12px!important;margin-top:14px!important;',
+    'margin-bottom:14px!important;box-sizing:border-box!important;width:100%!important;',
+    'flex:0 0 auto!important;height:auto!important;max-height:none!important}',
+  '.creation-options-group{gap:8px!important;margin-top:8px!important}',
+  '.creation-options-group:first-child{margin-top:0!important}',
+
+  '#splash-screen{padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px))}',
+  '#splash-content{padding:12px 16px;max-width:100%}',
+  '#splash-title{font-size:clamp(22px,min(5.4vw,15vh),40px)}',
+  '#splash-info{margin-top:4px;font-size:11.5px}',
+  '#splash-buttons{margin-top:10px;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}',
+  '.splash-btn{padding:8px 6px;font-size:13.5px}',
+'}',
+
+/* ===== 超窄 / 超矮兜底 ===== */
+'@media (max-width:400px){',
+  '#splash-content{padding:16px 12px}',
+  '#splash-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}',
+  '.splash-btn{font-size:14px;padding:10px 6px}',
+  '.modal-content,.modal-beautified{padding:14px!important;width:98vw;max-width:98vw}',
+'}',
+'@media (max-height:360px){',
+  '.overlay,[id$="-overlay"]{padding-top:2px!important;padding-bottom:2px!important}',
+  '.modal,.modal-content,.modal-beautified,[class*="-modal"]{',
+    'max-height:98vh!important;padding:8px!important}',
+  '#splash-title{font-size:clamp(18px,4.6vw,30px)}',
+  '#splash-info{display:none}',
+'}',
+  ].join('\n');
+
+  function injectCss() {
+    try {
+      if (document.getElementById('fr-mobile-adaptive-style')) return;
+      var st = document.createElement('style');
+      st.id = 'fr-mobile-adaptive-style';
+      st.textContent = CSS;
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  }
+
+  var MARK = 'data-fr-adapted';
+  var MAX_FIX_PER_PASS = 60;     // 单次最多纠正多少个，防止首屏卡顿
+  var PASS_THROTTLE = 320;       // 两次全量扫描最小间隔(ms)
+
+  function vw() { return window.innerWidth || document.documentElement.clientWidth || 0; }
+  function vh() { return window.innerHeight || document.documentElement.clientHeight || 0; }
+
+  function visible(el) {
+    try {
+      var st = getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
+      var b = el.getBoundingClientRect();
+      return b.width > 4 && b.height > 4;
+    } catch (e) { return false; }
+  }
+
+  /* 判断祖先里有没有已经能滚动的容器 —— 有的话不算问题 */
+  function hasScrollableAncestor(el) {
+    var p = el.parentElement;
+    var n = 0;
+    while (p && p !== document.body && n < 12) {
+      try {
+        var st = getComputedStyle(p);
+        if (/auto|scroll/.test(st.overflowX) || /auto|scroll/.test(st.overflowY)) return true;
+      } catch (e) {}
+      p = p.parentElement; n++;
+    }
+    return false;
+  }
+
+  /* 纠正单个元素：让它回到视口内 */
+  function fixElement(el) {
+    try {
+      if (el.getAttribute(MARK) === '1') return false;
+      var b = el.getBoundingClientRect();
+      var W = vw(), H = vh();
+      var changed = false;
+
+      // 横向溢出：限制最大宽度 + 允许内部滚动
+      if (b.right > W + 2 || b.left < -2 || b.width > W + 2) {
+        el.style.setProperty('max-width', 'calc(100vw - 12px)', 'important');
+        el.style.setProperty('box-sizing', 'border-box', 'important');
+        // 如果它是浮层/弹窗，允许它自己滚
+        var st = getComputedStyle(el);
+        if (st.position === 'fixed' || st.position === 'absolute') {
+          el.style.setProperty('overflow-x', 'auto', 'important');
+          el.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+        }
+        // 居中定位造成的越界：把 left/right 归位
+        if (st.position === 'fixed' || st.position === 'absolute') {
+          if (b.left < -2) { el.style.setProperty('left', '6px', 'important'); }
+          if (b.right > W + 2) { el.style.setProperty('right', '6px', 'important'); }
+        }
+        changed = true;
+      }
+
+      // 纵向溢出：可滚动 + 顶部对齐（保证标题/关闭键点得到）
+      if (b.top < -2 || b.bottom > H + 2 || b.height > H + 2) {
+        var st2 = getComputedStyle(el);
+        if (st2.position === 'fixed' || st2.position === 'absolute') {
+          if (b.top < -2) el.style.setProperty('top', '4px', 'important');
+          if (b.height > H + 2 || b.bottom > H + 2) {
+            el.style.setProperty('max-height', 'calc(100vh - 8px)', 'important');
+            el.style.setProperty('overflow-y', 'auto', 'important');
+            el.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+          }
+          changed = true;
+        }
+      }
+
+      if (changed) el.setAttribute(MARK, '1');
+      return changed;
+    } catch (e) { return false; }
+  }
+
+  /* 全量扫描一遍 */
+  function pass() {
+    var fixed = 0;
+    try {
+      var W = vw(), H = vh();
+
+      // 只扫"可能是浮层/容器"的元素，避免遍历几万个节点
+      var nodes = document.querySelectorAll(
+        'body > div, body > section, ' +
+        '[id$="-overlay"], [class*="overlay"], [class*="modal"], [class*="-panel"], ' +
+        '[class*="-dialog"], [class*="-window"], [class*="popup"], [class*="drawer"]'
+      );
+
+      for (var i = 0; i < nodes.length && fixed < MAX_FIX_PER_PASS; i++) {
+        var el = nodes[i];
+        if (el.getAttribute(MARK) === '1') continue;
+        if (!visible(el)) continue;
+        var b = el.getBoundingClientRect();
+
+        // 完全在视口内 → 跳过
+        if (b.left >= -2 && b.right <= W + 2 && b.top >= -2 && b.bottom <= H + 2) continue;
+
+        // 祖先能滚 → 玩家自己滚得到，不算硬伤
+        if (hasScrollableAncestor(el)) continue;
+
+        if (fixElement(el)) fixed++;
+      }
+    } catch (e) {}
+    return fixed;
+  }
+
+  /* 节流执行 */
+  var lastPass = 0, timer = null;
+  function schedule(force) {
+    var now = Date.now();
+    var wait = Math.max(0, PASS_THROTTLE - (now - lastPass));
+    if (timer) return;
+    timer = setTimeout(function () {
+      timer = null;
+      lastPass = Date.now();
+      pass();
+    }, force ? 0 : wait);
+  }
+
+  /* 定向扫描：查找当前最高优先级的可见浮层，只处理它 */
+  function passTopmost() {
+    try {
+      var overlays = document.querySelectorAll(
+        '[id$="-overlay"].visible, .overlay.visible, [class*="overlay"].visible, [class*="modal"].visible'
+      );
+      var best = null, bestZ = -1;
+      for (var i = 0; i < overlays.length; i++) {
+        var el = overlays[i];
+        if (!visible(el)) continue;
+        var z = parseInt(getComputedStyle(el).zIndex, 10);
+        if (isNaN(z)) z = 0;
+        if (z >= bestZ) { bestZ = z; best = el; }
+      }
+      if (best) {
+        // 同时修正它内部的弹窗盒子
+        var inner = best.querySelector('[class*="modal"], [class*="-panel"], [class*="-dialog"]');
+        if (inner && visible(inner)) fixElement(inner);
+        fixElement(best);
+      }
+    } catch (e) {}
+  }
+
+  /* 屏幕旋转 / 尺寸变化：清掉旧标记重新算 */
+  function resetAll() {
+    try {
+      var marked = document.querySelectorAll('[' + MARK + ']');
+      for (var i = 0; i < marked.length; i++) {
+        var el = marked[i];
+        el.removeAttribute(MARK);
+        // 只清掉我们加的那几条，不动其它样式
+        el.style.removeProperty('max-width');
+        el.style.removeProperty('max-height');
+        el.style.removeProperty('overflow-x');
+        el.style.removeProperty('overflow-y');
+        el.style.removeProperty('box-sizing');
+        el.style.removeProperty('-webkit-overflow-scrolling');
+      }
+    } catch (e) {}
+  }
+
+  function onResize() {
+    resetAll();
+    schedule(true);
+    // 旋转后布局要等一帧才稳定，补两次
+    setTimeout(passTopmost, 120);
+    setTimeout(function () { schedule(true); }, 400);
+  }
+
+  /* 安装 */
+  function install() {
+    // 0. 先把自适应 CSS 打进页面（第一层：静态兜底）
+    injectCss();
+
+    // 1. 首次 + 延迟补扫（很多弹窗是异步插入的）
+    schedule(true);
+    setTimeout(function () { schedule(true); }, 600);
+    setTimeout(function () { schedule(true); }, 1800);
+    setTimeout(passTopmost, 2600);
+
+    // 2. 尺寸/旋转
+    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('orientationchange', onResize, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () { schedule(true); }, { passive: true });
+    }
+
+    // 3. 动态插入的弹窗
+    try {
+      var mo = new MutationObserver(function (muts) {
+        var hit = false;
+        for (var i = 0; i < muts.length; i++) {
+          var m = muts[i];
+          if (m.type === 'attributes') {
+            var t = m.target;
+            if (t && t.classList && (t.classList.contains('visible') || /overlay|modal/i.test(t.className || ''))) {
+              hit = true; break;
+            }
+          } else if (m.addedNodes && m.addedNodes.length) {
+            for (var j = 0; j < m.addedNodes.length; j++) {
+              var n = m.addedNodes[j];
+              if (n.nodeType === 1) { hit = true; break; }
+            }
+          }
+          if (hit) break;
+        }
+        if (hit) { schedule(false); passTopmost(); }
+      });
+      mo.observe(document.body, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['class', 'style'],
+      });
+    } catch (e) {}
+
+    // 4. 打开浮层时（点击按钮）补一枪，覆盖"点开才创建"的场景
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t) return;
+      // 只关心可能打开弹窗的点击
+      setTimeout(function () { schedule(false); passTopmost(); }, 80);
+      setTimeout(passTopmost, 350);
+    }, true);
+
+    // 5. 触摸滚动开始时也校验一次（横屏最容易在这里出问题）
+    document.addEventListener('touchstart', function () {
+      if (!modalOpen()) return;
+      schedule(false);
+    }, { passive: true, capture: true });
+  }
+
+  function modalOpen() {
+    try {
+      var ov = document.querySelectorAll('.overlay.visible, [id$="-overlay"].visible');
+      for (var i = 0; i < ov.length; i++) if (visible(ov[i])) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install, { once: true });
+  } else {
+    install();
+  }
+})();
+
+})();
+</script>
+
+<script>
 /* ==== 启动引导 ==== */
 (function(){
 /* ============================================================================
@@ -7332,7 +8041,7 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-c440f0507e34" />
+    <meta name="fr-build-id" content="FRI-e33200302cd8" />
     <script>
       (function () {
         try {
@@ -7805,6 +8514,13 @@ window.__FR_WR_DEFAULT__={"version":"1.0","rules":[{"id":"realm-capability","nam
         margin-top: 40px;
         display: flex;
         gap: 20px;
+        /* 2026-11-01 手机适配：默认允许换行。
+           原来是 nowrap，4 个按钮 + 3×20px 间距约需 490px，手机窄屏只有 271px，
+           结果按钮被压到 80px 宽、字被 padding 挤成一列，第 4 个还溢出到屏幕外。
+           桌面端宽度充裕，允许换行不会改变原有单行外观。 */
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: stretch;
       }
 
       .modal-overlay {
@@ -25043,8 +25759,9 @@ html,body{font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Source
         <div class="map-modal-header">
           <h4>世界地图</h4>
           <div class="map-zoom-controls">
-            <button class="map-zoom-btn" data-action="zoom-in">+</button>
-            <button class="map-zoom-btn" data-action="zoom-out">-</button>
+            <button class="map-zoom-btn" data-action="zoom-in" title="放大">+</button>
+            <button class="map-zoom-btn" data-action="zoom-out" title="缩小">−</button>
+            <button class="map-zoom-btn" data-action="reset" title="回到地图中心">⟲</button>
           </div>
           <div
             id="mini-map-toggle-container"
@@ -25082,8 +25799,9 @@ html,body{font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Source
         <div class="map-modal-header">
           <h4>选择你的出生地</h4>
           <div class="map-zoom-controls">
-            <button class="map-zoom-btn" data-action="zoom-in">+</button>
-            <button class="map-zoom-btn" data-action="zoom-out">-</button>
+            <button class="map-zoom-btn" data-action="zoom-in" title="放大">+</button>
+            <button class="map-zoom-btn" data-action="zoom-out" title="缩小">−</button>
+            <button class="map-zoom-btn" data-action="reset" title="回到地图中心">⟲</button>
           </div>
           <button class="modal-close-btn">×</button>
         </div>
@@ -108169,7 +108887,22 @@ var CE_CORE = (function () {
       if(!rows?.length)return '';
       return '【原账本已保存的事件事实进度】\n'+JSON.stringify(rows)+'\n原日期不是强制完成日期，不按时间百分比推剧情；承接实际节点和变异，不重复已发生内容。尚未发生项是参考与前提，不是必须照单完成的命令，NPC按当前性格、动机和处境自然行动，真实结果再记账。';
     }
-    const EVENT_PROGRESS_PROTOCOL='事件进度按实际故事判断，禁止按日期比例、原结束日期或预定目标推算结果。返回eventProgress数组，每个本次事件一次：{"eventId":"E-001","status":"ongoing","resolved":false,"current":"当下实际剧情节点","occurred":["实际已发生的事"],"pending":["尚未发生的参考事项及前提"],"changes":["实际变异及影响"],"nodes":[{"nodeId":"E-001-N1","title":"节点名（六个字以内）","kind":"canon","state":"done","at":"实际或预计时间","actors":["实际涉及人物"],"original":"","cause":"","result":"","handling":""}],"reason":"结合所给真实故事与存档的判断依据"}。status可选ongoing、changed、blocked、completed、replaced、expired、cancelled；expired为机会窗口确已关闭且本路线错过，cancelled为前提破坏、取消或不再可能发生；后二者resolved=true，pending=[]，occurred可以为空，必须解释性质与真实依据，不能把系统欠写/欠落地当成世界中真的错过。仅日期过去不等于事件已完成，也不等于必可延期；有客观因果且机会仍成立才继续，限时机会正常结束可错过。原著正常过去且本应发生的历史仍应按实际轨迹补演，玩家没参与不等于整个事件取消。可附timingChange:{kind:early或delayed或expired或cancelled,reason,actualStart,recordedAt,referenceStart,referenceEnd}；实际日期未知留空，recordedAt是观察/记账时间，不伪造精确发生时刻。ongoing进行中，changed已经变异但仍可继续，blocked受阻，completed实际完成，replaced已被实际替代。resolved表示该事件是否真正收尾；受阻也可能仍待后续。已收尾时pending为空。不能把准备演出的动作当作已经发生；人物按其性格动机自由选择，偏离原著不是不合格，不许为满足事件进度强改故事。';
+    const EVENT_PROGRESS_PROTOCOL='事件进度按实际故事判断，禁止按日期比例、原结束日期或预定目标推算结果。返回eventProgress数组，每个本次事件一次：{"eventId":"E-001","status":"ongoing","resolved":false,"current":"当下实际剧情节点","occurred":["实际已发生的事"],"pending":["尚未发生的参考事项及前提"],"changes":["实际变异及影响"],"nodes":[{"nodeId":"E-001-N1","title":"节点名（六个字以内）","kind":"canon","state":"done","at":"实际或预计时间","actors":["实际涉及人物"],"original":"","cause":"","result":"","handling":""}],"reason":"结合所给真实故事与存档的判断依据"}。status可选ongoing、changed、blocked、completed、replaced、expired、cancelled；expired为机会窗口确已关闭且本路线错过，cancelled为前提破坏、取消或不再可能发生；后二者resolved=true，pending=[]，occurred可以为空，必须解释性质与真实依据，不能把系统欠写/欠落地当成世界中真的错过。仅日期过去不等于事件已完成，也不等于必可延期；有客观因果且机会仍成立才继续，限时机会正常结束可错过。原著正常过去且本应发生的历史仍应按实际轨迹补演，玩家没参与不等于整个事件取消。可附timingChange:{kind:early或delayed或expired或cancelled,reason,actualStart,recordedAt,referenceStart,referenceEnd}；实际日期未知留空，recordedAt是观察/记账时间，不伪造精确发生时刻。ongoing进行中，changed已经变异但仍可继续，blocked受阻，completed实际完成，replaced已被实际替代。resolved表示该事件是否真正收尾；受阻也可能仍待后续。已收尾时pending为空。不能把准备演出的动作当作已经发生；人物按其性格动机自由选择，偏离原著不是不合格，不许为满足事件进度强改故事。'
+      /* ── 2026-11-01 玩家报：正文时间已到首个年表节点起始时间，进度指针仍显示
+       *    「实际阶段：原著暂未启动」、节点「尚未触发」。
+       *    玩家的判断：这是提示词没教清楚，不是代码 bug；并给出关键设定——
+       *    「玩家没有主动去参与原著，就是原著完全当作背景故事在发生」。
+       *
+       *    所以补上「启动」与「完成」的区分：日期到了 → 算启动；做没做完 → 另说。
+       *    之前只有「仅日期过去不等于已完成」这一句，模型就容易过度保守，
+       *    把「时间已到但玩家没参与」误判成「尚未触发」。 */
+      +'【日期到了算不算启动】日期到达某节点/事件的起始时间，就等于它在原著轨迹上已经启动：'
+      +'玩家不参与只是「玩家没介入」，不等于原著停摆——原著是按自己节奏推进的背景世界。'
+      +'因此：当前正文时间已到或已越过起始时间，且没有明确因果证据表明它被改变、取消或受阻时，'
+      +'该节点应登记 state=done（已发生/已启动），事件 current 要写它实际走到哪一步，'
+      +'不得写成 todo 或「尚未启动」。只有当时间还没到起始时间，或文本已写明它被破坏、取消、错过时，才写 todo。'
+      +'「玩家没参与」「正文没细写」都不是判 todo 的理由：细节缺失只是没写，不等于事情没发生。'
+      +'这两件事要分清：启动与否看时间与因果；完成与否看实际结果。日期到了只代表启动，不代表已完成。';
 
     /**
      * 规范化「上一轮做了什么」，供下一轮接上。
@@ -110828,6 +111561,23 @@ var CE_CORE = (function () {
       + '- cause：todo 写当前状态或尚缺前提；mutated 和 created 写变异原因。\n'
       + '- result：done 写实际阶段结果，mutated 和 created 写实际变成了什么。\n'
       + '- handling：本轮补演打算怎么处理。mutated 和 created 必填。\n'
+      /* ── 2026-11-01 玩家报：正文时间已到首个年表节点起始时间，进度指针仍显示
+       *    「实际阶段：原著暂未启动」、节点「尚未触发」。
+       *    玩家点明这是提示词没教清楚，并给出一条关键设定：
+       *      「我推测是因为玩家没有主动去参与原著，就是原著完全当作背景故事在发生。」
+       *    也就是说，玩家不介入 ≠ 原著停摆；原著本身按时间在推进。
+       *    这里把判定口径写成可执行的三条，避免模型把「玩家没参与」误当成「尚未发生」。 */
+      + '\n【state 怎么判：时间到了就算启动，别把「玩家没参与」当成「没发生」】\n'
+      + '原著是**按自己的节奏在走的背景世界**，不是等玩家触发的任务列表。'
+      + '玩家完全不去参与某个事件，该事件仍然会按年表时间发生——只是玩家没介入而已。'
+      + '所以判定 state 时按这个顺序想：\n'
+      + '1. 当前正文时间已经到达或越过该节点的起始时间 → 只要没有明确证据表明它被改变、取消或受阻，'
+      + '就应当登记为 done（已发生），或在事件进行中时登记为 done 的「已启动」阶段，**不得写成 todo**。\n'
+      + '2. 只有「当前时间还没到它的起始时间」，或者「已经写明的因果使它确实不可能发生」时，才写 todo。\n'
+      + '3. 判断依据是**时间 + 文本里已确认的因果**；不能因为「玩家没参与」「正文没细写」就判 todo。'
+      + '正文没细写只是细节缺失，不等于事情没发生。\n'
+      + '同理，事件级的 current（当下实际剧情节点）也不能因为玩家没参与就写「尚未启动」，'
+      + '要写它按原著时间实际走到了哪一步。\n'
       + '\n节点数量由内容决定，不为凑数硬拆——普通事件通常 2–8 个，内容单薄的两三个就够。\n'
       + '\n【怎么拆节点】\n'
       + '先提醒一点：事件内容（content_brief）多为自动抽取，句子常被逗号切碎，'
@@ -118751,12 +119501,28 @@ var CE_CORE = (function () {
           +esc(val(c.retrievalRerankModel, ''))+'"/></label>',
       ].join('');
 
-      return controlCard('重排设置', '只作用于原著指导与补演，不影响正文检索。',
+      return controlCard('重排设置', '两阶段共享：重排参数。设定集检索按阶段各自开关。',
         '<div class="ce-canon-field-grid">'
           +toggleRow('ce-canon-retrieval-rerank-on', '启用重排', on,
             '开启后先用向量粗筛，再让重排模型精排。关闭则只用相似度排序。')
           +rows
         +'</div>'
+        /* 设定集检索的分阶段开关（玩家 2026-11-01 要求）。
+         * 玩家原话：「原著指导阶段的设定集检索最好默认是关闭，其实这个阶段不需要
+         * 详细的设定来支持指导，因为主要的关注点在剧情，而不是具体的人、事、物的
+         * 详细变量。所以你单独设置一个开关管原著指导阶段的设定集检索，并且默认为
+         * 关闭状态。原著补演阶段的设定集检索也单独设定开关，但是这个就要默认开启了。
+         * 开关可以放在重排设置这里，而重排设置内容就是两阶段共享的设置。」 */
+        +'<p class="ce-canon-subhead">设定集检索（按阶段）</p>'
+        +'<div class="ce-canon-field-grid">'
+          +toggleRow('ce-canon-guidance-retrieval-on', '原著指导阶段启用设定集检索',
+            val(c.guidanceRetrievalEnabled, false),
+            '默认关闭。指导阶段只需抓住剧情走向，人物、物品的详细数值留到补演阶段再查。')
+          +toggleRow('ce-canon-replay-retrieval-on', '原著补演阶段启用设定集检索',
+            val(c.replayRetrievalEnabled, true),
+            '默认开启。补演要判定具体人物与事件，需要设定集里的详细资料支撑。')
+        +'</div>'
+        +'<p class="hint">这两项只管各自的阶段；「资料来源」里把<strong>设定集检索</strong>整项关掉仍会全局停用。</p>'
         +'<details class="ce-canon-advanced"'+(on?'':' closed')+'><summary><span>重排服务</span>'
           +'<span class="ce-canon-advanced-caption">接口地址、密钥与模型</span></summary>'
           +'<div class="ce-canon-advanced-body"><div class="ce-canon-field-grid">'+service+'</div>'
@@ -119051,6 +119817,11 @@ var CE_CORE = (function () {
       if(get('ce-canon-retrieval-rerank-url'))next.retrievalRerankUrl=String(get('ce-canon-retrieval-rerank-url').value||'').trim();
       if(get('ce-canon-retrieval-rerank-key'))next.retrievalRerankKey=String(get('ce-canon-retrieval-rerank-key').value||'').trim();
       if(get('ce-canon-retrieval-rerank-model'))next.retrievalRerankModel=String(get('ce-canon-retrieval-rerank-model').value||'').trim();
+      /* 设定集检索的分阶段开关（玩家 2026-11-01 要求）。
+       * 默认值刻意不同：原著指导默认关、原著补演默认开，
+       * 所以第二个参数分别传 false / true，控件不存在时保留原值。 */
+      if(get('ce-canon-guidance-retrieval-on'))next.guidanceRetrievalEnabled=checked('ce-canon-guidance-retrieval-on',next.guidanceRetrievalEnabled===true);
+      if(get('ce-canon-replay-retrieval-on'))next.replayRetrievalEnabled=checked('ce-canon-replay-retrieval-on',next.replayRetrievalEnabled!==false);
 
       next.showDiagnostics = checked('ce-canon-show-diag', next.showDiagnostics !== false);
 
@@ -123662,6 +124433,23 @@ function ceBridgeDefaultConfig() {
     // 资料开关：空对象 = 全开。
     // 只存玩家显式关掉的项，这样以后新增资料项老存档自动就是开的。
     materials: {},
+    /* 设定集检索按阶段分开关（玩家 2026-11-01 要求）。
+     *
+     * 玩家的判断：「原著指导阶段不需要详细的设定来支持指导，因为主要的关注点
+     * 在剧情，而不是具体的人、事、物的详细变量」；「原著补演的设定集检索
+     * 单独设定开关，但是这个就要默认开启了」。
+     *
+     * 所以两个阶段各有一个独立开关，互不影响：
+     *   guidanceRetrievalEnabled —— 原著指导阶段，默认**关**
+     *   replayRetrievalEnabled   —— 原著补演阶段，默认**开**
+     *
+     * 注意别和上面的 materials.ragVector 重复：
+     *   materials.ragVector 是「资料清单里这一项要不要」，属于全局总闸；
+     *   这两个是按阶段细分的闸门，在总闸打开的前提下再细分。
+     * 实际生效 = 总闸开 && 该阶段开关开。
+     */
+    guidanceRetrievalEnabled: false,
+    replayRetrievalEnabled: true,
     // 重试：调用失败时重来几次。
     // 退避曲线不在这里——那是程序策略，玩家只决定试几次。
     retry: { maxRetries: 2, retryOnParseError: true },
@@ -123682,6 +124470,14 @@ async function ceBridgeLoadConfig() {
     merged.earlyBoundaryEnabled=![false,0,'false','0'].includes(merged.earlyBoundaryEnabled);
     merged.preBoundaryEnabled=![false,0,'false','0'].includes(merged.preBoundaryEnabled);
     merged.earlyPreparationEnabled=![false,0,'false','0'].includes(merged.earlyPreparationEnabled);
+    /* 设定集检索的分阶段开关：玩家要的是「默认关 / 默认开」的明确语义。
+     * 老存档里没有这两个字段时，必须落到各自默认值上，不能被 undefined 带偏。 */
+    merged.guidanceRetrievalEnabled=merged.guidanceRetrievalEnabled===undefined
+      ? defaults.guidanceRetrievalEnabled
+      : ![false,0,'false','0'].includes(merged.guidanceRetrievalEnabled);
+    merged.replayRetrievalEnabled=merged.replayRetrievalEnabled===undefined
+      ? defaults.replayRetrievalEnabled
+      : ![false,0,'false','0'].includes(merged.replayRetrievalEnabled);
     merged.batchLimits=Object.assign({},defaults.batchLimits,saved.batchLimits || {});
     // 旧字符预算不换算成轮数或条数；自然计数逐字段补默认，显式零值保留。
     merged.materialCounts=Object.assign({},defaults.materialCounts,saved.materialCounts && typeof saved.materialCounts==='object'?saved.materialCounts:{});
@@ -123778,6 +124574,32 @@ function ceBridgeCore() {
     throw new Error('核心包 CE_CORE 未加载：检查构建是否把 src/core 打进产物');
   }
   return CE_CORE;
+}
+
+/**
+ * 按阶段解析「设定集检索」是否启用（玩家 2026-11-01 要求分阶段）。
+ *
+ * 两个前提同时成立才真的检索：
+ *   ① 资料总闸 materials.ragVector !== false（资料清单里勾了这一项）
+ *   ② 该阶段自己的开关为开
+ *      stage='guidance' → config.guidanceRetrievalEnabled（默认 false，原著指导）
+ *      stage='replay'   → config.replayRetrievalEnabled  （默认 true ，原著补演）
+ *
+ * 返回一个新的 materials 对象，不修改传入的 config，避免污染其它阶段。
+ * 关闭时给 ragVector 置 false —— 这正是 orchestrator/guidance/canon-turn-plan
+ * 已有的判断方式，不需要在核心层加新分支。
+ */
+function ceBridgeMaterialsFor(stage, config) {
+  var base = config && typeof config.materials === 'object' && config.materials
+    ? Object.assign({}, config.materials) : {};
+  var enabled;
+  if (stage === 'guidance') {
+    enabled = config ? config.guidanceRetrievalEnabled !== false : false; // 默认关
+  } else {
+    enabled = config ? config.replayRetrievalEnabled !== false : true;    // 默认开
+  }
+  if (!enabled) base.ragVector = false;
+  return base;
 }
 
 // ---------- ① 看得到在运行 ----------
@@ -125114,7 +125936,12 @@ async function ceBridgeRunTurn(options) {
       turnNo: Number(opts.turnNo) > 0
         ? Number(opts.turnNo)
         : (prevLedger && Number(prevLedger.turnNo) > 0 ? Number(prevLedger.turnNo) + 1 : 1),
-      options: Object.assign({},ceBridgeProseDispatchConfig(config),{ordinarySettlement:opts.ordinarySettlement||null,savedActorCommits:opts.savedActorCommits,replay:opts.replay||null,onProseReady:opts.onProseReady,turnNo:Number(opts.turnNo) || (prevLedger && Number(prevLedger.turnNo) || 0) + 1},traceRun?{onStage:function(name,detail,view){frCanonTraceEvent(traceRun,'stage',name,detail);if(view)frCanonTracePublish(traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);},onRetry:function(info){frCanonTraceEvent(traceRun,'retry','重试 · '+info.stage,info);}}:{})
+      options: Object.assign({},ceBridgeProseDispatchConfig(config),{
+        /* 玩家 2026-11-01：设定集检索按阶段分开控制。
+         * 这里是**原著补演**的主入口，用 replay 这一档（默认开）。
+         * 漏掉这处的话，补演走总闸默认值，玩家的开关就不生效了。 */
+        materials:ceBridgeMaterialsFor('replay',config),
+        ordinarySettlement:opts.ordinarySettlement||null,savedActorCommits:opts.savedActorCommits,replay:opts.replay||null,onProseReady:opts.onProseReady,turnNo:Number(opts.turnNo) || (prevLedger && Number(prevLedger.turnNo) || 0) + 1},traceRun?{onStage:function(name,detail,view){frCanonTraceEvent(traceRun,'stage',name,detail);if(view)frCanonTracePublish(traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);},onRetry:function(info){frCanonTraceEvent(traceRun,'retry','重试 · '+info.stage,info);}}:{})
     });
 
     // 诊断写进思维 tab
@@ -125868,7 +126695,7 @@ function frStartCanonEarlyPreparation(options) {
 
       host.stateRead=function(){return typeof currentState==='object'?JSON.parse(JSON.stringify(currentState)):null;};
       host.uiStatus=function(){};host.uiThinking=function(){};
-      await core.orchestrator.runCanonTurn({host:host,signal:record.controller.signal,worldTime:ledger?.worldTime || time,targetTime:time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput || '',logId:opts.logId,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:ceBridgeGetBeforeState(),onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents || [],eventProgress:ledger?.eventProgress || [],eventWatches:ledger?.eventWatches || [],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:Object.assign({},ceBridgeProseDispatchConfig(config),{onStage:function(name){if(name==='补演边界判定'&&config.earlyBoundaryEnabled===false)record.controller.abort(frCanonEarlyAbort());}})});
+      await core.orchestrator.runCanonTurn({host:host,signal:record.controller.signal,worldTime:ledger?.worldTime || time,targetTime:time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput || '',logId:opts.logId,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:ceBridgeGetBeforeState(),onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents || [],eventProgress:ledger?.eventProgress || [],eventWatches:ledger?.eventWatches || [],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:Object.assign({},ceBridgeProseDispatchConfig(config),{materials:ceBridgeMaterialsFor('guidance',config),onStage:function(name){if(name==='补演边界判定'&&config.earlyBoundaryEnabled===false)record.controller.abort(frCanonEarlyAbort());}})});
     } catch(error) {
       var failure=error instanceof Error?error:Object.assign(new Error(typeof frErrorText==='function'?frErrorText(error):String(error?.message||error||'提前任务异常')),error&&typeof error==='object'?error:{});
       record.rejectBoundary?.(failure);if(failure.name!=='AbortError')record.reason=failure.message;
@@ -125926,7 +126753,7 @@ async function frRunCanonNarrativePreparation(record,opts,config,valid){
   host.storageSet=async function(){throw frCanonEarlyAbort();};host.stateRead=function(){return structuredClone(snapshot);};
   var ordinary=async function(){var base=await record.ordinaryReady;if(!base||!valid())throw frCanonEarlyAbort();return base;};
   var dispatch=ceBridgeProseDispatchConfig(config);
-  record.resultPromise=core.orchestrator.runCanonTurn({host:host,signal:record.controller.signal,worldTime:ledger?.worldTime||time,targetTime:time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),ceBridgeGetBeforeState()||rows),beforeStateRows:ceBridgeGetBeforeState(),onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,awaitOrdinarySettlement:ordinary,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}});
+  record.resultPromise=core.orchestrator.runCanonTurn({host:host,signal:record.controller.signal,worldTime:ledger?.worldTime||time,targetTime:time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),ceBridgeGetBeforeState()||rows),beforeStateRows:ceBridgeGetBeforeState(),onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,materials:ceBridgeMaterialsFor('replay',config),awaitOrdinarySettlement:ordinary,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}});
   record.resultPromise.catch(function(){});
   return record.resultPromise;
 }
@@ -125997,7 +126824,7 @@ async function frRunRequiredCanonPreparation(record,opts,config,valid){
   record.controller.signal.addEventListener('abort',function(){record.releaseOrdinary(null);},{once:true});
   var ordinary=async function(){var base=await record.ordinaryReady;if(!base||!valid())throw frCanonEarlyAbort();return base;};
   var dispatch=ceBridgeProseDispatchConfig(config);
-  var base={host:host,signal:record.controller.signal,worldTime:ledger?.worldTime||start,targetTime:time,bodyTimeKnown:!!time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,archiveName:record.archiveName,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:rows,onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,bodyTimeKnown:!!time,canonPushBoundaryVersion:1,ordinaryIndependent:true,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}};
+  var base={host:host,signal:record.controller.signal,worldTime:ledger?.worldTime||start,targetTime:time,bodyTimeKnown:!!time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,archiveName:record.archiveName,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:rows,onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,materials:ceBridgeMaterialsFor('replay',config),bodyTimeKnown:!!time,canonPushBoundaryVersion:1,ordinaryIndependent:true,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}};
   record.boundaryInput=base;
   var receipt=await core.orchestrator.prepareCanonTurnBoundary(base);
   if(!valid())throw frCanonEarlyAbort();
@@ -126433,7 +127260,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通重点演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-c440f0507e34";
+var FR_BUILD_ID = "FRI-e33200302cd8";
 function frCanonMainStoryText(value,options={}) {
   var source=String(value || '').replace(/<!--FR_CANON_START-->[\s\S]*?<!--FR_CANON_END-->/g,'');
   // 补演语料只取正文；读取实际时间时显式保留正文头。两者不回写展示源。
@@ -127715,9 +128542,44 @@ function frCanonOpenNode(anchor,row){
     var height=panel.getBoundingClientRect().height,bottom=rect.bottom;if(anchor.classList.contains('fr-pointer-node'))bottom+=30;
     var top=bottom+14;panel.dataset.side='below';if(top+height>(window.innerHeight||800)-10&&rect.top-height-14>=10){top=rect.top-height-14;panel.dataset.side='above';}panel.style.top=Math.max(10,Math.min(top,(window.innerHeight||800)-height-10))+'px';}
   locate();
-  function dismiss(){panel.remove();anchor.setAttribute('aria-expanded','false');document.removeEventListener('click',outside);document.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);document.removeEventListener('scroll',locate,true);frCanonPointerClose=null;}
-  function outside(e){if(!panel.contains(e.target)&&!anchor.contains(e.target))dismiss();}function key(e){if(e.key==='Escape'){dismiss();anchor.focus({preventScroll:true});}}
-  frCanonPointerClose=dismiss;close.onclick=function(){dismiss();anchor.focus({preventScroll:true});};document.addEventListener('click',outside);document.addEventListener('keydown',key);window.addEventListener('resize',dismiss);document.addEventListener('scroll',locate,true);close.focus({preventScroll:true});
+  function dismiss(){panel.remove();anchor.setAttribute('aria-expanded','false');document.removeEventListener('click',outside,true);document.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);document.removeEventListener('scroll',locate,true);frCanonPointerClose=null;}
+  function outside(e){
+    /* 玩家反馈：点节点详情的 × 会把整个补演 UI 一起关掉。
+     *
+     * 根因（已核实）：补演面板 #thinking-log-popup 上挂着
+     *   document.addEventListener('click', e=>{
+     *     if(!thinkBtn.contains(e.target) && !thinkPopup.contains(e.target))
+     *       thinkPopup.classList.add('hidden');   // 整个补演 UI 消失
+     *   });
+     * 而节点详情面板是 append 到 document.body 的，在 thinkPopup 之外，
+     * 所以点它的 × 会被判定成「点了面板外部」。
+     *
+     * 两层防护：
+     *   ① × 的 onclick 里 stopPropagation，事件不再往上冒；
+     *   ② 这里用捕获阶段监听 + 显式放行自身元素，双保险。
+     * 任一层生效都不会误关整个 UI。
+     */
+    if(e.target&&(panel.contains(e.target)||anchor.contains(e.target)))return;
+    dismiss();
+  }
+  function key(e){if(e.key==='Escape'){e.stopPropagation();dismiss();anchor.focus({preventScroll:true});}}
+  frCanonPointerClose=dismiss;
+  close.onmousedown=function(e){if(e)e.stopPropagation();};
+  close.onclick=function(e){
+    /* 关键：阻止冒泡。否则这次点击会被 #thinking-log-popup 的
+     * 「点外部就隐藏」监听当成点了外面，把整个原著补演 UI 一起关掉。 */
+    if(e){e.preventDefault();e.stopPropagation();}
+    dismiss();anchor.focus({preventScroll:true});
+  };
+  /* 弹窗内部任何点击都不往外冒，避免误触外层「点外面就关」的监听。 */
+  function stopEvt(e){e.stopPropagation();}
+  panel.addEventListener('click',stopEvt);
+  panel.addEventListener('mousedown',stopEvt);
+  document.addEventListener('click',outside,true);
+  document.addEventListener('keydown',key);
+  window.addEventListener('resize',dismiss);
+  document.addEventListener('scroll',locate,true);
+  close.focus({preventScroll:true});
 }
 function frCanonNodeButton(host,row,cls){var b=document.createElement('button');b.type='button';b.className=(cls||'fr-pointer-node')+' is-'+row.state;b.textContent=row.title;b.title=row.title;b.setAttribute('aria-label',row.title);b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-expanded','false');b.onclick=function(e){e.stopPropagation();if(b.getAttribute('aria-expanded')==='true'){if(frCanonPointerClose)frCanonPointerClose();}else frCanonOpenNode(b,row);};host.appendChild(b);return b;}
 function frCanonRenderLedger(host,ledger,key){
@@ -155782,6 +156644,17 @@ document.getElementById('open-cloud-settings-btn').addEventListener('click', () 
                   renderer.zoom(1.2);
                 } else if (action === 'zoom-out') {
                   renderer.zoom(1 / 1.2);
+                } else if (action === 'reset') {
+                  /* 回到地图中心：手机上很容易误触把地图拖出视野，
+                   * 这个按钮一键复位（2026-11-01 玩家需求）。 */
+                  if (typeof renderer.resetView === 'function') {
+                    renderer.resetView();
+                  } else {
+                    renderer.scale = 1;
+                    renderer.offsetX = 0;
+                    renderer.offsetY = 0;
+                    if (typeof renderer.drawMap === 'function') renderer.drawMap();
+                  }
                 }
               }
             });
@@ -169114,18 +169987,49 @@ function showAttributeTooltip(attributeName, sources, event) {
           tooltip.innerHTML = contentHTML;
           document.body.appendChild(tooltip);
 
+          /* 玩家 2026-11-01 反馈：左侧人物信息栏的各种弹窗「没有自适应直接飞出屏幕外」，
+           * 「弹窗应该显示在点击的内容附近」。
+           *
+           * 原来的写法有三个毛病：
+           *   ① 宽度写死 200px，手机上内容一多就撑爆；
+           *   ② 只处理了右越界和下越界，没处理左、上越界 ——
+           *      当按钮靠右、弹窗翻到左侧时 left 可能变成负数，直接飞出屏幕左边；
+           *   ③ 高度也可能超出视口，而 maxHeight 没设，长内容会把弹窗顶穿。
+           *
+           * 现在统一成「先量实际尺寸 → 再夹进视口 → 最后按优先级找位置」。
+           * 尺寸跟着视口走：宽 = min(200, 视口宽 - 24)，高 = 视口高 - 24，内部可滚。 */
+          const vw = window.innerWidth || 375;
+          const vh = window.innerHeight || 667;
+          const GAP = 15;          // 弹窗与按钮之间的空隙
+          const EDGE = 12;         // 弹窗与屏幕边缘的最小留白
+          tooltip.style.width = Math.min(200, vw - EDGE * 2) + 'px';
+          tooltip.style.maxWidth = 'calc(100vw - ' + EDGE * 2 + 'px)';
+          tooltip.style.maxHeight = 'calc(100vh - ' + EDGE * 2 + 'px)';
+          tooltip.style.overflowY = 'auto';
+          tooltip.style.boxSizing = 'border-box';
+
           const rect = event.currentTarget.getBoundingClientRect();
           const tooltipRect = tooltip.getBoundingClientRect();
+          const tw = tooltipRect.width;
+          const th = tooltipRect.height;
 
+          // 横向：优先放右边，右边放不下就放左边，两边都放不下就居中贴边。
+          let left = rect.right + GAP;
+          if (left + tw > vw - EDGE) {
+            const leftSide = rect.left - tw - GAP;
+            left = leftSide >= EDGE ? leftSide : Math.max(EDGE, vw - tw - EDGE);
+          }
+
+          // 纵向：默认与按钮顶部对齐；下面放不下就上移，再不行就夹进视口。
           let top = rect.top;
-          let left = rect.right + 15;
+          if (top + th > vh - EDGE) {
+            const above = rect.top - th - GAP;
+            top = above >= EDGE ? above : Math.max(EDGE, vh - th - EDGE);
+          }
 
-          if (left + tooltipRect.width > window.innerWidth) {
-            left = rect.left - tooltipRect.width - 15;
-          }
-          if (top + tooltipRect.height > window.innerHeight) {
-            top = window.innerHeight - tooltipRect.height - 15;
-          }
+          // 最后无条件夹进视口，任何情况下都不会飞出屏幕。
+          left = Math.max(EDGE, Math.min(left, vw - tw - EDGE));
+          top = Math.max(EDGE, Math.min(top, vh - th - EDGE));
 
           tooltip.style.top = `${top}px`;
           tooltip.style.left = `${left}px`;
@@ -169383,18 +170287,51 @@ function showAttributeTooltip(attributeName, sources, event) {
   tooltip.innerHTML = contentHTML;
   document.body.appendChild(tooltip);
 
+  /* 玩家 2026-11-01 反馈：左侧人物信息栏的各种弹窗「没有自适应直接飞出屏幕外」，
+   * 「弹窗应该显示在点击的内容附近」。
+   *
+   * ⚠ 注意：本文件里 showAttributeTooltip 有两个副本，后一份会覆盖前一份。
+   *   这里（第二份、也是实际生效的那份）必须同样修，否则改了等于没改。
+   *
+   * 原来的写法有三个毛病：
+   *   ① 宽度写死 200px，手机上内容一多就撑爆；
+   *   ② 只处理了右越界和下越界，没处理左、上越界 ——
+   *      按钮靠右、弹窗翻到左侧时 left 可能变成负数，直接飞出屏幕左边；
+   *   ③ 高度没上限，长内容会把弹窗顶穿视口。
+   *
+   * 统一成「先量实际尺寸 → 再夹进视口 → 最后按优先级找位置」。 */
+  const vw = window.innerWidth || 375;
+  const vh = window.innerHeight || 667;
+  const GAP = 15;
+  const EDGE = 12;
+  tooltip.style.width = Math.min(200, vw - EDGE * 2) + 'px';
+  tooltip.style.maxWidth = 'calc(100vw - ' + EDGE * 2 + 'px)';
+  tooltip.style.maxHeight = 'calc(100vh - ' + EDGE * 2 + 'px)';
+  tooltip.style.overflowY = 'auto';
+  tooltip.style.boxSizing = 'border-box';
+
   const rect = event.currentTarget.getBoundingClientRect();
   const tooltipRect = tooltip.getBoundingClientRect();
+  const tw = tooltipRect.width;
+  const th = tooltipRect.height;
 
+  // 横向：优先右边；右边放不下就翻到左边；两边都放不下就贴右边内侧。
+  let left = rect.right + GAP;
+  if (left + tw > vw - EDGE) {
+    const leftSide = rect.left - tw - GAP;
+    left = leftSide >= EDGE ? leftSide : Math.max(EDGE, vw - tw - EDGE);
+  }
+
+  // 纵向：默认与按钮顶部对齐；下面放不下就上移；再不行就夹进视口。
   let top = rect.top;
-  let left = rect.right + 15;
+  if (top + th > vh - EDGE) {
+    const above = rect.top - th - GAP;
+    top = above >= EDGE ? above : Math.max(EDGE, vh - th - EDGE);
+  }
 
-  if (left + tooltipRect.width > window.innerWidth) {
-    left = rect.left - tooltipRect.width - 15;
-  }
-  if (top + tooltipRect.height > window.innerHeight) {
-    top = window.innerHeight - tooltipRect.height - 15;
-  }
+  // 无条件夹进视口，任何情况下都不会飞出屏幕。
+  left = Math.max(EDGE, Math.min(left, vw - tw - EDGE));
+  top = Math.max(EDGE, Math.min(top, vh - th - EDGE));
 
   tooltip.style.top = `${top}px`;
   tooltip.style.left = `${left}px`;
@@ -171680,6 +172617,16 @@ async function manageThinkingApiSettings() {
           centerOn(worldX, worldY) {
             this.offsetX = this.canvas.width / 2 - worldX * this.scale;
             this.offsetY = this.canvas.height / 2 - worldY * this.scale;
+            this.drawMap();
+          }
+
+          /* 回到地图中心（玩家需求：不小心把地图拖出视野后能一键拉回来）。
+           * drawMap() 在没有 offset 时会把整张图居中绘制，
+           * 所以 scale=1、offset=0 就是"默认居中视图"。 */
+          resetView() {
+            this.scale = 1;
+            this.offsetX = 0;
+            this.offsetY = 0;
             this.drawMap();
           }
 
