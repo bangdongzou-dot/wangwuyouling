@@ -1,10 +1,10 @@
-<!-- 凡人卡独立前端 · build 2026-11-14T13:18:35.300Z · v1.1.1 -->
+<!-- 凡人卡独立前端 · build 2026-11-14T13:49:07.267Z · v1.1.1 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
 <script>
-window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.1.1","date":"2026-11-14","items":["【优化】重做白天主题与暗金夜间主题，统一主界面、人物面板和设置页的配色，白天模式采用柔和米白底和深色文字。","【优化】放大正文、侧栏和设置页的常用文字与按钮，桌面窗口空间充足时，系统控制台和「接口与模型」随主界面缩放，空间不足时可在窗口内滚动。","【优化】「接口与模型」分为「功能分配」和「接口库」，可以直接查看每项功能的主用模型和备用接口，展开后调整顺序或查看配置。","【优化】重排正文开场、对白与回合末尾的状态栏，时间、地点、在场人物和环境集中在一块简洁的附记里。","【优化】「世界大事」优先显示当前局势、可参与的主线和机缘，已结束的事件收进「历史大事」，同一场冲突的进展和结局归到原条目。","【优化】原著补演按关键节点或实质剧情变化推进，同一节点内的日常行动继续由变量演化处理，原著人物故事会保留「本轮无实质故事进展」的回合。","【优化】原著人物推进到新节点时，已发生的个人变化会随档案保留，并结合新节点确认的得失更新。","【优化】世界观指导与原著指导可以同时进行，两份结果都会供本轮正文参考，世界观裁定在本回合内按主题分卡展示。","【优化】每轮的大小总结由所选功能统一生成，开启分段记忆后，正文按设置使用对应楼层的原文或总结。","【优化】变量演化期间会显示当前在处理登退场、人物、物品还是世界与任务，并持续计时。","【修复】切换备用接口时有时会误用主接口的模型名，现在按实际启用的接口发送请求，切换提示会在请求结束后清除。","【修复】登场事迹使用人物本名时有时会被误判为漏记，导致普通结算中断，现在会按人物身份归属事迹，并支持用「智能重跑」恢复未完成的结算。","【修复】变量演化中有一条指令出错时，能定位的错误会单独补齐，其余已通过的结果会保留。","【修复】已经确认没有实质剧情进展的回合，人物故事有时会显示「尚未完成」，现在会显示本轮没有实质故事进展。","【修复】物品从一人转交给另一人时，接收方入库的同时会扣除给方对应的库存，物品原先穿戴在身上时也会从装备栏移除。","【新增】接口库可为每个接口设置推理强度、输入和输出上限、每分钟请求上限以及超时时间。","【新增】世界观指导开始裁定时显示「正在裁定」和计时，点击提示可取消本次裁定。","【新增】储物袋支持按包查看归组物品，展开即可查看包内各件物品。"]},{"version":"1.1.0","date":"2026-11-13","items":["【优化】原著年表由「原著补演」统一判定和推进，正文根据已经确认的剧情继续写，旧的「事件动态」和重复的年表预告已移除。","【优化】世界大事记会持续显示仍在发生的局势，记录影响范围、实际效果与预计结束时间或条件，并让这些局势影响玩家正文和原著补演。","【优化】NPC 的 Buff 与状态会继承上一轮仍有效的内容，同名状态更新时替换旧条目，到期或达成结束条件后移除，只有已生效的属性效果参与结算。","【优化】人物面板默认只显示 Buff 与状态的名称，点开即可查看效果、生效情况和结束条件。","【优化】「重点演化」更名为「变量演化」，原独立「变量思考」中仍需使用的功能已并入，生平压缩也复用变量演化的接口。","【优化】API 地址、密钥和模型集中在「统一 API 接口配置」维护，各系统直接选用已保存的接口。","【优化】「数值规则设定」可以按小境界查看血量、法力、神识等属性的具体上下限，进入编辑模式即可调整表格中的数值，规则说明也更容易查阅。","【优化】灵根表补齐天灵根、真灵根、伪灵根、异灵根与混沌灵根的名称、特性和修速规则。","【优化】重新平衡混沌之宝的五档强度，传导倍率由下品到至高依次为 10、50、100、500、1000 倍，启动和完整传导所需的神识随品阶提高。","【优化】正文铺满阅读区，灵景有独立样式，人物对白带署名，开场与转场标明时间地点，正文末尾的状态栏显示本轮结束时的实际时地。","【优化】「正文与正则设置」分为显示设置、正则预设和正文预设三页，流式输出开关放在正文预设页，旧迷雾模式和内置的旧战斗卡片样式已移除。","【优化】系统控制台、年表资料、世界档案、数值规则和诊断日志等窗口按内容和屏幕尺寸调整，常用文字更清晰，多页设置切页时外框保持稳定。","【修复】开局或重跑旧楼层时，原著补演有时会把有效剧情判为「年表之外」，现在按年表起点或轮前进度，以及正文末尾的实际时间判定。","【修复】原著补演有时漏读正在进行的事件原文，现在默认读取当前事件的原文，途中经过的事件使用简略条目与已有变量依据，选择「原文优先」可为经过事件一并取用可用原文。","【修复】剧情发生变异时，预制补演有时会把动作和所在地也当作历史增减处理，现在人物的动作、位置与状态按当前场景更新，历史得失仍按对应事件来源处理。","【修复】正文已经上屏时，行动选项有时要等后台结算才出现，现会随本轮正文显示，后续补演失败时也会随楼层保存。","【修复】部分旧楼层的对白和场景文字颜色过暗、字距过宽，现在重新排版并提高对比度，原文照常保留。","【修复】预制人物已有地点但坐标未详时可能无法保存，现可采用可信地点，并在需要时按已知前态和剧情补足年龄、寿元等档案。","【修复】人物明确突破后仍可能沿用上一境界整套基础属性，现按当前境界规则更新这类白值。","【修复】带有缺失属性说明的四灵根有时会取错修速，现按实际灵根类型计算。","【新增】各功能可设置一个主 API 和多个备用 API，请求在开始输出前失败时可按设定顺序切换。","【新增】「变量演化」可设置每批最多处理的 NPC 数量，超过上限时分批更新人物，登退场、物品与杂项仍统一处理一次。"]},{"version":"1.0.9","date":"2026-11-12","items":["【优化】预制补演过去要反复核对能否沿用的内容；现在先用已有进度指针判断，能直接采用的成品不再重写，只修订实际受剧情影响的部分。","【优化】普通补演跨多个事件时，人物经历和变化容易混在一起；现在按 NPC 视角正文逐段结算，补齐中间的空白时段，并保留各段经历、关系和物品的来源。","【优化】预制补演过去要等整批结束才看到结果；现在不互相依赖的 NPC 完成后即可分别保存视角正文和变量，失败时只需重跑该人物未完成的阶段。","【优化】补演气泡过去只提示「还有几项并行任务」；现在直接显示正在处理的阶段和人物，并区分 NPC 视角正文与玩家剧情正文。","【优化】进行中的年表事件过去主要显示时间；现在账本会列出事件名称、当前阶段、下一节点和本轮已保存的人物变化。","【优化】过去通过开关启用预制成品；现在可直接选择「普通补演」或「预制补演」，切换方式不会删除已导入的成品。","【优化】属性面板过去不容易看出数值大致相当于什么境界；现在用简短标签显示等效实力，血量和法力按容量判断。","【优化】「先天气运」改名为「气运特质」；现在人物档案会分开显示特质说明、实际效果和属性加成。","【优化】物品详情过去需要在大段文字里找重点；现在按物品类型分别展示效果、用法、来历和使用门槛。","【优化】百艺过去不容易分清自身熟练度与功法帮助；现在八项技艺分别显示档位和进度，功法辅助单独标注。","【优化】主界面和各弹窗的配色过去不够统一；现在随主题使用同一套配色，人物档案也更易阅读。","【修复】预制补演匹配到成品后有时会转回普通补演；现在原样采用、修订和接续均留在预制线路。","【修复】同一天的后续年表事件有时会被提前写入；现在两条补演线路都按实际经过的节点结算，进行中的事件只写到本轮正文时刻。","【修复】跨事件补演有时只保存当前片段、漏掉已经完成的历史成品；现在先采用符合条件的历史成品，当前片段从其终态接续。","【修复】剧情改变、原著事件不再发生时，旧成品可能仍带入该事件的经历、关系或物品；现在只撤回来源明确的对应变化，保留其他事件的独立结果。","【修复】本轮年表涉及的人物有时会因不在玩家面前而漏补，或被交给重点演化重复处理；现在由原著补演统一处理，是否列入「周围人物」另按实际在场情况判断。","【修复】补演局部重跑有时会选错人物、误报分工变化或只显示笼统错误；现在可按人物和阶段接续，保留已保存结果，并显示具体失败原因。","【修复】预制修订有时因资料超过固定上限而中断；现在可按设置提高输入上限，材料较多时会分组处理并保留已完成的结果。","【修复】重点演化有时因模型返回格式不符而无法保存；现在普通模型和 DeepSeek 的四份内置变量预设已统一各阶段的格式要求。","【修复】NPC 视角正文里有时会夹入生平摘要；现在视角正文按节点使用原段，人物生平单独保留。","【修复】补演人数有时漏算直接采用成品的人物，保存区还可能出现空白人物卡；现在按实际参与补演的人物统计，每人只计一次。","【修复】连续重 roll 后，本轮提示词、分支选项或原著指导有时会空白或串到别的楼层；现在按当前楼层显示对应内容。","【修复】连续新增模型接口有时会覆盖上一份配置；现在同地址的不同模型可分别保存，取消编辑也不会改动原配置。","【修复】出生地地图拖动或缩放后，点选位置有时会偏移；现在选择标记会对准实际点击的位置。","【修复】窗口较矮或界面放大时，物品详情可能超出屏幕；现在标题和关闭按钮保持可见，内容可单独滚动。","【修复】开局修炼速度有时看不出用了哪种灵根的基础值；现在新档会标明灵根来源，缺少来源记录的旧档仍显示实际存档值。","【修复】NPC 获得秘籍后有时没有对应的修习记录；现在符合条件的功法和技能会进入各自的栏位，装备转槽也会保留原物品。","【新增】右侧「系统」加入诊断日志；现在可展开查看所选回合的错误，并将首跑和重跑合并为一份日志导出。","【新增】设置加入「数值规则设定」；现在可集中编辑、导入数值规则，并让变量提示词引用，世界规则仍在「世界观指导」中查看。","【新增】功法扩充为黄、玄、地、天、仙、道六阶，每阶分下品、中品、上品、极品；现在每本功法都有修炼速度加成，装备并解锁对应效果后可在修炼明细查看。","【新增】法宝在玄天之宝之上加入「混沌之宝」，分下品、中品、上品、顶阶、至高五档；混沌造化瓶独占至高档，并使用专属虹彩边框。","【新增】新档选择混沌造化瓶天赋后，开局便与器灵红宝结成羁绊；红宝好感满格，全程以全盛超脱者的姿态登场，所有属性无限。"]},{"version":"1.0.8","date":"2026-11-10","items":["【优化】Gemini 和 DeepSeek V4.1 Flash 默认使用高思考档位。正文设置仍可调整档位，DeepSeek 选择「最高」时会使用最高档。","【修复】忽略过一份补丁后，游戏仍可提醒同一版本号下发布的下一份补丁。","【优化】原著补演的进度提示现在会显示正在进行的阶段，方便区分查资料、写人物故事、更新变量和保存结果。","【优化】当天发生的多个关键事件会按先后顺序排在进度轴上，点开节点可查看详情。","【优化】「原著补演 · 局部重跑」移到右侧「重新生成」，与「重点演化 · 局部重跑」并列，杂项可在重点演化的重跑面板里选择。","【修复】主界面有时会在启动后突然缩小，旧版遗留的 60%–70% 缩放会在首次启动时恢复到 100%，之后主动设置的比例照常保存。","【修复】左上角的快捷入口会盖住部分设置窗口，打开系统窗口时可以正常查看和操作被挡住的区域。","【修复】校订内置年表的开篇内容和简略条目，使事件顺序、人物经历和原文叙述对得上。","【新增】原著补演可在「总览与模型」中开启「使用预制成品」，按实际走过的事件节点复用已导入且匹配当前年表的人物故事和变量。","【新增】年表资料新增「预制成品」页，可导入或导出单条和批量成品，按事件展开查看变量增减，也可以删除单条、所选或全部成品。","【新增】预制补演保存后可按人物查看已落地的变量，重开游戏后仍可在当前楼层查看保存结果。","【新增】普通补演和预制补演都可以单独重跑当前楼层的账本，沿用已保存的人物故事和变量。","【新增】游戏内的年表资料可按事件编号导入并替换单条或一批条目，也可整份替换和导出。"]},{"version":"1.0.7","date":"2026-11-07","items":["【优化】原著补演有时会在「检索资料」停留很久；现在减少了过程记录带来的等待。","【优化】原著补演进度轴原先把事件名称直接排在轴上；现在轴上的编号对应下方的事件卡片，卡片上可直接查看日期。","【优化】重做玩家和 NPC 的装备界面；现在武器、护甲、功法和法宝分别有一格、四格、四格和六格，每格标明用途，空槽与已装备状态采用不同样式。","【优化】装备品阶原先主要靠颜色区分；现在高品阶装备也有对应的边框纹饰与光效。","【优化】查看属性加成时要从多段计算过程里找结果；现在先显示最终值、基础值和实际生效的加成来源。","【优化】调整装备与功法加成的计算规则；现在按人物未受加成的基础属性计算，每件加成各有上限。","【优化】重点演化的设置项集中在同一个长页面；现在可分开查看调度、阶段路由、预设和并发设置。","【优化】原著指导和补演展示改为跟随当前楼层保存；现在重开游戏后可继续查看本层已保存的内容。","【优化】重跑面板原先没有区分演化模式；现在会标出原回合采用的模式，合并回合也可以按阶段或人物选择补跑范围。","【修复】正文出字时，个别内嵌内容加载失败会把游戏退回开始界面；现在正文页面会继续保留。","【修复】指定重写一名原著人物的正文时，有时会从补演边界重新开始；现在同层材料有效时直达该人物正文，完成后只更新其相关变量，其他已保存的人物照常保留。","【修复】正文已经出字，思考面板的「正文提示词」有时还是空的；现在可在对应楼层查看实际发送的内容。","【修复】旧存档中的时间、地点和坐标有时混在同一行；现在世界时间和所在地各自显示。","【新增】系统设置加入「统一 API 接口配置」，可集中保存接口，各系统可以选用已保存的接口、独立选择模型或保留手动配置。","【新增】重点演化可选合并或分阶段运行，合并模式会把普通人物、物品和杂项集中处理，指定人物仍可单独演化。","【新增】法宝栏设有一个本命法宝专用槽，玩家和 NPC 从结丹期起可以装备。","【新增】补全 19 类物品图标，兵器、护甲、功法、法宝、丹药、符箓等在背包、装备栏和详情中按类型显示。","【新增】原著人物列表顶部加入「世界大事记」入口，可单独查看世界事件。","【新增】发现新版本时可以选择「忽略」，同一个版本之后不会反复弹出提示。"]},{"version":"1.0.6","date":"2026-11-02","items":["【优化】NPC 视角正文的日期单独标出，一眼能看到时间点。","【优化】变量思维改为每跑完一个阶段就显示，不用等整轮结束。","【优化】界面放大改为分档：菜单和提示不放大，小窗最多 115%，窗口不再超出屏幕。","【修复】补演失败不再只给一句笼统话，会直接指出哪个字段错了、该填什么。","【修复】一个人物出错不再拖垮整轮，写对的照常推进，出错的单独标出可重跑。","【修复】NPC 正文不再参考玩家正文，只用判定阶段提炼出的事实。","【修复】NPC 正文的楼层编号改为显示真实楼层序号，回退后同步退回。","【修复】NPC 正文每段单独成块，段与段之间留出间距。","【修复】NPC 正文会标出最新那一段，不会把旧内容当成新的。","【修复】重 roll 时指令没改就沿用上一轮指导，改了才问要不要重推。","【修复】一层只留一份生效记录，旧记录收起为一行，仍可展开查看。","【修复】中止按正常操作处理，只提示已中止，不再锁死本回合。","【修复】原著人物故事按回合分开，默认停在最新回合。","【修复】人物故事的时间接上回合继续写，空档期一并补上。","【修复】人物故事按出场分段，没戏份的日子合并为空白期。","【修复】跨回合事件只覆盖最后一段，前面已写的原样保留。","【修复】续写把上回合原文和时间区间一起交给模型照抄，不再凭空猜。","【修复】生平摘要合并后保持完整一条，时间地点不再丢失。","【修复】重点演化的局部重跑点下去真的会跑，过程不再卡顿。","【修复】长时间没有进展会如实说卡在哪一步，不再假装在跑。","【修复】重跑失败会留在面板上，红字写清原因，不再一闪就没。","【修复】重跑重点演化只跑自己的事，不再牵连原著补演。","【修复】勾了谁就只重跑谁，不会连带整轮重跑。","【修复】发现新版本直接列出这一版的更新内容，按优化、修复、新增分开。","【修复】游戏中途只轻提示一行，想细看再展开；刚启动时才完整列出。","【修复】更新下载完当场列出本版内容，不用等重启。","【修复】勾什么就跑什么，必须连带的相关项会自动补上并说明原因。","【修复】重跑面板每项都用日常说法写清作用，勾选时自动带出相关项。","【修复】跑完就是跑完，不再把成功的结果报成失败。","【修复】失败项真的排到最前，用红条和深底标出，并单独加分隔标题。","【修复】重跑面板底部三个按钮并排一行，智能重跑描金边更醒目。","【修复】只有真正落地才算完成，没落地会说明卡在哪一步。","【修复】勾阶段就按阶段跑，不再误判成没有对应人物。","【修复】重跑出错直接说清真实原因，不再被英文报错盖住。","【修复】账本自动补跑不再被「对不上人物」拦住。","【修复】变量思维只显示一句「进行中」，结果出来直接替换。","【修复】重跑只用本回合的资料，旧楼层不再保留，也不再给选楼层下拉框。","【修复】删掉重跑面板上方多余的分类切换，左侧阶段右侧目标本身就是分类。","【修复】加了「显示全部」，看完某个阶段能回到完整列表，左侧对应项会高亮。","【修复】阶段勾上之后可以取消，只有必须连带的相关项才会自动勾上。","【修复】账本和面板的「智能重跑」统一成同一套做法。","【修复】没有需要补的项目会明说，不再弹红字当成故障。","【修复】启动时一次就接上调试记录，不再反复重试并报「函数未找到」。"]},{"version":"1.0.5","date":"2026-11-01","items":["【修复】原著补演的边界判定说明文字被挤成每行一个字的竖条、撑高整块面板并推走后面内容；现已正常换行。","【修复】重roll正文后原著补演下面的内容整段消失；现在会标注「本轮已被重roll覆盖」并说明覆盖了几条，原记录仍保留可查。"]},{"version":"1.0.4","date":"2026-11-01","items":["【修复】补演正文把韩立的 NPC 视角写成了玩家，人称错乱；已彻底移除补演阶段混入的玩家变量与快照信息","【修复】一个小道具没匹配上就判整轮失败，还要手动点继续补演；现在不再拦","【修复】局部重跑被「合批包含未选人物」整轮中止；现在能安全拆分的会拆开、只重跑勾选的那几个","【修复】PC 端双击不再缩放，只有 Ctrl+滚轮可以；缩放复位按钮也不容易再被误触","【优化】两个阶段的资料采集全面梳理：必要的保留、作用不大的默认关闭、完全没用的直接删除。默认关闭不等于移除，随时可以开回来","【修复】补演阶段不再注入玩家的变量和快照，玩家与 NPC 的变量交互由重点演化接管","【优化】删掉「在场人物」、灵兽不再显示为「我的」、人物档案加回玩家、补演阶段去掉小地图、地图默认开启","【删除】「随身物品与装备」在两个阶段都移除，快照里已经包含","【优化】资料分区与提示词：每份资料都写清是什么、有什么用、该怎么用；设定集检索优先调用凡人卡自身占位符","【修复】世界信息共享、个人信息独享，按人拆开资料，不再被迫把共享背景调到 50 万字","【修复】检索阶段就分好类：人物设定按 NPC 独享，非人物设定先放共享","【重做】设置面板排版：结构错位、尺寸死板、排版冲突全部重做；资料来源按原著指导、原著补演分上下两栏独立设置","【修复】补演报错不再是一句空话，分别说明是引用不在名单、重复、枚举写错、还是理由留空；理由留空不再判失败","【修复】「无推进」等同义写法会自动识别纠正，不会因为一个词的写法把整轮卡死；真正编错的仍然拦","【修复】重试按钮不再被「这条记录属于其他楼层」永久锁死，只要那次楼层还在存档里就放行","【修复】「每批最多处理几条」以前是摆设，现在真正生效，和单批输入输出上限组成两道闸，超容量自动减人","【修复】补演请求数异常增多，恢复按人数合批","【修复】老存档单批输入容量从 12 万自动升到 50 万，不覆盖玩家自己填过的数字","【修复】设置项排查，补齐后端在用但界面上没有的开关；清理掉填了也不生效的冗余输入框"]},{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
+window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.1.1","date":"","items":["【优化】重做白天主题与暗金夜间主题，统一主界面、人物面板和设置页的配色，白天模式采用柔和米白底和深色文字。","【优化】放大正文、侧栏和设置页的常用文字与按钮，桌面窗口空间充足时，系统控制台和「接口与模型」随主界面缩放，空间不足时可在窗口内滚动。","【优化】「接口与模型」分为「功能分配」和「接口库」，可以直接查看每项功能的主用模型和备用接口，展开后调整顺序或查看配置。","【优化】重排正文开场、对白与回合末尾的状态栏，时间、地点、在场人物和环境集中在一块简洁的附记里。","【优化】「世界大事」优先显示当前局势、可参与的主线和机缘，已结束的事件收进「历史大事」，同一场冲突的进展和结局归到原条目。","【优化】原著补演按关键节点或实质剧情变化推进，同一节点内的日常行动继续由变量演化处理，原著人物故事会保留「本轮无实质故事进展」的回合。","【优化】原著人物推进到新节点时，已发生的个人变化会随档案保留，并结合新节点确认的得失更新。","【优化】世界观指导与原著指导可以同时进行，两份结果都会供本轮正文参考，世界观裁定在本回合内按主题分卡展示。","【优化】每轮的大小总结由所选功能统一生成，开启分段记忆后，正文按设置使用对应楼层的原文或总结。","【优化】变量演化期间会显示当前在处理登退场、人物、物品还是世界与任务，并持续计时。","【修复】切换备用接口时有时会误用主接口的模型名，现在按实际启用的接口发送请求，切换提示会在请求结束后清除。","【修复】登场事迹使用人物本名时有时会被误判为漏记，导致普通结算中断，现在会按人物身份归属事迹，并支持用「智能重跑」恢复未完成的结算。","【修复】变量演化中有一条指令出错时，能定位的错误会单独补齐，其余已通过的结果会保留。","【修复】已经确认没有实质剧情进展的回合，人物故事有时会显示「尚未完成」，现在会显示本轮没有实质故事进展。","【修复】物品从一人转交给另一人时，接收方入库的同时会扣除给方对应的库存，物品原先穿戴在身上时也会从装备栏移除。","【修复】向量、重排序和生图模型按各自接口发送测试请求，重排序遇到单次 25 条上限时会分批处理完整候选。","【修复】「功能分配」展开后，主接口和备用接口的详情与排序按钮在放大界面时也能完整显示和点击。","【新增】接口库可为每个接口设置推理强度、输入和输出上限、每分钟请求上限以及超时时间。","【新增】世界观指导开始裁定时显示「正在裁定」和计时，点击提示可取消本次裁定。","【新增】储物袋支持按包查看归组物品，展开即可查看包内各件物品。"]},{"version":"1.1.0","date":"2026-11-13","items":["【优化】原著年表由「原著补演」统一判定和推进，正文根据已经确认的剧情继续写，旧的「事件动态」和重复的年表预告已移除。","【优化】世界大事记会持续显示仍在发生的局势，记录影响范围、实际效果与预计结束时间或条件，并让这些局势影响玩家正文和原著补演。","【优化】NPC 的 Buff 与状态会继承上一轮仍有效的内容，同名状态更新时替换旧条目，到期或达成结束条件后移除，只有已生效的属性效果参与结算。","【优化】人物面板默认只显示 Buff 与状态的名称，点开即可查看效果、生效情况和结束条件。","【优化】「重点演化」更名为「变量演化」，原独立「变量思考」中仍需使用的功能已并入，生平压缩也复用变量演化的接口。","【优化】API 地址、密钥和模型集中在「统一 API 接口配置」维护，各系统直接选用已保存的接口。","【优化】「数值规则设定」可以按小境界查看血量、法力、神识等属性的具体上下限，进入编辑模式即可调整表格中的数值，规则说明也更容易查阅。","【优化】灵根表补齐天灵根、真灵根、伪灵根、异灵根与混沌灵根的名称、特性和修速规则。","【优化】重新平衡混沌之宝的五档强度，传导倍率由下品到至高依次为 10、50、100、500、1000 倍，启动和完整传导所需的神识随品阶提高。","【优化】正文铺满阅读区，灵景有独立样式，人物对白带署名，开场与转场标明时间地点，正文末尾的状态栏显示本轮结束时的实际时地。","【优化】「正文与正则设置」分为显示设置、正则预设和正文预设三页，流式输出开关放在正文预设页，旧迷雾模式和内置的旧战斗卡片样式已移除。","【优化】系统控制台、年表资料、世界档案、数值规则和诊断日志等窗口按内容和屏幕尺寸调整，常用文字更清晰，多页设置切页时外框保持稳定。","【修复】开局或重跑旧楼层时，原著补演有时会把有效剧情判为「年表之外」，现在按年表起点或轮前进度，以及正文末尾的实际时间判定。","【修复】原著补演有时漏读正在进行的事件原文，现在默认读取当前事件的原文，途中经过的事件使用简略条目与已有变量依据，选择「原文优先」可为经过事件一并取用可用原文。","【修复】剧情发生变异时，预制补演有时会把动作和所在地也当作历史增减处理，现在人物的动作、位置与状态按当前场景更新，历史得失仍按对应事件来源处理。","【修复】正文已经上屏时，行动选项有时要等后台结算才出现，现会随本轮正文显示，后续补演失败时也会随楼层保存。","【修复】部分旧楼层的对白和场景文字颜色过暗、字距过宽，现在重新排版并提高对比度，原文照常保留。","【修复】预制人物已有地点但坐标未详时可能无法保存，现可采用可信地点，并在需要时按已知前态和剧情补足年龄、寿元等档案。","【修复】人物明确突破后仍可能沿用上一境界整套基础属性，现按当前境界规则更新这类白值。","【修复】带有缺失属性说明的四灵根有时会取错修速，现按实际灵根类型计算。","【新增】各功能可设置一个主 API 和多个备用 API，请求在开始输出前失败时可按设定顺序切换。","【新增】「变量演化」可设置每批最多处理的 NPC 数量，超过上限时分批更新人物，登退场、物品与杂项仍统一处理一次。"]},{"version":"1.0.9","date":"2026-11-12","items":["【优化】预制补演过去要反复核对能否沿用的内容；现在先用已有进度指针判断，能直接采用的成品不再重写，只修订实际受剧情影响的部分。","【优化】普通补演跨多个事件时，人物经历和变化容易混在一起；现在按 NPC 视角正文逐段结算，补齐中间的空白时段，并保留各段经历、关系和物品的来源。","【优化】预制补演过去要等整批结束才看到结果；现在不互相依赖的 NPC 完成后即可分别保存视角正文和变量，失败时只需重跑该人物未完成的阶段。","【优化】补演气泡过去只提示「还有几项并行任务」；现在直接显示正在处理的阶段和人物，并区分 NPC 视角正文与玩家剧情正文。","【优化】进行中的年表事件过去主要显示时间；现在账本会列出事件名称、当前阶段、下一节点和本轮已保存的人物变化。","【优化】过去通过开关启用预制成品；现在可直接选择「普通补演」或「预制补演」，切换方式不会删除已导入的成品。","【优化】属性面板过去不容易看出数值大致相当于什么境界；现在用简短标签显示等效实力，血量和法力按容量判断。","【优化】「先天气运」改名为「气运特质」；现在人物档案会分开显示特质说明、实际效果和属性加成。","【优化】物品详情过去需要在大段文字里找重点；现在按物品类型分别展示效果、用法、来历和使用门槛。","【优化】百艺过去不容易分清自身熟练度与功法帮助；现在八项技艺分别显示档位和进度，功法辅助单独标注。","【优化】主界面和各弹窗的配色过去不够统一；现在随主题使用同一套配色，人物档案也更易阅读。","【修复】预制补演匹配到成品后有时会转回普通补演；现在原样采用、修订和接续均留在预制线路。","【修复】同一天的后续年表事件有时会被提前写入；现在两条补演线路都按实际经过的节点结算，进行中的事件只写到本轮正文时刻。","【修复】跨事件补演有时只保存当前片段、漏掉已经完成的历史成品；现在先采用符合条件的历史成品，当前片段从其终态接续。","【修复】剧情改变、原著事件不再发生时，旧成品可能仍带入该事件的经历、关系或物品；现在只撤回来源明确的对应变化，保留其他事件的独立结果。","【修复】本轮年表涉及的人物有时会因不在玩家面前而漏补，或被交给重点演化重复处理；现在由原著补演统一处理，是否列入「周围人物」另按实际在场情况判断。","【修复】补演局部重跑有时会选错人物、误报分工变化或只显示笼统错误；现在可按人物和阶段接续，保留已保存结果，并显示具体失败原因。","【修复】预制修订有时因资料超过固定上限而中断；现在可按设置提高输入上限，材料较多时会分组处理并保留已完成的结果。","【修复】重点演化有时因模型返回格式不符而无法保存；现在普通模型和 DeepSeek 的四份内置变量预设已统一各阶段的格式要求。","【修复】NPC 视角正文里有时会夹入生平摘要；现在视角正文按节点使用原段，人物生平单独保留。","【修复】补演人数有时漏算直接采用成品的人物，保存区还可能出现空白人物卡；现在按实际参与补演的人物统计，每人只计一次。","【修复】连续重 roll 后，本轮提示词、分支选项或原著指导有时会空白或串到别的楼层；现在按当前楼层显示对应内容。","【修复】连续新增模型接口有时会覆盖上一份配置；现在同地址的不同模型可分别保存，取消编辑也不会改动原配置。","【修复】出生地地图拖动或缩放后，点选位置有时会偏移；现在选择标记会对准实际点击的位置。","【修复】窗口较矮或界面放大时，物品详情可能超出屏幕；现在标题和关闭按钮保持可见，内容可单独滚动。","【修复】开局修炼速度有时看不出用了哪种灵根的基础值；现在新档会标明灵根来源，缺少来源记录的旧档仍显示实际存档值。","【修复】NPC 获得秘籍后有时没有对应的修习记录；现在符合条件的功法和技能会进入各自的栏位，装备转槽也会保留原物品。","【新增】右侧「系统」加入诊断日志；现在可展开查看所选回合的错误，并将首跑和重跑合并为一份日志导出。","【新增】设置加入「数值规则设定」；现在可集中编辑、导入数值规则，并让变量提示词引用，世界规则仍在「世界观指导」中查看。","【新增】功法扩充为黄、玄、地、天、仙、道六阶，每阶分下品、中品、上品、极品；现在每本功法都有修炼速度加成，装备并解锁对应效果后可在修炼明细查看。","【新增】法宝在玄天之宝之上加入「混沌之宝」，分下品、中品、上品、顶阶、至高五档；混沌造化瓶独占至高档，并使用专属虹彩边框。","【新增】新档选择混沌造化瓶天赋后，开局便与器灵红宝结成羁绊；红宝好感满格，全程以全盛超脱者的姿态登场，所有属性无限。"]},{"version":"1.0.8","date":"2026-11-10","items":["【优化】Gemini 和 DeepSeek V4.1 Flash 默认使用高思考档位。正文设置仍可调整档位，DeepSeek 选择「最高」时会使用最高档。","【修复】忽略过一份补丁后，游戏仍可提醒同一版本号下发布的下一份补丁。","【优化】原著补演的进度提示现在会显示正在进行的阶段，方便区分查资料、写人物故事、更新变量和保存结果。","【优化】当天发生的多个关键事件会按先后顺序排在进度轴上，点开节点可查看详情。","【优化】「原著补演 · 局部重跑」移到右侧「重新生成」，与「重点演化 · 局部重跑」并列，杂项可在重点演化的重跑面板里选择。","【修复】主界面有时会在启动后突然缩小，旧版遗留的 60%–70% 缩放会在首次启动时恢复到 100%，之后主动设置的比例照常保存。","【修复】左上角的快捷入口会盖住部分设置窗口，打开系统窗口时可以正常查看和操作被挡住的区域。","【修复】校订内置年表的开篇内容和简略条目，使事件顺序、人物经历和原文叙述对得上。","【新增】原著补演可在「总览与模型」中开启「使用预制成品」，按实际走过的事件节点复用已导入且匹配当前年表的人物故事和变量。","【新增】年表资料新增「预制成品」页，可导入或导出单条和批量成品，按事件展开查看变量增减，也可以删除单条、所选或全部成品。","【新增】预制补演保存后可按人物查看已落地的变量，重开游戏后仍可在当前楼层查看保存结果。","【新增】普通补演和预制补演都可以单独重跑当前楼层的账本，沿用已保存的人物故事和变量。","【新增】游戏内的年表资料可按事件编号导入并替换单条或一批条目，也可整份替换和导出。"]},{"version":"1.0.7","date":"2026-11-07","items":["【优化】原著补演有时会在「检索资料」停留很久；现在减少了过程记录带来的等待。","【优化】原著补演进度轴原先把事件名称直接排在轴上；现在轴上的编号对应下方的事件卡片，卡片上可直接查看日期。","【优化】重做玩家和 NPC 的装备界面；现在武器、护甲、功法和法宝分别有一格、四格、四格和六格，每格标明用途，空槽与已装备状态采用不同样式。","【优化】装备品阶原先主要靠颜色区分；现在高品阶装备也有对应的边框纹饰与光效。","【优化】查看属性加成时要从多段计算过程里找结果；现在先显示最终值、基础值和实际生效的加成来源。","【优化】调整装备与功法加成的计算规则；现在按人物未受加成的基础属性计算，每件加成各有上限。","【优化】重点演化的设置项集中在同一个长页面；现在可分开查看调度、阶段路由、预设和并发设置。","【优化】原著指导和补演展示改为跟随当前楼层保存；现在重开游戏后可继续查看本层已保存的内容。","【优化】重跑面板原先没有区分演化模式；现在会标出原回合采用的模式，合并回合也可以按阶段或人物选择补跑范围。","【修复】正文出字时，个别内嵌内容加载失败会把游戏退回开始界面；现在正文页面会继续保留。","【修复】指定重写一名原著人物的正文时，有时会从补演边界重新开始；现在同层材料有效时直达该人物正文，完成后只更新其相关变量，其他已保存的人物照常保留。","【修复】正文已经出字，思考面板的「正文提示词」有时还是空的；现在可在对应楼层查看实际发送的内容。","【修复】旧存档中的时间、地点和坐标有时混在同一行；现在世界时间和所在地各自显示。","【新增】系统设置加入「统一 API 接口配置」，可集中保存接口，各系统可以选用已保存的接口、独立选择模型或保留手动配置。","【新增】重点演化可选合并或分阶段运行，合并模式会把普通人物、物品和杂项集中处理，指定人物仍可单独演化。","【新增】法宝栏设有一个本命法宝专用槽，玩家和 NPC 从结丹期起可以装备。","【新增】补全 19 类物品图标，兵器、护甲、功法、法宝、丹药、符箓等在背包、装备栏和详情中按类型显示。","【新增】原著人物列表顶部加入「世界大事记」入口，可单独查看世界事件。","【新增】发现新版本时可以选择「忽略」，同一个版本之后不会反复弹出提示。"]},{"version":"1.0.6","date":"2026-11-02","items":["【优化】NPC 视角正文的日期单独标出，一眼能看到时间点。","【优化】变量思维改为每跑完一个阶段就显示，不用等整轮结束。","【优化】界面放大改为分档：菜单和提示不放大，小窗最多 115%，窗口不再超出屏幕。","【修复】补演失败不再只给一句笼统话，会直接指出哪个字段错了、该填什么。","【修复】一个人物出错不再拖垮整轮，写对的照常推进，出错的单独标出可重跑。","【修复】NPC 正文不再参考玩家正文，只用判定阶段提炼出的事实。","【修复】NPC 正文的楼层编号改为显示真实楼层序号，回退后同步退回。","【修复】NPC 正文每段单独成块，段与段之间留出间距。","【修复】NPC 正文会标出最新那一段，不会把旧内容当成新的。","【修复】重 roll 时指令没改就沿用上一轮指导，改了才问要不要重推。","【修复】一层只留一份生效记录，旧记录收起为一行，仍可展开查看。","【修复】中止按正常操作处理，只提示已中止，不再锁死本回合。","【修复】原著人物故事按回合分开，默认停在最新回合。","【修复】人物故事的时间接上回合继续写，空档期一并补上。","【修复】人物故事按出场分段，没戏份的日子合并为空白期。","【修复】跨回合事件只覆盖最后一段，前面已写的原样保留。","【修复】续写把上回合原文和时间区间一起交给模型照抄，不再凭空猜。","【修复】生平摘要合并后保持完整一条，时间地点不再丢失。","【修复】重点演化的局部重跑点下去真的会跑，过程不再卡顿。","【修复】长时间没有进展会如实说卡在哪一步，不再假装在跑。","【修复】重跑失败会留在面板上，红字写清原因，不再一闪就没。","【修复】重跑重点演化只跑自己的事，不再牵连原著补演。","【修复】勾了谁就只重跑谁，不会连带整轮重跑。","【修复】发现新版本直接列出这一版的更新内容，按优化、修复、新增分开。","【修复】游戏中途只轻提示一行，想细看再展开；刚启动时才完整列出。","【修复】更新下载完当场列出本版内容，不用等重启。","【修复】勾什么就跑什么，必须连带的相关项会自动补上并说明原因。","【修复】重跑面板每项都用日常说法写清作用，勾选时自动带出相关项。","【修复】跑完就是跑完，不再把成功的结果报成失败。","【修复】失败项真的排到最前，用红条和深底标出，并单独加分隔标题。","【修复】重跑面板底部三个按钮并排一行，智能重跑描金边更醒目。","【修复】只有真正落地才算完成，没落地会说明卡在哪一步。","【修复】勾阶段就按阶段跑，不再误判成没有对应人物。","【修复】重跑出错直接说清真实原因，不再被英文报错盖住。","【修复】账本自动补跑不再被「对不上人物」拦住。","【修复】变量思维只显示一句「进行中」，结果出来直接替换。","【修复】重跑只用本回合的资料，旧楼层不再保留，也不再给选楼层下拉框。","【修复】删掉重跑面板上方多余的分类切换，左侧阶段右侧目标本身就是分类。","【修复】加了「显示全部」，看完某个阶段能回到完整列表，左侧对应项会高亮。","【修复】阶段勾上之后可以取消，只有必须连带的相关项才会自动勾上。","【修复】账本和面板的「智能重跑」统一成同一套做法。","【修复】没有需要补的项目会明说，不再弹红字当成故障。","【修复】启动时一次就接上调试记录，不再反复重试并报「函数未找到」。"]},{"version":"1.0.5","date":"2026-11-01","items":["【修复】原著补演的边界判定说明文字被挤成每行一个字的竖条、撑高整块面板并推走后面内容；现已正常换行。","【修复】重roll正文后原著补演下面的内容整段消失；现在会标注「本轮已被重roll覆盖」并说明覆盖了几条，原记录仍保留可查。"]},{"version":"1.0.4","date":"2026-11-01","items":["【修复】补演正文把韩立的 NPC 视角写成了玩家，人称错乱；已彻底移除补演阶段混入的玩家变量与快照信息","【修复】一个小道具没匹配上就判整轮失败，还要手动点继续补演；现在不再拦","【修复】局部重跑被「合批包含未选人物」整轮中止；现在能安全拆分的会拆开、只重跑勾选的那几个","【修复】PC 端双击不再缩放，只有 Ctrl+滚轮可以；缩放复位按钮也不容易再被误触","【优化】两个阶段的资料采集全面梳理：必要的保留、作用不大的默认关闭、完全没用的直接删除。默认关闭不等于移除，随时可以开回来","【修复】补演阶段不再注入玩家的变量和快照，玩家与 NPC 的变量交互由重点演化接管","【优化】删掉「在场人物」、灵兽不再显示为「我的」、人物档案加回玩家、补演阶段去掉小地图、地图默认开启","【删除】「随身物品与装备」在两个阶段都移除，快照里已经包含","【优化】资料分区与提示词：每份资料都写清是什么、有什么用、该怎么用；设定集检索优先调用凡人卡自身占位符","【修复】世界信息共享、个人信息独享，按人拆开资料，不再被迫把共享背景调到 50 万字","【修复】检索阶段就分好类：人物设定按 NPC 独享，非人物设定先放共享","【重做】设置面板排版：结构错位、尺寸死板、排版冲突全部重做；资料来源按原著指导、原著补演分上下两栏独立设置","【修复】补演报错不再是一句空话，分别说明是引用不在名单、重复、枚举写错、还是理由留空；理由留空不再判失败","【修复】「无推进」等同义写法会自动识别纠正，不会因为一个词的写法把整轮卡死；真正编错的仍然拦","【修复】重试按钮不再被「这条记录属于其他楼层」永久锁死，只要那次楼层还在存档里就放行","【修复】「每批最多处理几条」以前是摆设，现在真正生效，和单批输入输出上限组成两道闸，超容量自动减人","【修复】补演请求数异常增多，恢复按人数合批","【修复】老存档单批输入容量从 12 万自动升到 50 万，不覆盖玩家自己填过的数字","【修复】设置项排查，补齐后端在用但界面上没有的开关；清理掉填了也不生效的冗余输入框"]},{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
 </script>
 
 <script>
@@ -8870,7 +8870,7 @@ var FR_CHAT_REQUEST_CORE = (function () {
 
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-8de484a2bdf0" />
+    <meta name="fr-build-id" content="FRI-b9ce1d6207af" />
     <script>
       (function () {
         try {
@@ -28841,7 +28841,7 @@ body #unified-api-settings-overlay .fr-api-route-summary::after { grid-column:3;
 body #unified-api-settings-overlay .fr-api-route-count { grid-column:2; grid-row:1; color:var(--fr-ui-accent); }
 body #unified-api-settings-overlay .fr-api-route-summary:hover,body #unified-api-settings-overlay .fr-api-chain-binding[open] .fr-api-route-summary { background:transparent; }
 body #unified-api-settings-overlay .fr-api-chain-binding:hover { border-color:var(--fr-ui-line); }
-body #unified-api-settings-overlay .fr-api-chain { margin:0 20px 14px; padding:10px 0 0; border-top:1px solid var(--fr-ui-divider); }
+body #unified-api-settings-overlay .fr-api-chain { width:auto; grid-template-columns:minmax(0,1fr); margin:0 20px 14px; padding:10px 0 0; border-top:1px solid var(--fr-ui-divider); }
 body #unified-api-settings-overlay .fr-api-chain-item { border:0; padding:6px 0; }
 body #unified-api-settings-overlay .fr-api-chain-item + .fr-api-chain-item { border:0; }
 body #unified-api-settings-overlay :is(input:not([type=checkbox]),select) { box-shadow:var(--fr-ui-well-shadow); border-color:var(--fr-ui-line); font-size:15px; }
@@ -43124,7 +43124,7 @@ async function _portraitCallDoubaoImageGen(providerConfig, prompt, signal) {
     watermark: false
   };
 
-  var response = await fetch(providerConfig.apiUrl, {
+  var response = await fetch(CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, 'images/generations'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -43153,7 +43153,7 @@ async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal) {
     background: providerConfig.background || 'auto',
     output_format: providerConfig.outputFormat || 'png'
   };
-  var response = await fetch(providerConfig.apiUrl, {
+  var response = await fetch(CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, 'images/generations'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -43245,7 +43245,8 @@ async function _portraitCallGrokImageGen(providerConfig, prompt, signal) {
     body: JSON.stringify(body),
     signal: signal || null
   };
-  var response = await fetch(providerConfig.apiUrl, requestOptions);
+  const endpoint = CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, 'images/generations');
+  var response = await fetch(endpoint, requestOptions);
   if (!response.ok && requestedImageFormat === 'base64') {
     var firstErr = await _portraitExtractApiError(response);
     // 兼容旧实现：若不支持 image_format，则回退为不带 image_format 再试一次
@@ -43255,7 +43256,7 @@ async function _portraitCallGrokImageGen(providerConfig, prompt, signal) {
         prompt: prompt.trim(),
         aspect_ratio: _portraitNormalizeGrokAspectRatio(providerConfig.aspectRatio)
       };
-      response = await fetch(providerConfig.apiUrl, Object.assign({}, requestOptions, {
+      response = await fetch(endpoint, Object.assign({}, requestOptions, {
         body: JSON.stringify(fallbackBody)
       }));
     } else {
@@ -59813,7 +59814,7 @@ async function ceCallDoubaoImageGeneration(config, promptText, signal) {
     watermark: false
   };
 
-  const response = await fetch(apiUrl, {
+  const response = await fetch(CE_CORE['api-library'].modelEndpoint(apiUrl, 'images/generations'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -132068,6 +132069,32 @@ var CE_CORE = (function () {
       return String(url == null ? '' : url).trim().replace(/\/+$/, '');
     }
 
+    function modelEndpoint(apiUrl, operation) {
+      const url = new URL(apiUrl);
+      let pathname = url.pathname.replace(/\/+$/, '');
+      if (pathname.endsWith('/' + operation)) {
+        url.pathname = pathname;
+        return url.href;
+      }
+      pathname = pathname.replace(/\/(?:chat\/completions|embeddings|rerank|images\/generations|models)$/i, '');
+      if (!/\/v\d+(?:beta\d*)?(?:\/openai)?$/i.test(pathname)) pathname += '/v1';
+      url.pathname = pathname + '/' + operation;
+      return url.href;
+    }
+
+    function probeKind(consumer, url, model) {
+      const slot = consumer?.slotId || consumer?.idField || '';
+      if (slot === 'embeddingApiPresetId') return 'embeddings';
+      if (/rerank/i.test(slot)) return 'rerank';
+      if (/^(providers|imageProviderConfigs)\./.test(slot)) return 'image';
+      const pathname = new URL(url).pathname.replace(/\/+$/, '');
+      if (/\/embeddings$/i.test(pathname) || /embedding/i.test(model)) return 'embeddings';
+      if (/\/rerank$/i.test(pathname) || /rerank/i.test(model)) return 'rerank';
+      if (/\/images\/generations$|:generateContent$/i.test(pathname) ||
+          /(?:gpt-image|dall-e|seedream|grok-imagine|nano-banana|gemini.*-image)/i.test(model)) return 'image';
+      return 'chat';
+    }
+
     /** 一条接口是否填完整（URL / Key / 模型 三项都要） */
     /**
      * 这条接口是否「填完整、可以直接用」。
@@ -133250,7 +133277,7 @@ var CE_CORE = (function () {
             panel.style.zIndex=String(Math.max(2000,...[...document.querySelectorAll('.overlay.visible')]
               .map(overlay=>Number.parseInt(window.getComputedStyle(overlay).zIndex,10)||0))+1);
             panel.classList.add('visible');
-            api?.openEditor(preset);
+            api?.openEditor(preset, consumer);
             el(panel,'api-library-editor')?.scrollIntoView?.({block:'nearest'});
           });
           row.append(detail);
@@ -133595,9 +133622,10 @@ var CE_CORE = (function () {
     #unified-api-settings-overlay .fr-api-route-model small{display:block;color:var(--api-muted);font-size:12px}
     #unified-api-settings-overlay .fr-api-route-count{color:var(--api-muted);font-size:12px;text-align:right;white-space:nowrap}
     #unified-api-settings-overlay .fr-api-chain{padding:5px 14px 10px;gap:0}
-    #unified-api-settings-overlay .fr-api-chain-item{padding:6px 0;gap:6px;background:none;border:0;border-radius:0}
+    #unified-api-settings-overlay .fr-api-chain-item{display:flex;flex-wrap:wrap;padding:6px 0;gap:6px;background:none;border:0;border-radius:0}
     #unified-api-settings-overlay .fr-api-chain-item+.fr-api-chain-item{border-top:1px solid var(--fr-ui-divider)}
-    #unified-api-settings-overlay .fr-api-chain-item label{grid-template-columns:92px minmax(0,1fr);align-items:center;gap:10px;margin:0;color:var(--api-muted);font-size:13px}
+    #unified-api-settings-overlay .fr-api-chain-item label{flex:1 1 12rem;width:auto;min-width:0;grid-template-columns:minmax(0,92px) minmax(0,1fr);align-items:center;gap:10px;margin:0;color:var(--api-muted);font-size:13px}
+    #unified-api-settings-overlay .fr-api-chain-item button{flex:0 0 auto;width:auto;white-space:nowrap}
     #unified-api-settings-overlay #api-library-save-btn{background:var(--fr-ui-action);color:var(--fr-ui-action-text)}
     #unified-api-settings-overlay #api-library-save-btn i{color:inherit}
     #unified-api-settings-overlay .button-group{display:flex;flex-wrap:wrap}
@@ -133669,7 +133697,7 @@ var CE_CORE = (function () {
      *   表现为「保存后出现两条一模一样的接口」。这是实测到的真实故障，
      *   不是理论风险。所以第一次绑定后打标记，之后只做重绘。
      */
-    function bindApiLibraryPanel(root) {
+    function bindApiLibraryPanel(root, options) {
       const host = root || document;
       const listBox = el(host, 'api-library-list');
       const editor = el(host, 'api-library-editor');
@@ -133730,10 +133758,11 @@ var CE_CORE = (function () {
        *
        * 【修法】标记带版本号。版本一变，标记自动失效，重新完整绑定。
        * 以后每次改这个面板记得把 BIND_VERSION 加一。 */
-      const BIND_VERSION = 8;
+      const BIND_VERSION = 9;
       const boundFlag = host || document;
       if (boundFlag.__frApiLibraryBound && boundFlag.__frApiLibraryBound.version === BIND_VERSION) {
         const api = boundFlag.__frApiLibraryBound;
+        if (options?.probeImage) api.probeImage = options.probeImage;
         try {
           api.renderList();
           api.renderBindings();
@@ -133856,7 +133885,9 @@ var CE_CORE = (function () {
         if (modelDropdown) modelDropdown.hidden = true;
       };
 
-      const openEditor = (preset) => {
+      let editorConsumer;
+      const openEditor = (preset, consumer) => {
+        editorConsumer = consumer;
         editorSession++;
         editorReturnFocus = document.activeElement;
         const panel = editor.closest('#unified-api-settings-overlay');
@@ -134188,7 +134219,7 @@ var CE_CORE = (function () {
           const isCurrentRequest = () => request === modelRequest && isCurrentEditor(session, url, key);
           say('正在获取模型列表…', '#d8c399');
           try {
-            const resp = await fetch(url.replace(/\/chat\/completions$/, '') + '/models', {
+            const resp = await fetch(modelEndpoint(url, 'models'), {
               headers: { Authorization: 'Bearer ' + key },
             });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -134218,17 +134249,40 @@ var CE_CORE = (function () {
           if (!url || !key || !model) return say('URL、Key、模型三项都要填，才能测试。', '#e0a3a3');
           say('正在测试连接…', '#d8c399');
           try {
-            const endpoint = chatCompletionsEndpoint(url);
+            const consumer = editorConsumer || (fId.value && listApiConsumers().find(row =>
+              (savedApiChain(row) || []).includes(fId.value) && probeKind(row, url, model) === 'image' && row.path));
+            const kind = probeKind(consumer, url, model);
+            const sample = '接口连接测试';
+            const imagePrompt = '一张简单的蓝色方块图';
+            const profile = readRequestProfile();
+            const signal = AbortSignal.timeout((profile.timeoutSeconds || (kind === 'image' ? 120 : 30)) * 1000);
+            if (kind === 'image' && api.probeImage) {
+              await api.probeImage(consumer, {apiUrl:url,apiKey:key,apiModel:model}, imagePrompt, signal);
+              return say('连接成功，这条接口已返回图片。');
+            }
+            const endpoint = kind === 'chat' ? chatCompletionsEndpoint(url) :
+              modelEndpoint(url, kind === 'image' ? 'images/generations' : kind);
+            const body = kind === 'embeddings' ? {model,input:sample} :
+              kind === 'rerank' ? {model,query:sample,documents:[sample],top_n:1} :
+              kind === 'image' ? {model,prompt:imagePrompt} :
+              chatRequestBody({model,messages:[{role:'user',content:profile.jsonMode ?
+                '请返回 JSON 对象 {"ok":true}。' : '请简短回复「连接成功」。'}],stream:false},
+              {apiUrl:url,profile,purpose:'test'});
             const resp = await fetch(endpoint, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-              body: JSON.stringify(chatRequestBody({model,messages:[{role:'user',content:
-                readRequestProfile().jsonMode?'请返回 JSON 对象 {"ok":true}。':'请简短回复「连接成功」。'}],stream:false},
-                {apiUrl:url,profile:readRequestProfile(),purpose:'test'})),
+              body: JSON.stringify(body),
+              signal,
             });
             if (!resp.ok) throw new Error('HTTP '+resp.status);
             const data=await resp.json();
-            if(!String(data?.choices?.[0]?.message?.content||'').trim())
+            const vector = data?.data?.[0]?.embedding;
+            const result = data?.results?.[0];
+            const image = data?.data?.[0];
+            const valid = kind === 'embeddings' ? Array.isArray(vector) && vector.length && vector.every(Number.isFinite) :
+              kind === 'rerank' ? result?.index === 0 && Number.isFinite(result.relevance_score) :
+              kind === 'image' ? image?.b64_json || image?.url : String(data?.choices?.[0]?.message?.content||'').trim();
+            if(data?.error || !valid)
               throw new Error(data?.choices?.[0]?.finish_reason==='length'?'达到输出上限，未收到回复':'未收到有效回复');
             say('连接成功，这条接口可以使用。');
           } catch (e) {
@@ -134239,7 +134293,7 @@ var CE_CORE = (function () {
 
       renderList();
       renderBindings();
-      const api = { renderList, renderBindings, openEditor, version: BIND_VERSION };
+      const api = { renderList, renderBindings, openEditor, probeImage: options?.probeImage, version: BIND_VERSION };
       try { boundFlag.__frApiLibraryBound = api; } catch (_) {}
       // 顺手把各子系统设置页里留下的占位挂上（幂等，重复调用只重绘）
       try { mountAllApiEmbeds(); } catch (_) {}
@@ -134286,6 +134340,7 @@ var CE_CORE = (function () {
     exports.hasMirrored = hasMirrored;
     exports.emptyApiLibrary = emptyApiLibrary;
     exports.normalizeApiUrl = normalizeApiUrl;
+    exports.modelEndpoint = modelEndpoint;
     exports.apiPresetComplete = apiPresetComplete;
     exports.loadApiLibrary = loadApiLibrary;
     exports.saveApiLibrary = saveApiLibrary;
@@ -151209,7 +151264,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通变量演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-8de484a2bdf0";
+var FR_BUILD_ID = "FRI-b9ce1d6207af";
 function frCanonReadAdoptedStoryHeader(storyText) {
   const source = String(storyText || '').replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '');
   const contents = [...source.matchAll(/<content>[\s\S]*?<\/content>/gi)];
@@ -168588,20 +168643,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
             if (!config.apiUrl) throw new Error('API URL 未配置');
             if (!config.apiKey) throw new Error('API Key 未配置');
 
-            let fetchUrl = config.apiUrl.trim();
-
-            if (fetchUrl.endsWith('/embeddings')) {
-              // Do nothing, use as is
-            } else if (fetchUrl.endsWith('/chat/completions')) {
-              fetchUrl = fetchUrl.replace('/chat/completions', '/embeddings');
-            } else {
-              fetchUrl = fetchUrl.replace(/\/+$/, '');
-              if (fetchUrl.endsWith('/v1')) {
-                fetchUrl += '/embeddings';
-              } else {
-                fetchUrl += '/v1/embeddings';
-              }
-            }
+            const fetchUrl = CE_CORE['api-library'].modelEndpoint(config.apiUrl.trim(), 'embeddings');
 
             const performRequest=async(requestSignal)=>{
           const activeSignal=requestSignal || signal;
@@ -168661,17 +168703,12 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
           const routeFailures=failureScope&&(failures.get(failureScope)||new Map());
           if(failureScope&&!failures.has(failureScope))failures.set(failureScope,routeFailures);
           if(routeFailures?.has(routeKey))throw Object.assign(new Error('该重排接口本轮已返回 HTTP '+routeFailures.get(routeKey)+'，请检查重排接口与模型'),{status:routeFailures.get(routeKey)});
-          // 沿原卡整批发送已选候选，不让补演的历史25条限制改写原向量设置。
-          const documentLimit = Number(config.rerankMaxDocuments)>0 ? Math.floor(Number(config.rerankMaxDocuments)) : documents.length;
+          const fetchUrl = CE_CORE['api-library'].modelEndpoint(config.rerankUrl.trim(), 'rerank');
+          const requestedLimit = Math.floor(Number(config.rerankMaxDocuments));
+          // Aurentis limits each request to 25 texts. Preserve all selected candidates.
+          const providerLimit = new URL(fetchUrl).hostname === 'aurentis.veletis.com' ? 25 : documents.length;
+          const documentLimit = Math.min(providerLimit, requestedLimit > 0 ? requestedLimit : documents.length);
           const combinedResults = [];
-          let fetchUrl = config.rerankUrl.replace(/\/$/, '');
-          if (!fetchUrl.endsWith('/rerank')) {
-            if (fetchUrl.endsWith('/v1')) {
-              fetchUrl += '/rerank';
-            } else {
-              fetchUrl += '/v1/rerank';
-            }
-          }
           for(let offset=0;offset<documents.length;offset+=documentLimit){
           signal?.throwIfAborted();
           const batchDocuments=documents.slice(offset,offset+documentLimit);
@@ -185940,7 +185977,29 @@ characterDetailView.classList.remove('hidden');
               // 所以 api-library 挂在 CE_CORE['api-library'] 上。
               var libPack = (typeof CE_CORE === 'object' && CE_CORE) ? CE_CORE['api-library'] : null;
               if (libPack && typeof libPack.bindApiLibraryPanel === 'function') {
-                libPack.bindApiLibraryPanel(overlay);
+                libPack.bindApiLibraryPanel(overlay, {probeImage: async (consumer, config, prompt, signal) => {
+                  const provider = consumer?.path?.[1];
+                  let image;
+                  if (consumer?.path?.[0] === 'imageProviderConfigs') {
+                    const saved = await loadConcurrentEvolutionConfig();
+                    image = await ceCallImageGenerationOnce({...saved.imageProviderConfigs?.[provider],
+                      ...config,provider},prompt,signal);
+                  } else if (provider) {
+                    const saved = await loadPortraitGenConfig();
+                    _portraitEnsureProviderConfigs(saved);
+                    image = await callCommercialImageGenOnce({...saved,provider},prompt,signal,
+                      {..._portraitGetProviderConfig(saved,provider),...config});
+                  } else if (new URL(config.apiUrl).hostname === 'generativelanguage.googleapis.com' ||
+                      /:generateContent$/i.test(new URL(config.apiUrl).pathname)) {
+                    image = await _portraitCallGeminiImageGen(config,prompt,signal);
+                  } else {
+                    const url = new URL(config.apiUrl);
+                    const endpoint = /\/chat\/completions\/?$/i.test(url.pathname) ? config.apiUrl :
+                      libPack.modelEndpoint(config.apiUrl,'images/generations');
+                    image = await _portraitCallCustomOpenAiImageGen({...config,apiUrl:endpoint},prompt,signal);
+                  }
+                  if (!image) throw new Error('未收到有效图片');
+                }});
               } else {
                 console.warn('[API 接口库] 模块未加载（CE_CORE[api-library] 不可用）');
               }
