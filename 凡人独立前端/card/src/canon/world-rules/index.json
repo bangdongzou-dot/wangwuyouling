@@ -1,0 +1,398 @@
+{
+  "version": "1.1",
+  "source": "card/src/canon/world-rules/",
+  "rules": [
+    {
+      "id": "realm-capability",
+      "name": "大境界能力尺度",
+      "domain": [
+        "境界",
+        "战斗"
+      ],
+      "enabled": true,
+      "order": 1,
+      "chars": 6788,
+      "file": "realm-capability.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "境界",
+        "炼气",
+        "筑基",
+        "结丹",
+        "元婴",
+        "化神",
+        "炼虚",
+        "合体",
+        "大乘",
+        "渡劫",
+        "真仙",
+        "金仙",
+        "太乙",
+        "大罗",
+        "道祖",
+        "超脱者",
+        "红宝",
+        "混沌造化瓶",
+        "施法",
+        "斗法"
+      ]
+    },
+    {
+      "id": "realm-scale",
+      "name": "境界尺度、突破动静与神识范围校准",
+      "domain": [
+        "境界"
+      ],
+      "enabled": true,
+      "order": 2,
+      "chars": 2696,
+      "file": "realm-scale.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "神识",
+        "突破",
+        "瓶颈",
+        "异象",
+        "感知",
+        "威压"
+      ]
+    },
+    {
+      "id": "cultivation-codex",
+      "name": "修炼宝典",
+      "domain": [
+        "境界"
+      ],
+      "enabled": true,
+      "order": 3,
+      "chars": 919,
+      "file": "cultivation-codex.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "修炼",
+        "闭关",
+        "打坐",
+        "吐纳",
+        "功法",
+        "丹药",
+        "突破",
+        "双修",
+        "炼化"
+      ]
+    },
+    {
+      "id": "sect-rank",
+      "name": "门派等级与境界对应参考",
+      "domain": [
+        "门派"
+      ],
+      "enabled": true,
+      "order": 4,
+      "chars": 5772,
+      "file": "sect-rank.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "宗门",
+        "门派",
+        "弟子",
+        "掌门",
+        "七玄门",
+        "师父",
+        "长老",
+        "坊市"
+      ]
+    },
+    {
+      "id": "geography",
+      "name": "世界地理与势力信息",
+      "domain": [
+        "地点"
+      ],
+      "enabled": true,
+      "order": 5,
+      "chars": 765,
+      "file": "geography.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "地图",
+        "疆域",
+        "地理",
+        "远行",
+        "出发",
+        "赶路",
+        "前往",
+        "抵达",
+        "势力"
+      ]
+    },
+    {
+      "id": "travel-time",
+      "name": "移动速度与时间计算",
+      "domain": [
+        "地点",
+        "时间"
+      ],
+      "enabled": true,
+      "order": 6,
+      "chars": 1810,
+      "file": "travel-time.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "赶路",
+        "前往",
+        "步行",
+        "飞遁",
+        "御器",
+        "传送",
+        "抵达",
+        "赶赴",
+        "路程",
+        "飞舟"
+      ]
+    },
+    {
+      "id": "economy",
+      "name": "修仙经济基准",
+      "domain": [
+        "交易"
+      ],
+      "enabled": true,
+      "order": 7,
+      "chars": 5172,
+      "file": "economy.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "灵石",
+        "交易",
+        "购买",
+        "售价",
+        "卖给",
+        "坊市",
+        "报酬",
+        "拍卖",
+        "收购",
+        "赊账",
+        "换取",
+        "铜钱"
+      ]
+    },
+    {
+      "id": "equipment-grade",
+      "name": "装备品阶与特性介绍",
+      "domain": [
+        "交易",
+        "装备"
+      ],
+      "enabled": true,
+      "order": 8,
+      "chars": 800,
+      "file": "equipment-grade.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "法器",
+        "法宝",
+        "护甲",
+        "长剑",
+        "器物",
+        "装备",
+        "炼器",
+        "鉴定",
+        "兵器",
+        "认主",
+        "灵宝",
+        "本命"
+      ]
+    },
+    {
+      "id": "item-glossary",
+      "name": "常见修仙物品名词定义",
+      "domain": [
+        "交易",
+        "装备"
+      ],
+      "enabled": true,
+      "order": 9,
+      "chars": 2435,
+      "file": "item-glossary.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "丹药",
+        "灵药",
+        "符箓",
+        "玉简",
+        "储物",
+        "妖丹",
+        "灵石",
+        "天材地宝"
+      ]
+    },
+    {
+      "id": "refining",
+      "name": "万物炼制规则",
+      "domain": [
+        "炼制"
+      ],
+      "enabled": true,
+      "order": 10,
+      "chars": 309,
+      "file": "refining.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "炼丹",
+        "炼器",
+        "炼制",
+        "制符",
+        "种植",
+        "灵膳",
+        "炼傀儡",
+        "培育"
+      ]
+    },
+    {
+      "id": "beast-grade",
+      "name": "妖兽品阶与化形规则",
+      "domain": [
+        "妖兽"
+      ],
+      "enabled": true,
+      "order": 11,
+      "chars": 1921,
+      "file": "beast-grade.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "妖兽",
+        "妖修",
+        "妖丹",
+        "灵兽",
+        "坐骑",
+        "化形"
+      ]
+    },
+    {
+      "id": "body-scale",
+      "name": "修士体魄与生存能力尺度",
+      "domain": [
+        "战斗"
+      ],
+      "enabled": true,
+      "order": 12,
+      "chars": 1519,
+      "file": "body-scale.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "疲惫",
+        "中毒",
+        "受伤",
+        "辟谷",
+        "体魄",
+        "风雨",
+        "露宿",
+        "力竭",
+        "饿",
+        "渴"
+      ]
+    },
+    {
+      "id": "address-system",
+      "name": "称呼体系",
+      "domain": [
+        "称呼"
+      ],
+      "enabled": true,
+      "order": 13,
+      "chars": 3469,
+      "file": "address-system.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "道友",
+        "前辈",
+        "师父",
+        "师兄",
+        "掌门",
+        "长老",
+        "拜师"
+      ]
+    },
+    {
+      "id": "address-relation",
+      "name": "关系称谓校准",
+      "domain": [
+        "称呼"
+      ],
+      "enabled": true,
+      "order": 14,
+      "chars": 1577,
+      "file": "address-relation.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "师徒",
+        "同门",
+        "亲传",
+        "道侣",
+        "义兄",
+        "师叔",
+        "师尊"
+      ]
+    },
+    {
+      "id": "npc-cognition",
+      "name": "NPC认知与关系现实校准",
+      "domain": [
+        "称呼"
+      ],
+      "enabled": true,
+      "order": 15,
+      "chars": 3522,
+      "file": "npc-cognition.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "对话",
+        "问道",
+        "交谈",
+        "传闻",
+        "询问",
+        "秘密",
+        "听说",
+        "猜测",
+        "误会"
+      ]
+    },
+    {
+      "id": "self-address",
+      "name": "自称核心协议",
+      "domain": [
+        "称呼"
+      ],
+      "enabled": false,
+      "order": 16,
+      "chars": 124,
+      "file": "self-address.txt",
+      "empty": false,
+      "triggerMode": "green",
+      "keywords": [
+        "自称",
+        "在下",
+        "本座",
+        "老夫",
+        "弟子",
+        "晚辈"
+      ]
+    }
+  ],
+  "totalChars": 38947
+}

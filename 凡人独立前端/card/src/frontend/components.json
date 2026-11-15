@@ -1,0 +1,18 @@
+[
+  {
+    "token": "{{FR_COMPONENT_0}}",
+    "file": "src/frontend/script-1.js"
+  },
+  {
+    "token": "{{FR_COMPONENT_1}}",
+    "file": "src/frontend/main.js"
+  },
+  {
+    "token": "{{FR_COMPONENT_2}}",
+    "file": "src/frontend/script-2.js"
+  },
+  {
+    "token": "{{FR_COMPONENT_3}}",
+    "file": "src/frontend/style-1.css"
+  }
+]

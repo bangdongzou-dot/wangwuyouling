@@ -1,0 +1,1095 @@
+{
+  "fontSize": "1.1",
+  "fontColor": "#f5f5dc",
+  "chatFont": "'Noto Sans SC', 'Source Han Sans SC', sans-serif",
+  "renderLimit": 10,
+  "contextLimit": 0,
+  "autoHideSummarized": false,
+  "showTokenTimer": true,
+  "fixedHideRange": "",
+  "enableStreaming": false,
+  "miniMapSize": 200,
+  "miniMapVisible": false,
+  "miniMapPosition": {
+    "left": "910px",
+    "top": "991px"
+  },
+  "miniMapOpacity": 1,
+  "rules": [
+    {
+      "id": "3d33fe78-7b48-44f6-a355-084d689d9ceb",
+      "scriptName": "隐藏防截断",
+      "findRegex": "/<disclaimer>.*?</disclaimer>/gs",
+      "replaceString": "",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    },
+    {
+      "id": "67fb02da-c5c5-44c9-aa09-b276b6a5e28d",
+      "scriptName": "新闻参考隐藏",
+      "findRegex": "<news_ref>([\\s\\S]*?)<\\/news_ref>",
+      "replaceString": "",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "e6522557-8f9e-4415-a63e-3d739d2e3ea4",
+      "scriptName": "tablethink隐藏",
+      "findRegex": "/<tablethink>([\\s\\S]*?)</tablethink>/g",
+      "replaceString": "",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": false,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "894e870c-938a-4bd8-94bf-dec2c396ec2b",
+      "scriptName": "隐藏imgthink",
+      "findRegex": "/<imgthink>([\\s\\S]*?)</imgthink>/g",
+      "replaceString": "",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "5cef40e4-4c71-47ed-b8c5-764b511d33d8",
+      "scriptName": "状态栏_UI系统最外层容器",
+      "findRegex": "<ui_sys>",
+      "replaceString": "<div class=\"fr-story-status\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "489beee9-ee0d-4040-b443-0640b250e6a7",
+      "scriptName": "状态栏_UI系统最外层容器_尾部",
+      "findRegex": "</ui_sys>",
+      "replaceString": "</div>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "6d85b8cc-4a56-41e7-884f-7effb2c49273",
+      "scriptName": "状态栏_时间图标（金色）",
+      "findRegex": "<ti>",
+      "replaceString": "<span class=\"fr-story-status-time\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "068350bf-28bb-4ed9-bb47-cd809d81d13d",
+      "scriptName": "状态栏_时间图标（金色）_尾部",
+      "findRegex": "</ti>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "6912b400-0dcc-4146-8edf-6f13bf09baf4",
+      "scriptName": "状态栏_地点图标（金色）",
+      "findRegex": "<li>",
+      "replaceString": "<span class=\"fr-story-status-place\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "02aeab73-a8e6-4a1b-85d9-cc4cd6923230",
+      "scriptName": "状态栏_地点图标（金色）_尾部",
+      "findRegex": "</li>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "1c4e641a-be5c-4494-85c4-92f28b22d736",
+      "scriptName": "状态栏_环境图标（浅绿色）",
+      "findRegex": "<ei>",
+      "replaceString": "<span class=\"fr-story-status-mood\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "cbf7acd9-d8dd-46a9-be10-bbbfebd54e1f",
+      "scriptName": "状态栏_环境图标（浅绿色）_尾部",
+      "findRegex": "</ei>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "a62bce8c-4b8b-4f91-bdbc-e8a3c5f5fde2",
+      "scriptName": "状态栏_环境描述文本（斜体，半透明）",
+      "findRegex": "<env>",
+      "replaceString": "<span class=\"fr-story-status-env\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "b031a247-8ac7-4043-8c30-c31ca533e41f",
+      "scriptName": "状态栏_环境描述文本（斜体，半透明）_尾部",
+      "findRegex": "</env>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "1cc7554b-2b92-4d93-945d-d7c400bcb7e1",
+      "scriptName": "状态栏_预警行（红色，脉冲动画）",
+      "findRegex": "<warn>",
+      "replaceString": "<span class=\"fr-story-status-note\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "3b03584f-08fd-4aa2-aba1-95dd44be085c",
+      "scriptName": "状态栏_预警行（红色，脉冲动画）_尾部",
+      "findRegex": "</warn>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_daily_start",
+      "scriptName": "3.7_积木_日常容器_开",
+      "findRegex": "<tupo_daily>",
+      "replaceString": "<div class=\"fr-story-artifact fr-story-cultivation\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_daily_end",
+      "scriptName": "3.7_积木_日常容器_关",
+      "findRegex": "</tupo_daily>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_break_start",
+      "scriptName": "3.7_积木_突破容器_开",
+      "findRegex": "<tupo_break>",
+      "replaceString": "<div class=\"fr-story-artifact fr-story-breakthrough\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_break_end",
+      "scriptName": "3.7_积木_突破容器_关",
+      "findRegex": "</tupo_break>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_head_box_start",
+      "scriptName": "3.7_积木_头部盒子_灰_开",
+      "findRegex": "<tp_head_box>",
+      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_head_box_end",
+      "scriptName": "3.7_积木_头部盒子_灰_关",
+      "findRegex": "</tp_head_box>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_head_box_red_start",
+      "scriptName": "3.7_积木_头部盒子_红_开",
+      "findRegex": "<tp_head_box_red>",
+      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_head_box_red_end",
+      "scriptName": "3.7_积木_头部盒子_红_关",
+      "findRegex": "</tp_head_box_red>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_flex_start",
+      "scriptName": "3.7_积木_Flex布局_开",
+      "findRegex": "<tp_flex>",
+      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_flex_end",
+      "scriptName": "3.7_积木_Flex布局_关",
+      "findRegex": "</tp_flex>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_title_green_start",
+      "scriptName": "3.7_积木_标题文本_绿_开",
+      "findRegex": "<tp_title_green>",
+      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_title_green_end",
+      "scriptName": "3.7_积木_标题文本_绿_关",
+      "findRegex": "</tp_title_green>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_title_red_start",
+      "scriptName": "3.7_积木_标题文本_红_开",
+      "findRegex": "<tp_title_red>",
+      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_title_red_end",
+      "scriptName": "3.7_积木_标题文本_红_关",
+      "findRegex": "</tp_title_red>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_sub_start",
+      "scriptName": "3.7_积木_副标题_开",
+      "findRegex": "<tp_sub>",
+      "replaceString": "<span class=\"fr-story-artifact-accent\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_sub_end",
+      "scriptName": "3.7_积木_副标题_关",
+      "findRegex": "</tp_sub>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_grid_gray_start",
+      "scriptName": "3.7_积木_Grid布局_灰_开",
+      "findRegex": "<tp_grid_gray>",
+      "replaceString": "<div class=\"fr-story-artifact-grid\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_grid_gray_end",
+      "scriptName": "3.7_积木_Grid布局_灰_关",
+      "findRegex": "</tp_grid_gray>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_grid_red_start",
+      "scriptName": "3.7_积木_Grid布局_红_开",
+      "findRegex": "<tp_grid_red>",
+      "replaceString": "<div class=\"fr-story-artifact-grid\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_grid_red_end",
+      "scriptName": "3.7_积木_Grid布局_红_关",
+      "findRegex": "</tp_grid_red>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_row_start",
+      "scriptName": "3.7_积木_行元素_开",
+      "findRegex": "<tp_row>",
+      "replaceString": "<div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_row_end",
+      "scriptName": "3.7_积木_行元素_关",
+      "findRegex": "</tp_row>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_prog_box_start",
+      "scriptName": "3.7_积木_进度条盒子_开",
+      "findRegex": "<tp_prog_box>",
+      "replaceString": "<div class=\"fr-story-artifact-progress\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_prog_box_end",
+      "scriptName": "3.7_积木_进度条盒子_关",
+      "findRegex": "</tp_prog_box>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_visual_bar_cyan",
+      "scriptName": "3.7_积木_动态进度条_青",
+      "findRegex": "<tp_bar_cyan>([\\d\\.]+)</tp_bar_cyan>",
+      "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"修炼进度\">$1%</progress>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_visual_bar_red",
+      "scriptName": "3.7_积木_动态进度条_红",
+      "findRegex": "<tp_bar_red>([\\d\\.]+)</tp_bar_red>",
+      "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"突破成功率\">$1%</progress>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_res_box_start",
+      "scriptName": "3.7_积木_结果条_开",
+      "findRegex": "<tp_res_box>",
+      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_res_box_end",
+      "scriptName": "3.7_积木_结果条_关",
+      "findRegex": "</tp_res_box>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_foot_start",
+      "scriptName": "3.7_积木_页脚_开",
+      "findRegex": "<tp_foot>",
+      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_foot_end",
+      "scriptName": "3.7_积木_页脚_关",
+      "findRegex": "</tp_foot>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_ccc_s",
+      "scriptName": "3.7_积木_文字CCC_开",
+      "findRegex": "<tp_span_ccc>",
+      "replaceString": "<span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_ccc_e",
+      "scriptName": "3.7_积木_文字CCC_关",
+      "findRegex": "</tp_span_ccc>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_888_s",
+      "scriptName": "3.7_积木_文字888_开",
+      "findRegex": "<tp_span_888>",
+      "replaceString": "<span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_888_e",
+      "scriptName": "3.7_积木_文字888_关",
+      "findRegex": "</tp_span_888>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_444_s",
+      "scriptName": "3.7_积木_文字444_开",
+      "findRegex": "<tp_span_444>",
+      "replaceString": "<span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_444_e",
+      "scriptName": "3.7_积木_文字444_关",
+      "findRegex": "</tp_span_444>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_fff_s",
+      "scriptName": "3.7_积木_文字FFF_开",
+      "findRegex": "<tp_span_fff>",
+      "replaceString": "<span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_fff_e",
+      "scriptName": "3.7_积木_文字FFF_关",
+      "findRegex": "</tp_span_fff>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_red_s",
+      "scriptName": "3.7_积木_文字红_开",
+      "findRegex": "<tp_span_red>",
+      "replaceString": "<span class=\"fr-story-status-note\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_red_e",
+      "scriptName": "3.7_积木_文字红_关",
+      "findRegex": "</tp_span_red>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_gold_s",
+      "scriptName": "3.7_积木_文字金_开",
+      "findRegex": "<tp_span_gold>",
+      "replaceString": "<span class=\"fr-story-artifact-accent\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_gold_e",
+      "scriptName": "3.7_积木_文字金_关",
+      "findRegex": "</tp_span_gold>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_cyan_s",
+      "scriptName": "3.7_积木_文字青_开",
+      "findRegex": "<tp_span_cyan>",
+      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_span_cyan_e",
+      "scriptName": "3.7_积木_文字青_关",
+      "findRegex": "</tp_span_cyan>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_icon_s",
+      "scriptName": "3.7_积木_图标_开",
+      "findRegex": "<tp_icon>",
+      "replaceString": "<span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_icon_e",
+      "scriptName": "3.7_积木_图标_关",
+      "findRegex": "</tp_icon>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_bold_s",
+      "scriptName": "3.7_积木_加粗_开",
+      "findRegex": "<tp_b>",
+      "replaceString": "<b>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "blk_bold_e",
+      "scriptName": "3.7_积木_加粗_关",
+      "findRegex": "</tp_b>",
+      "replaceString": "</b>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "efee64e4-ae20-4ae9-a985-8677842a64a6",
+      "scriptName": "天机推演_主容器",
+      "findRegex": "<c1>",
+      "replaceString": "<div class=\"fr-story-artifact fr-story-divination\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c1_end",
+      "scriptName": "天机推演_主容器_关",
+      "findRegex": "</c1>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "34b43858-7188-4351-bbd3-f2745b9af5f8",
+      "scriptName": "天机推演_装饰性“道”字",
+      "findRegex": "<c2>",
+      "replaceString": "<div hidden>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c2_end",
+      "scriptName": "天机推演_背景道字_关",
+      "findRegex": "</c2>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "f218849a-9200-49ba-85e7-8c124c38350e",
+      "scriptName": "天机推演_标题栏",
+      "findRegex": "<c3>",
+      "replaceString": "<div class=\"fr-story-artifact-title\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c3_end",
+      "scriptName": "天机推演_标题行_关",
+      "findRegex": "</c3>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "d1babf7e-96a3-4227-a972-00ef6bfd06c2",
+      "scriptName": "天机推演_数值计算区",
+      "findRegex": "<c4>",
+      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c4_end",
+      "scriptName": "天机推演_数值区_关",
+      "findRegex": "</c4>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "7ed2f78c-d7d7-4177-bf74-67f715b6da61",
+      "scriptName": "天机推演_标签文本 (开始)",
+      "findRegex": "<s>",
+      "replaceString": "<span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "6641b82b-f116-4ed8-999d-43a412663121",
+      "scriptName": "天机推演_标签文本 (结束)",
+      "findRegex": "</s>",
+      "replaceString": "</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "167f116f-85e5-41da-9de2-bf2b0941b3dd",
+      "scriptName": "天机推演_DC数值",
+      "findRegex": "<b1>",
+      "replaceString": "<b class=\"fr-story-artifact-accent\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "9928b881-d205-4da0-878f-344e5d4972c0",
+      "scriptName": "天机推演_修复泄露",
+      "findRegex": "</b1>",
+      "replaceString": "</b>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "db17797b-f363-4c81-8a8c-1b4fb2e09612",
+      "scriptName": "天机推演_Roll数值",
+      "findRegex": "<b2>",
+      "replaceString": "<b class=\"fr-story-artifact-title\">",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "c94d210f-7e7a-4b20-93da-0fdfa6e39be2",
+      "scriptName": "天机推演_修复泄露1",
+      "findRegex": "</b2>",
+      "replaceString": "</b>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "2407d354-b8ab-44f8-8b2e-cfb7859ff844",
+      "scriptName": "天机推演_加成详情",
+      "findRegex": "<c5>",
+      "replaceString": "<span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c5_end",
+      "scriptName": "天机推演_修正值_关",
+      "findRegex": "</c5>",
+      "replaceString": "</span>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "d22bcc5a-58f9-407d-b726-f6136dbb9d99",
+      "scriptName": "天机推演_最终结果",
+      "findRegex": "<c6>",
+      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judge_c6_end",
+      "scriptName": "天机推演_结果区_关",
+      "findRegex": "</c6>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "02e9812f-dbb9-4ba7-96fe-a0372fc36873",
+      "scriptName": "天机推演_结果：大吉",
+      "findRegex": "<r_gg>",
+      "replaceString": " <strong class=\"fr-story-artifact-accent\">大吉</strong>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "9d1d97d8-eede-4ec8-9aee-c7ce3eac22f4",
+      "scriptName": "天机推演_结果：吉",
+      "findRegex": "<r_g>",
+      "replaceString": " <strong class=\"fr-story-artifact-title\">吉</strong>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "84676d0e-1302-48e0-b8cf-d6b2827093bd",
+      "scriptName": "天机推演_结果：平",
+      "findRegex": "<r_n>",
+      "replaceString": " <strong>平</strong>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "1a0f2897-bcd0-45f1-a63f-1faa47996c18",
+      "scriptName": "天机推演_结果：凶",
+      "findRegex": "<r_b>",
+      "replaceString": " <strong class=\"fr-story-status-note\">凶</strong>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "37497bbd-bbe2-4628-a913-bc335f256f04",
+      "scriptName": "天机推演_结果：大凶",
+      "findRegex": "<r_bb>",
+      "replaceString": " <strong class=\"fr-story-status-note\">大凶</strong>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judgment_desc_open",
+      "scriptName": "天机推演_结果描述_开",
+      "findRegex": "<desc>",
+      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "judgment_desc_close",
+      "scriptName": "天机推演_结果描述_关",
+      "findRegex": "</desc>",
+      "replaceString": "</div>",
+      "runOnEdit": true,
+      "placement": [
+        2
+      ]
+    },
+    {
+      "id": "52a90e43-be78-4c15-a81a-8c75305dff01",
+      "scriptName": "天机推演_通用闭合标签",
+      "findRegex": "</d>",
+      "replaceString": "</div>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    },
+    {
+      "id": "fr_status_population",
+      "scriptName": "万物有灵 · 状态栏人气",
+      "findRegex": "/<sect_stat>([^<\\r\\n]*)<\\/sect_stat>/g",
+      "replaceString": "<span class=\"fr-story-status-mood\">$1</span>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": false,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    },
+    {
+      "id": "fr_living_story_scene",
+      "scriptName": "万物有灵 · 灵景",
+      "findRegex": "/^[ \\t]*【灵景】([^\\r\\n<>]+?)[ \\t]*$/gm",
+      "replaceString": "<aside class=\"fr-story-scene\">$1</aside>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": false,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    },
+    {
+      "id": "fr_living_story_dialogue",
+      "scriptName": "万物有灵 · 对白",
+      "findRegex": "/^[ \\t]*【对白[｜|]([^｜|】\\r\\n<>]{1,40})】[ \\t]*([^\\r\\n<>]+?)[ \\t]*$/gm",
+      "replaceString": "<blockquote class=\"fr-story-quote\"><span class=\"fr-story-speaker\">$1</span>$2</blockquote>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": false,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    },
+    {
+      "id": "fr_living_story_transition",
+      "scriptName": "万物有灵 · 转场",
+      "findRegex": "/^[ \\t]*【转场[｜|]([^｜|】\\r\\n<>]{1,60})(?:[｜|]([^｜|】\\r\\n<>]{1,80}))?】[ \\t]*$/gm",
+      "replaceString": "<div class=\"fr-story-turn\">$1<span class=\"fr-story-turn-place\">$2</span></div>",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": false,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    }
+  ],
+  "chainRules": [
+    {
+      "id": "091c6316-09db-40e3-b248-6762b11670f1",
+      "scriptName": "隐藏思维链",
+      "findRegex": "([\\s\\S]+?)<\\/think>",
+      "replaceString": "",
+      "disabled": false,
+      "runOnEdit": true,
+      "markdownOnly": true,
+      "promptOnly": true,
+      "placement": [
+        2
+      ],
+      "minDepth": null,
+      "maxDepth": null,
+      "substituteRegex": 0,
+      "trimStrings": []
+    }
+  ],
+  "sendMapRegionOnly": false,
+  "mapContextMode": "nearby"
+}

@@ -1,0 +1,75 @@
+{
+  "name": "fanren-standalone",
+  "private": true,
+  "version": "1.1.2",
+  "description": "凡人修仙传 · 原著补演（独立桌面版）",
+  "author": "原著补演",
+  "main": "electron/main.cjs",
+  "update": {
+    "owner": "bangdongzou-dot",
+    "repo": "wangwuyouling",
+    "branch": "main"
+  },
+  "scripts": {
+    "assemble": "node scripts/check-undef.mjs && node scripts/assemble.mjs",
+    "build": "node scripts/check-undef.mjs && node scripts/assemble.mjs && node scripts/make-dist.mjs && node scripts/make-version.mjs",
+    "start": "npm run build && electron .",
+    "pack": "npm run build && electron-builder --win --x64 --dir",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "android": "node scripts/make-android.mjs",
+    "version:make": "node scripts/make-version.mjs",
+    "publish": "node scripts/publish.mjs",
+    "release": "npm run build && electron-builder --win --x64 --dir && electron-builder --win --x64 && node scripts/make-android.mjs && node scripts/publish.mjs",
+    "check:undef": "node scripts/check-undef.mjs"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0",
+    "dexie": "^4.3.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "playwright": "^1.64.1",
+    "typescript": "5.9.3"
+  },
+  "build": {
+    "appId": "fanren.standalone.app",
+    "productName": "凡人修仙传-原著补演",
+    "copyright": "原著补演",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.cjs",
+      "electron/preload.cjs",
+      "build-info.json",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "凡人修仙传·原著补演",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052"
+    }
+  }
+}

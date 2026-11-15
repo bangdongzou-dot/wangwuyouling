@@ -1,0 +1,7 @@
+node_modules/
+**/dist/
+**/release/
+**/build-info.json
+/凡人独立前端.html
+/发布包/index.html
+/发布包/version.json

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="jade" x2="1" y2="1"><stop stop-color="#233d32"/><stop offset="1" stop-color="#091714"/></linearGradient></defs>
+<rect x="12" y="12" width="488" height="488" rx="102" fill="url(#jade)"/>
+<rect x="16" y="16" width="480" height="480" rx="99" fill="none" stroke="#bf9a58" stroke-width="6"/>
+<rect x="30.5" y="30.5" width="451" height="451" rx="85.5" fill="none" stroke="#666440" stroke-width="1.5"/>
+<text x="256" y="360" text-anchor="middle" font-family="KaiTi,STKaiti,serif" font-size="368" fill="#edd193">凡</text>
+<path d="M185 431h54m34 0h54" stroke="#9b7d46" stroke-width="1.5"/>
+<path d="m256 424 7 7-7 7-7-7z" fill="#c6a25e"/>
+</svg>

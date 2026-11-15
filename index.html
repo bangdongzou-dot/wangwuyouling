@@ -1,10 +1,10 @@
-<!-- 凡人卡独立前端 · build 2026-11-15T06:47:43.950Z · v1.1.2 -->
+<!-- 凡人卡独立前端 · build 2026-11-15T12:08:17.861Z · v1.1.2 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
 <script>
-window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.1.2","date":"","items":["【优化】加快游戏启动时的存档检查，尤其是保存了较多或较大存档的情况下。","【优化】再次查看同一回合的诊断时会复用已加载的内容，打开面板更快。","【优化】储物袋会自动把可归并的常用物资收到一张物资卡里，点开可查看各件的数量和用途，使用或转交时仍按单件结算。","【优化】正文加宽，回合末尾的状态栏居中显示，变量变动、AI 思考、世界演化和原著人物故事恢复左侧竖排。","【修复】正文或世界观指导生成较久时，游戏端的统一限额和本地等待计时曾会提前中止请求，现在由接口返回结果或玩家主动停止。","【修复】正文被接口截断时会提示本次输出未写完，并保留重发入口，补演和变量结算会等到正文完整后再继续。","【修复】原著补演确认了有效的剧情进度后即可登记，正文没有逐字引文或没写精确时刻的回合也能按实际进展结算。","【修复】本轮尚未推进剧情时，进度指针仍会显示当前事件和日期，并说明本轮的结算状态。","【修复】原著人物档案缺少地点、年龄或寿元时会先尝试补齐，其他已有依据的内容照常落地。","【修复】回退楼层后重新补演时按当前楼层的记录结算，重跑失败也会显示这次的失败原因。","【修复】NPC 会从已有物品中换上更合适的可用装备，同源主修功法的完整版本可以替换残本，换下的物品会收回储物袋。","【修复】同一套法宝只占一个装备槽，部分组件损坏后会扣除对应数量，剩余组件仍属于原来的整套法宝。","【修复】物品交易会同时结算收货和付款，细分数量缺失时按已确认的交付批次登记，避免扣到其他库存。","【修复】技能详情中的技能说明、当前效果及熟练度各归其位，人物经历归入本人的生平。","【新增】数值规则设定加入「宗门供给与差事收入」，人物的初始资产会参考身份和生计，在宗门履职或领取供给后按实际时段计入收入。","【新增】世界大事会记录已经确定、玩家可以着手准备的活动，筹备、开放和结案都保留在同一条记录中。"]},{"version":"1.1.1","date":"2026-11-14","items":["【优化】重做白天主题与暗金夜间主题，统一主界面、人物面板和设置页的配色，白天模式采用柔和米白底和深色文字。","【优化】放大正文、侧栏和设置页的常用文字与按钮，桌面窗口空间充足时，系统控制台和「接口与模型」随主界面缩放，空间不足时可在窗口内滚动。","【优化】「接口与模型」分为「功能分配」和「接口库」，可以直接查看每项功能的主用模型和备用接口，展开后调整顺序或查看配置。","【优化】重排正文开场、对白与回合末尾的状态栏，时间、地点、在场人物和环境集中在一块简洁的附记里。","【优化】「世界大事」优先显示当前局势、可参与的主线和机缘，已结束的事件收进「历史大事」，同一场冲突的进展和结局归到原条目。","【优化】原著补演按关键节点或实质剧情变化推进，同一节点内的日常行动继续由变量演化处理，原著人物故事会保留「本轮无实质故事进展」的回合。","【优化】原著人物推进到新节点时，已发生的个人变化会随档案保留，并结合新节点确认的得失更新。","【优化】世界观指导与原著指导可以同时进行，两份结果都会供本轮正文参考，世界观裁定在本回合内按主题分卡展示。","【优化】每轮的大小总结由所选功能统一生成，开启分段记忆后，正文按设置使用对应楼层的原文或总结。","【优化】变量演化期间会显示当前在处理登退场、人物、物品还是世界与任务，并持续计时。","【修复】切换备用接口时有时会误用主接口的模型名，现在按实际启用的接口发送请求，切换提示会在请求结束后清除。","【修复】登场事迹使用人物本名时有时会被误判为漏记，导致普通结算中断，现在会按人物身份归属事迹，并支持用「智能重跑」恢复未完成的结算。","【修复】变量演化中有一条指令出错时，能定位的错误会单独补齐，其余已通过的结果会保留。","【修复】已经确认没有实质剧情进展的回合，人物故事有时会显示「尚未完成」，现在会显示本轮没有实质故事进展。","【修复】物品从一人转交给另一人时，接收方入库的同时会扣除给方对应的库存，物品原先穿戴在身上时也会从装备栏移除。","【修复】向量、重排序和生图模型按各自接口发送测试请求，重排序遇到单次 25 条上限时会分批处理完整候选。","【修复】「功能分配」展开后，主接口和备用接口的详情与排序按钮在放大界面时也能完整显示和点击。","【新增】接口库可为每个接口设置推理强度、输入和输出上限、每分钟请求上限以及超时时间。","【新增】世界观指导开始裁定时显示「正在裁定」和计时，点击提示可取消本次裁定。","【新增】储物袋支持按包查看归组物品，展开即可查看包内各件物品。"]},{"version":"1.1.0","date":"2026-11-13","items":["【优化】原著年表由「原著补演」统一判定和推进，正文根据已经确认的剧情继续写，旧的「事件动态」和重复的年表预告已移除。","【优化】世界大事记会持续显示仍在发生的局势，记录影响范围、实际效果与预计结束时间或条件，并让这些局势影响玩家正文和原著补演。","【优化】NPC 的 Buff 与状态会继承上一轮仍有效的内容，同名状态更新时替换旧条目，到期或达成结束条件后移除，只有已生效的属性效果参与结算。","【优化】人物面板默认只显示 Buff 与状态的名称，点开即可查看效果、生效情况和结束条件。","【优化】「重点演化」更名为「变量演化」，原独立「变量思考」中仍需使用的功能已并入，生平压缩也复用变量演化的接口。","【优化】API 地址、密钥和模型集中在「统一 API 接口配置」维护，各系统直接选用已保存的接口。","【优化】「数值规则设定」可以按小境界查看血量、法力、神识等属性的具体上下限，进入编辑模式即可调整表格中的数值，规则说明也更容易查阅。","【优化】灵根表补齐天灵根、真灵根、伪灵根、异灵根与混沌灵根的名称、特性和修速规则。","【优化】重新平衡混沌之宝的五档强度，传导倍率由下品到至高依次为 10、50、100、500、1000 倍，启动和完整传导所需的神识随品阶提高。","【优化】正文铺满阅读区，灵景有独立样式，人物对白带署名，开场与转场标明时间地点，正文末尾的状态栏显示本轮结束时的实际时地。","【优化】「正文与正则设置」分为显示设置、正则预设和正文预设三页，流式输出开关放在正文预设页，旧迷雾模式和内置的旧战斗卡片样式已移除。","【优化】系统控制台、年表资料、世界档案、数值规则和诊断日志等窗口按内容和屏幕尺寸调整，常用文字更清晰，多页设置切页时外框保持稳定。","【修复】开局或重跑旧楼层时，原著补演有时会把有效剧情判为「年表之外」，现在按年表起点或轮前进度，以及正文末尾的实际时间判定。","【修复】原著补演有时漏读正在进行的事件原文，现在默认读取当前事件的原文，途中经过的事件使用简略条目与已有变量依据，选择「原文优先」可为经过事件一并取用可用原文。","【修复】剧情发生变异时，预制补演有时会把动作和所在地也当作历史增减处理，现在人物的动作、位置与状态按当前场景更新，历史得失仍按对应事件来源处理。","【修复】正文已经上屏时，行动选项有时要等后台结算才出现，现会随本轮正文显示，后续补演失败时也会随楼层保存。","【修复】部分旧楼层的对白和场景文字颜色过暗、字距过宽，现在重新排版并提高对比度，原文照常保留。","【修复】预制人物已有地点但坐标未详时可能无法保存，现可采用可信地点，并在需要时按已知前态和剧情补足年龄、寿元等档案。","【修复】人物明确突破后仍可能沿用上一境界整套基础属性，现按当前境界规则更新这类白值。","【修复】带有缺失属性说明的四灵根有时会取错修速，现按实际灵根类型计算。","【新增】各功能可设置一个主 API 和多个备用 API，请求在开始输出前失败时可按设定顺序切换。","【新增】「变量演化」可设置每批最多处理的 NPC 数量，超过上限时分批更新人物，登退场、物品与杂项仍统一处理一次。"]},{"version":"1.0.9","date":"2026-11-12","items":["【优化】预制补演过去要反复核对能否沿用的内容；现在先用已有进度指针判断，能直接采用的成品不再重写，只修订实际受剧情影响的部分。","【优化】普通补演跨多个事件时，人物经历和变化容易混在一起；现在按 NPC 视角正文逐段结算，补齐中间的空白时段，并保留各段经历、关系和物品的来源。","【优化】预制补演过去要等整批结束才看到结果；现在不互相依赖的 NPC 完成后即可分别保存视角正文和变量，失败时只需重跑该人物未完成的阶段。","【优化】补演气泡过去只提示「还有几项并行任务」；现在直接显示正在处理的阶段和人物，并区分 NPC 视角正文与玩家剧情正文。","【优化】进行中的年表事件过去主要显示时间；现在账本会列出事件名称、当前阶段、下一节点和本轮已保存的人物变化。","【优化】过去通过开关启用预制成品；现在可直接选择「普通补演」或「预制补演」，切换方式不会删除已导入的成品。","【优化】属性面板过去不容易看出数值大致相当于什么境界；现在用简短标签显示等效实力，血量和法力按容量判断。","【优化】「先天气运」改名为「气运特质」；现在人物档案会分开显示特质说明、实际效果和属性加成。","【优化】物品详情过去需要在大段文字里找重点；现在按物品类型分别展示效果、用法、来历和使用门槛。","【优化】百艺过去不容易分清自身熟练度与功法帮助；现在八项技艺分别显示档位和进度，功法辅助单独标注。","【优化】主界面和各弹窗的配色过去不够统一；现在随主题使用同一套配色，人物档案也更易阅读。","【修复】预制补演匹配到成品后有时会转回普通补演；现在原样采用、修订和接续均留在预制线路。","【修复】同一天的后续年表事件有时会被提前写入；现在两条补演线路都按实际经过的节点结算，进行中的事件只写到本轮正文时刻。","【修复】跨事件补演有时只保存当前片段、漏掉已经完成的历史成品；现在先采用符合条件的历史成品，当前片段从其终态接续。","【修复】剧情改变、原著事件不再发生时，旧成品可能仍带入该事件的经历、关系或物品；现在只撤回来源明确的对应变化，保留其他事件的独立结果。","【修复】本轮年表涉及的人物有时会因不在玩家面前而漏补，或被交给重点演化重复处理；现在由原著补演统一处理，是否列入「周围人物」另按实际在场情况判断。","【修复】补演局部重跑有时会选错人物、误报分工变化或只显示笼统错误；现在可按人物和阶段接续，保留已保存结果，并显示具体失败原因。","【修复】预制修订有时因资料超过固定上限而中断；现在可按设置提高输入上限，材料较多时会分组处理并保留已完成的结果。","【修复】重点演化有时因模型返回格式不符而无法保存；现在普通模型和 DeepSeek 的四份内置变量预设已统一各阶段的格式要求。","【修复】NPC 视角正文里有时会夹入生平摘要；现在视角正文按节点使用原段，人物生平单独保留。","【修复】补演人数有时漏算直接采用成品的人物，保存区还可能出现空白人物卡；现在按实际参与补演的人物统计，每人只计一次。","【修复】连续重 roll 后，本轮提示词、分支选项或原著指导有时会空白或串到别的楼层；现在按当前楼层显示对应内容。","【修复】连续新增模型接口有时会覆盖上一份配置；现在同地址的不同模型可分别保存，取消编辑也不会改动原配置。","【修复】出生地地图拖动或缩放后，点选位置有时会偏移；现在选择标记会对准实际点击的位置。","【修复】窗口较矮或界面放大时，物品详情可能超出屏幕；现在标题和关闭按钮保持可见，内容可单独滚动。","【修复】开局修炼速度有时看不出用了哪种灵根的基础值；现在新档会标明灵根来源，缺少来源记录的旧档仍显示实际存档值。","【修复】NPC 获得秘籍后有时没有对应的修习记录；现在符合条件的功法和技能会进入各自的栏位，装备转槽也会保留原物品。","【新增】右侧「系统」加入诊断日志；现在可展开查看所选回合的错误，并将首跑和重跑合并为一份日志导出。","【新增】设置加入「数值规则设定」；现在可集中编辑、导入数值规则，并让变量提示词引用，世界规则仍在「世界观指导」中查看。","【新增】功法扩充为黄、玄、地、天、仙、道六阶，每阶分下品、中品、上品、极品；现在每本功法都有修炼速度加成，装备并解锁对应效果后可在修炼明细查看。","【新增】法宝在玄天之宝之上加入「混沌之宝」，分下品、中品、上品、顶阶、至高五档；混沌造化瓶独占至高档，并使用专属虹彩边框。","【新增】新档选择混沌造化瓶天赋后，开局便与器灵红宝结成羁绊；红宝好感满格，全程以全盛超脱者的姿态登场，所有属性无限。"]},{"version":"1.0.8","date":"2026-11-10","items":["【优化】Gemini 和 DeepSeek V4.1 Flash 默认使用高思考档位。正文设置仍可调整档位，DeepSeek 选择「最高」时会使用最高档。","【修复】忽略过一份补丁后，游戏仍可提醒同一版本号下发布的下一份补丁。","【优化】原著补演的进度提示现在会显示正在进行的阶段，方便区分查资料、写人物故事、更新变量和保存结果。","【优化】当天发生的多个关键事件会按先后顺序排在进度轴上，点开节点可查看详情。","【优化】「原著补演 · 局部重跑」移到右侧「重新生成」，与「重点演化 · 局部重跑」并列，杂项可在重点演化的重跑面板里选择。","【修复】主界面有时会在启动后突然缩小，旧版遗留的 60%–70% 缩放会在首次启动时恢复到 100%，之后主动设置的比例照常保存。","【修复】左上角的快捷入口会盖住部分设置窗口，打开系统窗口时可以正常查看和操作被挡住的区域。","【修复】校订内置年表的开篇内容和简略条目，使事件顺序、人物经历和原文叙述对得上。","【新增】原著补演可在「总览与模型」中开启「使用预制成品」，按实际走过的事件节点复用已导入且匹配当前年表的人物故事和变量。","【新增】年表资料新增「预制成品」页，可导入或导出单条和批量成品，按事件展开查看变量增减，也可以删除单条、所选或全部成品。","【新增】预制补演保存后可按人物查看已落地的变量，重开游戏后仍可在当前楼层查看保存结果。","【新增】普通补演和预制补演都可以单独重跑当前楼层的账本，沿用已保存的人物故事和变量。","【新增】游戏内的年表资料可按事件编号导入并替换单条或一批条目，也可整份替换和导出。"]},{"version":"1.0.7","date":"2026-11-07","items":["【优化】原著补演有时会在「检索资料」停留很久；现在减少了过程记录带来的等待。","【优化】原著补演进度轴原先把事件名称直接排在轴上；现在轴上的编号对应下方的事件卡片，卡片上可直接查看日期。","【优化】重做玩家和 NPC 的装备界面；现在武器、护甲、功法和法宝分别有一格、四格、四格和六格，每格标明用途，空槽与已装备状态采用不同样式。","【优化】装备品阶原先主要靠颜色区分；现在高品阶装备也有对应的边框纹饰与光效。","【优化】查看属性加成时要从多段计算过程里找结果；现在先显示最终值、基础值和实际生效的加成来源。","【优化】调整装备与功法加成的计算规则；现在按人物未受加成的基础属性计算，每件加成各有上限。","【优化】重点演化的设置项集中在同一个长页面；现在可分开查看调度、阶段路由、预设和并发设置。","【优化】原著指导和补演展示改为跟随当前楼层保存；现在重开游戏后可继续查看本层已保存的内容。","【优化】重跑面板原先没有区分演化模式；现在会标出原回合采用的模式，合并回合也可以按阶段或人物选择补跑范围。","【修复】正文出字时，个别内嵌内容加载失败会把游戏退回开始界面；现在正文页面会继续保留。","【修复】指定重写一名原著人物的正文时，有时会从补演边界重新开始；现在同层材料有效时直达该人物正文，完成后只更新其相关变量，其他已保存的人物照常保留。","【修复】正文已经出字，思考面板的「正文提示词」有时还是空的；现在可在对应楼层查看实际发送的内容。","【修复】旧存档中的时间、地点和坐标有时混在同一行；现在世界时间和所在地各自显示。","【新增】系统设置加入「统一 API 接口配置」，可集中保存接口，各系统可以选用已保存的接口、独立选择模型或保留手动配置。","【新增】重点演化可选合并或分阶段运行，合并模式会把普通人物、物品和杂项集中处理，指定人物仍可单独演化。","【新增】法宝栏设有一个本命法宝专用槽，玩家和 NPC 从结丹期起可以装备。","【新增】补全 19 类物品图标，兵器、护甲、功法、法宝、丹药、符箓等在背包、装备栏和详情中按类型显示。","【新增】原著人物列表顶部加入「世界大事记」入口，可单独查看世界事件。","【新增】发现新版本时可以选择「忽略」，同一个版本之后不会反复弹出提示。"]},{"version":"1.0.6","date":"2026-11-02","items":["【优化】NPC 视角正文的日期单独标出，一眼能看到时间点。","【优化】变量思维改为每跑完一个阶段就显示，不用等整轮结束。","【优化】界面放大改为分档：菜单和提示不放大，小窗最多 115%，窗口不再超出屏幕。","【修复】补演失败不再只给一句笼统话，会直接指出哪个字段错了、该填什么。","【修复】一个人物出错不再拖垮整轮，写对的照常推进，出错的单独标出可重跑。","【修复】NPC 正文不再参考玩家正文，只用判定阶段提炼出的事实。","【修复】NPC 正文的楼层编号改为显示真实楼层序号，回退后同步退回。","【修复】NPC 正文每段单独成块，段与段之间留出间距。","【修复】NPC 正文会标出最新那一段，不会把旧内容当成新的。","【修复】重 roll 时指令没改就沿用上一轮指导，改了才问要不要重推。","【修复】一层只留一份生效记录，旧记录收起为一行，仍可展开查看。","【修复】中止按正常操作处理，只提示已中止，不再锁死本回合。","【修复】原著人物故事按回合分开，默认停在最新回合。","【修复】人物故事的时间接上回合继续写，空档期一并补上。","【修复】人物故事按出场分段，没戏份的日子合并为空白期。","【修复】跨回合事件只覆盖最后一段，前面已写的原样保留。","【修复】续写把上回合原文和时间区间一起交给模型照抄，不再凭空猜。","【修复】生平摘要合并后保持完整一条，时间地点不再丢失。","【修复】重点演化的局部重跑点下去真的会跑，过程不再卡顿。","【修复】长时间没有进展会如实说卡在哪一步，不再假装在跑。","【修复】重跑失败会留在面板上，红字写清原因，不再一闪就没。","【修复】重跑重点演化只跑自己的事，不再牵连原著补演。","【修复】勾了谁就只重跑谁，不会连带整轮重跑。","【修复】发现新版本直接列出这一版的更新内容，按优化、修复、新增分开。","【修复】游戏中途只轻提示一行，想细看再展开；刚启动时才完整列出。","【修复】更新下载完当场列出本版内容，不用等重启。","【修复】勾什么就跑什么，必须连带的相关项会自动补上并说明原因。","【修复】重跑面板每项都用日常说法写清作用，勾选时自动带出相关项。","【修复】跑完就是跑完，不再把成功的结果报成失败。","【修复】失败项真的排到最前，用红条和深底标出，并单独加分隔标题。","【修复】重跑面板底部三个按钮并排一行，智能重跑描金边更醒目。","【修复】只有真正落地才算完成，没落地会说明卡在哪一步。","【修复】勾阶段就按阶段跑，不再误判成没有对应人物。","【修复】重跑出错直接说清真实原因，不再被英文报错盖住。","【修复】账本自动补跑不再被「对不上人物」拦住。","【修复】变量思维只显示一句「进行中」，结果出来直接替换。","【修复】重跑只用本回合的资料，旧楼层不再保留，也不再给选楼层下拉框。","【修复】删掉重跑面板上方多余的分类切换，左侧阶段右侧目标本身就是分类。","【修复】加了「显示全部」，看完某个阶段能回到完整列表，左侧对应项会高亮。","【修复】阶段勾上之后可以取消，只有必须连带的相关项才会自动勾上。","【修复】账本和面板的「智能重跑」统一成同一套做法。","【修复】没有需要补的项目会明说，不再弹红字当成故障。","【修复】启动时一次就接上调试记录，不再反复重试并报「函数未找到」。"]},{"version":"1.0.5","date":"2026-11-01","items":["【修复】原著补演的边界判定说明文字被挤成每行一个字的竖条、撑高整块面板并推走后面内容；现已正常换行。","【修复】重roll正文后原著补演下面的内容整段消失；现在会标注「本轮已被重roll覆盖」并说明覆盖了几条，原记录仍保留可查。"]},{"version":"1.0.4","date":"2026-11-01","items":["【修复】补演正文把韩立的 NPC 视角写成了玩家，人称错乱；已彻底移除补演阶段混入的玩家变量与快照信息","【修复】一个小道具没匹配上就判整轮失败，还要手动点继续补演；现在不再拦","【修复】局部重跑被「合批包含未选人物」整轮中止；现在能安全拆分的会拆开、只重跑勾选的那几个","【修复】PC 端双击不再缩放，只有 Ctrl+滚轮可以；缩放复位按钮也不容易再被误触","【优化】两个阶段的资料采集全面梳理：必要的保留、作用不大的默认关闭、完全没用的直接删除。默认关闭不等于移除，随时可以开回来","【修复】补演阶段不再注入玩家的变量和快照，玩家与 NPC 的变量交互由重点演化接管","【优化】删掉「在场人物」、灵兽不再显示为「我的」、人物档案加回玩家、补演阶段去掉小地图、地图默认开启","【删除】「随身物品与装备」在两个阶段都移除，快照里已经包含","【优化】资料分区与提示词：每份资料都写清是什么、有什么用、该怎么用；设定集检索优先调用凡人卡自身占位符","【修复】世界信息共享、个人信息独享，按人拆开资料，不再被迫把共享背景调到 50 万字","【修复】检索阶段就分好类：人物设定按 NPC 独享，非人物设定先放共享","【重做】设置面板排版：结构错位、尺寸死板、排版冲突全部重做；资料来源按原著指导、原著补演分上下两栏独立设置","【修复】补演报错不再是一句空话，分别说明是引用不在名单、重复、枚举写错、还是理由留空；理由留空不再判失败","【修复】「无推进」等同义写法会自动识别纠正，不会因为一个词的写法把整轮卡死；真正编错的仍然拦","【修复】重试按钮不再被「这条记录属于其他楼层」永久锁死，只要那次楼层还在存档里就放行","【修复】「每批最多处理几条」以前是摆设，现在真正生效，和单批输入输出上限组成两道闸，超容量自动减人","【修复】补演请求数异常增多，恢复按人数合批","【修复】老存档单批输入容量从 12 万自动升到 50 万，不覆盖玩家自己填过的数字","【修复】设置项排查，补齐后端在用但界面上没有的开关；清理掉填了也不生效的冗余输入框"]},{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
+window.__FR_CHANGELOG_BUILTIN__=[{"version":"1.1.2","date":"2026-11-15","items":["【优化】加快游戏启动时的存档检查，尤其是保存了较多或较大存档的情况下。","【优化】再次查看同一回合的诊断时会复用已加载的内容，打开面板更快。","【优化】储物袋会自动把可归并的常用物资收到一张物资卡里，点开可查看各件的数量和用途，使用或转交时仍按单件结算。","【优化】正文加宽，回合末尾的状态栏居中显示，变量变动、AI 思考、世界演化和原著人物故事恢复左侧竖排。","【修复】正文或世界观指导生成较久时，游戏端的统一限额和本地等待计时曾会提前中止请求，现在由接口返回结果或玩家主动停止。","【修复】正文被接口截断时会提示本次输出未写完，并保留重发入口，补演和变量结算会等到正文完整后再继续。","【修复】原著补演确认了有效的剧情进度后即可登记，正文没有逐字引文或没写精确时刻的回合也能按实际进展结算。","【修复】本轮尚未推进剧情时，进度指针仍会显示当前事件和日期，并说明本轮的结算状态。","【修复】原著人物档案缺少地点、年龄或寿元时会先尝试补齐，其他已有依据的内容照常落地。","【修复】回退楼层后重新补演时按当前楼层的记录结算，重跑失败也会显示这次的失败原因。","【修复】NPC 会从已有物品中换上更合适的可用装备，同源主修功法的完整版本可以替换残本，换下的物品会收回储物袋。","【修复】同一套法宝只占一个装备槽，部分组件损坏后会扣除对应数量，剩余组件仍属于原来的整套法宝。","【修复】物品交易会同时结算收货和付款，细分数量缺失时按已确认的交付批次登记，避免扣到其他库存。","【修复】技能详情中的技能说明、当前效果及熟练度各归其位，人物经历归入本人的生平。","【新增】数值规则设定加入「宗门供给与差事收入」，人物的初始资产会参考身份和生计，在宗门履职或领取供给后按实际时段计入收入。","【新增】世界大事会记录已经确定、玩家可以着手准备的活动，筹备、开放和结案都保留在同一条记录中。","【修复】新档明确指定开局日期时，年表指导、正文状态栏、补演边界和变量保存使用同一日期。模型沿用创角默认日期时会校正时间，并保留本轮经过的分钟数。","【修复】已经过时且没有变异的预制事件可按实际游戏时间完成入账，旧节点不会卡住后续事件的进度指针。","【修复】接口请求失败时立即尝试下一条已配置备用。限流等待只影响对应接口，独立接口可以继续请求。","【优化】备用接口切换提示约两秒后收起。变量演化气泡简化为结算、核对结果或修正格式，并继续显示计时。","【修复】已到期或已经解除的状态会从有效状态中退出。痊愈归入正文和经历，仍有效的影响继续随人物状态承接。","【优化】NPC 首次建档按身份和场景准备常用物品和装备。已建档人物会从自己的库存选择更适用的装备。"]},{"version":"1.1.1","date":"2026-11-14","items":["【优化】重做白天主题与暗金夜间主题，统一主界面、人物面板和设置页的配色，白天模式采用柔和米白底和深色文字。","【优化】放大正文、侧栏和设置页的常用文字与按钮，桌面窗口空间充足时，系统控制台和「接口与模型」随主界面缩放，空间不足时可在窗口内滚动。","【优化】「接口与模型」分为「功能分配」和「接口库」，可以直接查看每项功能的主用模型和备用接口，展开后调整顺序或查看配置。","【优化】重排正文开场、对白与回合末尾的状态栏，时间、地点、在场人物和环境集中在一块简洁的附记里。","【优化】「世界大事」优先显示当前局势、可参与的主线和机缘，已结束的事件收进「历史大事」，同一场冲突的进展和结局归到原条目。","【优化】原著补演按关键节点或实质剧情变化推进，同一节点内的日常行动继续由变量演化处理，原著人物故事会保留「本轮无实质故事进展」的回合。","【优化】原著人物推进到新节点时，已发生的个人变化会随档案保留，并结合新节点确认的得失更新。","【优化】世界观指导与原著指导可以同时进行，两份结果都会供本轮正文参考，世界观裁定在本回合内按主题分卡展示。","【优化】每轮的大小总结由所选功能统一生成，开启分段记忆后，正文按设置使用对应楼层的原文或总结。","【优化】变量演化期间会显示当前在处理登退场、人物、物品还是世界与任务，并持续计时。","【修复】切换备用接口时有时会误用主接口的模型名，现在按实际启用的接口发送请求，切换提示会在请求结束后清除。","【修复】登场事迹使用人物本名时有时会被误判为漏记，导致普通结算中断，现在会按人物身份归属事迹，并支持用「智能重跑」恢复未完成的结算。","【修复】变量演化中有一条指令出错时，能定位的错误会单独补齐，其余已通过的结果会保留。","【修复】已经确认没有实质剧情进展的回合，人物故事有时会显示「尚未完成」，现在会显示本轮没有实质故事进展。","【修复】物品从一人转交给另一人时，接收方入库的同时会扣除给方对应的库存，物品原先穿戴在身上时也会从装备栏移除。","【修复】向量、重排序和生图模型按各自接口发送测试请求，重排序遇到单次 25 条上限时会分批处理完整候选。","【修复】「功能分配」展开后，主接口和备用接口的详情与排序按钮在放大界面时也能完整显示和点击。","【新增】接口库可为每个接口设置推理强度、输入和输出上限、每分钟请求上限以及超时时间。","【新增】世界观指导开始裁定时显示「正在裁定」和计时，点击提示可取消本次裁定。","【新增】储物袋支持按包查看归组物品，展开即可查看包内各件物品。"]},{"version":"1.1.0","date":"2026-11-13","items":["【优化】原著年表由「原著补演」统一判定和推进，正文根据已经确认的剧情继续写，旧的「事件动态」和重复的年表预告已移除。","【优化】世界大事记会持续显示仍在发生的局势，记录影响范围、实际效果与预计结束时间或条件，并让这些局势影响玩家正文和原著补演。","【优化】NPC 的 Buff 与状态会继承上一轮仍有效的内容，同名状态更新时替换旧条目，到期或达成结束条件后移除，只有已生效的属性效果参与结算。","【优化】人物面板默认只显示 Buff 与状态的名称，点开即可查看效果、生效情况和结束条件。","【优化】「重点演化」更名为「变量演化」，原独立「变量思考」中仍需使用的功能已并入，生平压缩也复用变量演化的接口。","【优化】API 地址、密钥和模型集中在「统一 API 接口配置」维护，各系统直接选用已保存的接口。","【优化】「数值规则设定」可以按小境界查看血量、法力、神识等属性的具体上下限，进入编辑模式即可调整表格中的数值，规则说明也更容易查阅。","【优化】灵根表补齐天灵根、真灵根、伪灵根、异灵根与混沌灵根的名称、特性和修速规则。","【优化】重新平衡混沌之宝的五档强度，传导倍率由下品到至高依次为 10、50、100、500、1000 倍，启动和完整传导所需的神识随品阶提高。","【优化】正文铺满阅读区，灵景有独立样式，人物对白带署名，开场与转场标明时间地点，正文末尾的状态栏显示本轮结束时的实际时地。","【优化】「正文与正则设置」分为显示设置、正则预设和正文预设三页，流式输出开关放在正文预设页，旧迷雾模式和内置的旧战斗卡片样式已移除。","【优化】系统控制台、年表资料、世界档案、数值规则和诊断日志等窗口按内容和屏幕尺寸调整，常用文字更清晰，多页设置切页时外框保持稳定。","【修复】开局或重跑旧楼层时，原著补演有时会把有效剧情判为「年表之外」，现在按年表起点或轮前进度，以及正文末尾的实际时间判定。","【修复】原著补演有时漏读正在进行的事件原文，现在默认读取当前事件的原文，途中经过的事件使用简略条目与已有变量依据，选择「原文优先」可为经过事件一并取用可用原文。","【修复】剧情发生变异时，预制补演有时会把动作和所在地也当作历史增减处理，现在人物的动作、位置与状态按当前场景更新，历史得失仍按对应事件来源处理。","【修复】正文已经上屏时，行动选项有时要等后台结算才出现，现会随本轮正文显示，后续补演失败时也会随楼层保存。","【修复】部分旧楼层的对白和场景文字颜色过暗、字距过宽，现在重新排版并提高对比度，原文照常保留。","【修复】预制人物已有地点但坐标未详时可能无法保存，现可采用可信地点，并在需要时按已知前态和剧情补足年龄、寿元等档案。","【修复】人物明确突破后仍可能沿用上一境界整套基础属性，现按当前境界规则更新这类白值。","【修复】带有缺失属性说明的四灵根有时会取错修速，现按实际灵根类型计算。","【新增】各功能可设置一个主 API 和多个备用 API，请求在开始输出前失败时可按设定顺序切换。","【新增】「变量演化」可设置每批最多处理的 NPC 数量，超过上限时分批更新人物，登退场、物品与杂项仍统一处理一次。"]},{"version":"1.0.9","date":"2026-11-12","items":["【优化】预制补演过去要反复核对能否沿用的内容；现在先用已有进度指针判断，能直接采用的成品不再重写，只修订实际受剧情影响的部分。","【优化】普通补演跨多个事件时，人物经历和变化容易混在一起；现在按 NPC 视角正文逐段结算，补齐中间的空白时段，并保留各段经历、关系和物品的来源。","【优化】预制补演过去要等整批结束才看到结果；现在不互相依赖的 NPC 完成后即可分别保存视角正文和变量，失败时只需重跑该人物未完成的阶段。","【优化】补演气泡过去只提示「还有几项并行任务」；现在直接显示正在处理的阶段和人物，并区分 NPC 视角正文与玩家剧情正文。","【优化】进行中的年表事件过去主要显示时间；现在账本会列出事件名称、当前阶段、下一节点和本轮已保存的人物变化。","【优化】过去通过开关启用预制成品；现在可直接选择「普通补演」或「预制补演」，切换方式不会删除已导入的成品。","【优化】属性面板过去不容易看出数值大致相当于什么境界；现在用简短标签显示等效实力，血量和法力按容量判断。","【优化】「先天气运」改名为「气运特质」；现在人物档案会分开显示特质说明、实际效果和属性加成。","【优化】物品详情过去需要在大段文字里找重点；现在按物品类型分别展示效果、用法、来历和使用门槛。","【优化】百艺过去不容易分清自身熟练度与功法帮助；现在八项技艺分别显示档位和进度，功法辅助单独标注。","【优化】主界面和各弹窗的配色过去不够统一；现在随主题使用同一套配色，人物档案也更易阅读。","【修复】预制补演匹配到成品后有时会转回普通补演；现在原样采用、修订和接续均留在预制线路。","【修复】同一天的后续年表事件有时会被提前写入；现在两条补演线路都按实际经过的节点结算，进行中的事件只写到本轮正文时刻。","【修复】跨事件补演有时只保存当前片段、漏掉已经完成的历史成品；现在先采用符合条件的历史成品，当前片段从其终态接续。","【修复】剧情改变、原著事件不再发生时，旧成品可能仍带入该事件的经历、关系或物品；现在只撤回来源明确的对应变化，保留其他事件的独立结果。","【修复】本轮年表涉及的人物有时会因不在玩家面前而漏补，或被交给重点演化重复处理；现在由原著补演统一处理，是否列入「周围人物」另按实际在场情况判断。","【修复】补演局部重跑有时会选错人物、误报分工变化或只显示笼统错误；现在可按人物和阶段接续，保留已保存结果，并显示具体失败原因。","【修复】预制修订有时因资料超过固定上限而中断；现在可按设置提高输入上限，材料较多时会分组处理并保留已完成的结果。","【修复】重点演化有时因模型返回格式不符而无法保存；现在普通模型和 DeepSeek 的四份内置变量预设已统一各阶段的格式要求。","【修复】NPC 视角正文里有时会夹入生平摘要；现在视角正文按节点使用原段，人物生平单独保留。","【修复】补演人数有时漏算直接采用成品的人物，保存区还可能出现空白人物卡；现在按实际参与补演的人物统计，每人只计一次。","【修复】连续重 roll 后，本轮提示词、分支选项或原著指导有时会空白或串到别的楼层；现在按当前楼层显示对应内容。","【修复】连续新增模型接口有时会覆盖上一份配置；现在同地址的不同模型可分别保存，取消编辑也不会改动原配置。","【修复】出生地地图拖动或缩放后，点选位置有时会偏移；现在选择标记会对准实际点击的位置。","【修复】窗口较矮或界面放大时，物品详情可能超出屏幕；现在标题和关闭按钮保持可见，内容可单独滚动。","【修复】开局修炼速度有时看不出用了哪种灵根的基础值；现在新档会标明灵根来源，缺少来源记录的旧档仍显示实际存档值。","【修复】NPC 获得秘籍后有时没有对应的修习记录；现在符合条件的功法和技能会进入各自的栏位，装备转槽也会保留原物品。","【新增】右侧「系统」加入诊断日志；现在可展开查看所选回合的错误，并将首跑和重跑合并为一份日志导出。","【新增】设置加入「数值规则设定」；现在可集中编辑、导入数值规则，并让变量提示词引用，世界规则仍在「世界观指导」中查看。","【新增】功法扩充为黄、玄、地、天、仙、道六阶，每阶分下品、中品、上品、极品；现在每本功法都有修炼速度加成，装备并解锁对应效果后可在修炼明细查看。","【新增】法宝在玄天之宝之上加入「混沌之宝」，分下品、中品、上品、顶阶、至高五档；混沌造化瓶独占至高档，并使用专属虹彩边框。","【新增】新档选择混沌造化瓶天赋后，开局便与器灵红宝结成羁绊；红宝好感满格，全程以全盛超脱者的姿态登场，所有属性无限。"]},{"version":"1.0.8","date":"2026-11-10","items":["【优化】Gemini 和 DeepSeek V4.1 Flash 默认使用高思考档位。正文设置仍可调整档位，DeepSeek 选择「最高」时会使用最高档。","【修复】忽略过一份补丁后，游戏仍可提醒同一版本号下发布的下一份补丁。","【优化】原著补演的进度提示现在会显示正在进行的阶段，方便区分查资料、写人物故事、更新变量和保存结果。","【优化】当天发生的多个关键事件会按先后顺序排在进度轴上，点开节点可查看详情。","【优化】「原著补演 · 局部重跑」移到右侧「重新生成」，与「重点演化 · 局部重跑」并列，杂项可在重点演化的重跑面板里选择。","【修复】主界面有时会在启动后突然缩小，旧版遗留的 60%–70% 缩放会在首次启动时恢复到 100%，之后主动设置的比例照常保存。","【修复】左上角的快捷入口会盖住部分设置窗口，打开系统窗口时可以正常查看和操作被挡住的区域。","【修复】校订内置年表的开篇内容和简略条目，使事件顺序、人物经历和原文叙述对得上。","【新增】原著补演可在「总览与模型」中开启「使用预制成品」，按实际走过的事件节点复用已导入且匹配当前年表的人物故事和变量。","【新增】年表资料新增「预制成品」页，可导入或导出单条和批量成品，按事件展开查看变量增减，也可以删除单条、所选或全部成品。","【新增】预制补演保存后可按人物查看已落地的变量，重开游戏后仍可在当前楼层查看保存结果。","【新增】普通补演和预制补演都可以单独重跑当前楼层的账本，沿用已保存的人物故事和变量。","【新增】游戏内的年表资料可按事件编号导入并替换单条或一批条目，也可整份替换和导出。"]},{"version":"1.0.7","date":"2026-11-07","items":["【优化】原著补演有时会在「检索资料」停留很久；现在减少了过程记录带来的等待。","【优化】原著补演进度轴原先把事件名称直接排在轴上；现在轴上的编号对应下方的事件卡片，卡片上可直接查看日期。","【优化】重做玩家和 NPC 的装备界面；现在武器、护甲、功法和法宝分别有一格、四格、四格和六格，每格标明用途，空槽与已装备状态采用不同样式。","【优化】装备品阶原先主要靠颜色区分；现在高品阶装备也有对应的边框纹饰与光效。","【优化】查看属性加成时要从多段计算过程里找结果；现在先显示最终值、基础值和实际生效的加成来源。","【优化】调整装备与功法加成的计算规则；现在按人物未受加成的基础属性计算，每件加成各有上限。","【优化】重点演化的设置项集中在同一个长页面；现在可分开查看调度、阶段路由、预设和并发设置。","【优化】原著指导和补演展示改为跟随当前楼层保存；现在重开游戏后可继续查看本层已保存的内容。","【优化】重跑面板原先没有区分演化模式；现在会标出原回合采用的模式，合并回合也可以按阶段或人物选择补跑范围。","【修复】正文出字时，个别内嵌内容加载失败会把游戏退回开始界面；现在正文页面会继续保留。","【修复】指定重写一名原著人物的正文时，有时会从补演边界重新开始；现在同层材料有效时直达该人物正文，完成后只更新其相关变量，其他已保存的人物照常保留。","【修复】正文已经出字，思考面板的「正文提示词」有时还是空的；现在可在对应楼层查看实际发送的内容。","【修复】旧存档中的时间、地点和坐标有时混在同一行；现在世界时间和所在地各自显示。","【新增】系统设置加入「统一 API 接口配置」，可集中保存接口，各系统可以选用已保存的接口、独立选择模型或保留手动配置。","【新增】重点演化可选合并或分阶段运行，合并模式会把普通人物、物品和杂项集中处理，指定人物仍可单独演化。","【新增】法宝栏设有一个本命法宝专用槽，玩家和 NPC 从结丹期起可以装备。","【新增】补全 19 类物品图标，兵器、护甲、功法、法宝、丹药、符箓等在背包、装备栏和详情中按类型显示。","【新增】原著人物列表顶部加入「世界大事记」入口，可单独查看世界事件。","【新增】发现新版本时可以选择「忽略」，同一个版本之后不会反复弹出提示。"]},{"version":"1.0.6","date":"2026-11-02","items":["【优化】NPC 视角正文的日期单独标出，一眼能看到时间点。","【优化】变量思维改为每跑完一个阶段就显示，不用等整轮结束。","【优化】界面放大改为分档：菜单和提示不放大，小窗最多 115%，窗口不再超出屏幕。","【修复】补演失败不再只给一句笼统话，会直接指出哪个字段错了、该填什么。","【修复】一个人物出错不再拖垮整轮，写对的照常推进，出错的单独标出可重跑。","【修复】NPC 正文不再参考玩家正文，只用判定阶段提炼出的事实。","【修复】NPC 正文的楼层编号改为显示真实楼层序号，回退后同步退回。","【修复】NPC 正文每段单独成块，段与段之间留出间距。","【修复】NPC 正文会标出最新那一段，不会把旧内容当成新的。","【修复】重 roll 时指令没改就沿用上一轮指导，改了才问要不要重推。","【修复】一层只留一份生效记录，旧记录收起为一行，仍可展开查看。","【修复】中止按正常操作处理，只提示已中止，不再锁死本回合。","【修复】原著人物故事按回合分开，默认停在最新回合。","【修复】人物故事的时间接上回合继续写，空档期一并补上。","【修复】人物故事按出场分段，没戏份的日子合并为空白期。","【修复】跨回合事件只覆盖最后一段，前面已写的原样保留。","【修复】续写把上回合原文和时间区间一起交给模型照抄，不再凭空猜。","【修复】生平摘要合并后保持完整一条，时间地点不再丢失。","【修复】重点演化的局部重跑点下去真的会跑，过程不再卡顿。","【修复】长时间没有进展会如实说卡在哪一步，不再假装在跑。","【修复】重跑失败会留在面板上，红字写清原因，不再一闪就没。","【修复】重跑重点演化只跑自己的事，不再牵连原著补演。","【修复】勾了谁就只重跑谁，不会连带整轮重跑。","【修复】发现新版本直接列出这一版的更新内容，按优化、修复、新增分开。","【修复】游戏中途只轻提示一行，想细看再展开；刚启动时才完整列出。","【修复】更新下载完当场列出本版内容，不用等重启。","【修复】勾什么就跑什么，必须连带的相关项会自动补上并说明原因。","【修复】重跑面板每项都用日常说法写清作用，勾选时自动带出相关项。","【修复】跑完就是跑完，不再把成功的结果报成失败。","【修复】失败项真的排到最前，用红条和深底标出，并单独加分隔标题。","【修复】重跑面板底部三个按钮并排一行，智能重跑描金边更醒目。","【修复】只有真正落地才算完成，没落地会说明卡在哪一步。","【修复】勾阶段就按阶段跑，不再误判成没有对应人物。","【修复】重跑出错直接说清真实原因，不再被英文报错盖住。","【修复】账本自动补跑不再被「对不上人物」拦住。","【修复】变量思维只显示一句「进行中」，结果出来直接替换。","【修复】重跑只用本回合的资料，旧楼层不再保留，也不再给选楼层下拉框。","【修复】删掉重跑面板上方多余的分类切换，左侧阶段右侧目标本身就是分类。","【修复】加了「显示全部」，看完某个阶段能回到完整列表，左侧对应项会高亮。","【修复】阶段勾上之后可以取消，只有必须连带的相关项才会自动勾上。","【修复】账本和面板的「智能重跑」统一成同一套做法。","【修复】没有需要补的项目会明说，不再弹红字当成故障。","【修复】启动时一次就接上调试记录，不再反复重试并报「函数未找到」。"]},{"version":"1.0.5","date":"2026-11-01","items":["【修复】原著补演的边界判定说明文字被挤成每行一个字的竖条、撑高整块面板并推走后面内容；现已正常换行。","【修复】重roll正文后原著补演下面的内容整段消失；现在会标注「本轮已被重roll覆盖」并说明覆盖了几条，原记录仍保留可查。"]},{"version":"1.0.4","date":"2026-11-01","items":["【修复】补演正文把韩立的 NPC 视角写成了玩家，人称错乱；已彻底移除补演阶段混入的玩家变量与快照信息","【修复】一个小道具没匹配上就判整轮失败，还要手动点继续补演；现在不再拦","【修复】局部重跑被「合批包含未选人物」整轮中止；现在能安全拆分的会拆开、只重跑勾选的那几个","【修复】PC 端双击不再缩放，只有 Ctrl+滚轮可以；缩放复位按钮也不容易再被误触","【优化】两个阶段的资料采集全面梳理：必要的保留、作用不大的默认关闭、完全没用的直接删除。默认关闭不等于移除，随时可以开回来","【修复】补演阶段不再注入玩家的变量和快照，玩家与 NPC 的变量交互由重点演化接管","【优化】删掉「在场人物」、灵兽不再显示为「我的」、人物档案加回玩家、补演阶段去掉小地图、地图默认开启","【删除】「随身物品与装备」在两个阶段都移除，快照里已经包含","【优化】资料分区与提示词：每份资料都写清是什么、有什么用、该怎么用；设定集检索优先调用凡人卡自身占位符","【修复】世界信息共享、个人信息独享，按人拆开资料，不再被迫把共享背景调到 50 万字","【修复】检索阶段就分好类：人物设定按 NPC 独享，非人物设定先放共享","【重做】设置面板排版：结构错位、尺寸死板、排版冲突全部重做；资料来源按原著指导、原著补演分上下两栏独立设置","【修复】补演报错不再是一句空话，分别说明是引用不在名单、重复、枚举写错、还是理由留空；理由留空不再判失败","【修复】「无推进」等同义写法会自动识别纠正，不会因为一个词的写法把整轮卡死；真正编错的仍然拦","【修复】重试按钮不再被「这条记录属于其他楼层」永久锁死，只要那次楼层还在存档里就放行","【修复】「每批最多处理几条」以前是摆设，现在真正生效，和单批输入输出上限组成两道闸，超容量自动减人","【修复】补演请求数异常增多，恢复按人数合批","【修复】老存档单批输入容量从 12 万自动升到 50 万，不覆盖玩家自己填过的数字","【修复】设置项排查，补齐后端在用但界面上没有的开关；清理掉填了也不生效的冗余输入框"]},{"version":"1.0.3","date":"2026-11-01","items":["【修复】资料太多时整轮补演报错中止；现在单批输入默认 50 万字（上限 80 万），背景放不下会自动精简，不会整轮失败。","【修复】设置里好几个开关改了没反应：设定集检索开关在原著指导阶段仍然照旧检索、换模型后仍提示「还没有选择模型」、API 报错只显示英文 network error。","【修复】设置页长数字显示不全（500000 只显示 5000）、下方内容看不到、折叠区默认收起找不到。「单批容量」相关的六项设置也归到同一处。","【修复】已经更新到最新版，更新日志里却还是上一版的说明、看不到本次改了什么；现在打开就显示当前版本这一版。","【优化】原著补演未跑完时的提示改成实话：继续推进后那一轮就补不回来了，想补要先点「继续本轮」跑完。仍然只是提醒，不拦你推进。","【优化】核心角色篇幅默认值从 1200 降到 800，节省篇幅也够用；补演未完成标记不会再因为残留把回合卡死。"]},{"version":"1.0.2","date":"2026-11-01","items":["【修复】开局填的性格不生效，提示词里始终是「待定」。","【修复】「可复用资料楼层」显示成乱码编号，现改为真实楼层。","【修复】更新失败问题：已是最新版时看不到更新日志、点更新瞬间弹回、部分网络环境提示「无法连接网络」。","【优化】更新日志永久保留并支持左右翻版，打开即显示最新一版；界面改为青玉楷体的修仙风格。","【优化】挂机期间自动巡检新版本，不必重启游戏。"]},{"version":"1.0.1","date":"2026-11-01","items":["原著进度会按时间正常推进：正文时间到了年表节点，进度指针不再一直显示「原著暂未启动」。即使你没有主动参与，原著也会当作背景故事照常发生。","设定集检索改成按阶段开关：原著指导阶段默认关闭（这个阶段重点是剧情，不需要详细设定支撑），原著补演阶段默认开启。两个开关都在「重排设置」里。","左侧人物信息栏的属性弹窗不再飞出屏幕，会自动避开边缘并显示在你点击的位置旁边；内容太长时弹窗内部可滚动。","进度指针的节点详情，点 × 只关这一个详情弹窗，不会再把整个原著补演界面一起关掉，可以接着点别的节点查看。","版本更新页面现在会显示每个版本改了什么，更新完能直接看到这版的内容。"]}];
 </script>
 
 <script>
@@ -8831,7 +8831,7 @@ var FR_CHAT_REQUEST_CORE = (function () {
 
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>lucklyjkop（禁止二改二创面板）</title>
-    <meta name="fr-build-id" content="FRI-8140be97aecf" />
+    <meta name="fr-build-id" content="FRI-1a49ae9442b4" />
     <script>
       (function () {
         try {
@@ -41947,24 +41947,26 @@ function frApiRoutes(key, slot) {
 }
 
 async function frRunApiRoutes(key, slot, fallback, attempt, signal, canRetry) {
-  const routes=frApiRoutes(key,slot);
+  let routes=frApiRoutes(key,slot);
   if(routes===null||routes===undefined)return attempt(fallback);
-  let switchStatus;
-  try {
-    return await CE_CORE['api-library'].runApiChain(routes,attempt,signal,route=>{
-      switchStatus?.remove();
-      if(typeof showDanmaku==='function'){
-        const name=String(route.name||'').replace(/[<>&]/g,char=>({'<':'&lt;','>':'&gt;','&':'&amp;'})[char]);
-        switchStatus=showDanmaku('已切换备用接口 · '+name,'status');
-        if(switchStatus){
-          if(switchStatus.style)switchStatus.style.pointerEvents='none';
-          switchStatus.removeAttribute?.('title');
-        }
-      }
-    },canRetry);
-  } finally {
+  if(typeof frAiPrioritizeRoutes==='function')routes=frAiPrioritizeRoutes(routes);
+  let switchStatus,switchStatusTimer;
+  return CE_CORE['api-library'].runApiChain(routes,(route,index)=>attempt(route,index,index<routes.length-1),signal,route=>{
+    clearTimeout(switchStatusTimer);
     switchStatus?.remove();
-  }
+    if(typeof showDanmaku==='function'){
+      const name=String(route.name||'').replace(/[<>&]/g,char=>({'<':'&lt;','>':'&gt;','&':'&amp;'})[char]);
+      switchStatus=showDanmaku('已切换备用接口 · '+name,'status');
+      if(switchStatus){
+        if(switchStatus.style)switchStatus.style.pointerEvents='none';
+        switchStatus.removeAttribute?.('title');
+        switchStatusTimer=setTimeout(()=>{
+          switchStatus.remove();
+          switchStatus=null;
+        },2000);
+      }
+    }
+  },canRetry);
 }
 
 function frActiveApiRoute(key,slot,fallback) {
@@ -41981,15 +41983,15 @@ function frTheaterApiRoute() {
 }
 
 function frFeatureChat(key, slot, apiUrl, apiKey, apiModel, prompt, signal, options) {
-  return frRunApiRoutes(key,slot,{apiUrl,apiKey,apiModel},route=>
-    genericApiCall(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,{...options,route,enforceTimeout:true}),signal);
+  return frRunApiRoutes(key,slot,{apiUrl,apiKey,apiModel},(route,index,hasNextRoute)=>
+    genericApiCall(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,{...options,route,enforceTimeout:true,hasNextRoute}),signal);
 }
 
 function frFeatureStream(key, slot, apiUrl, apiKey, apiModel, prompt, signal, useGeminiBuild, target) {
-  return frRunApiRoutes(key,slot,{apiUrl,apiKey,apiModel},route=>
+  return frRunApiRoutes(key,slot,{apiUrl,apiKey,apiModel},(route,index,hasNextRoute)=>
     route.requestProfile?.stream===false?
-      genericApiCall(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,{route,enforceTimeout:true}):
-      genericApiCallStream(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,useGeminiBuild,target,route),signal,
+      genericApiCall(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,{route,enforceTimeout:true,hasNextRoute}):
+      genericApiCallStream(route.apiUrl,route.apiKey,route.apiModel,prompt,signal,useGeminiBuild,target,route,hasNextRoute),signal,
     error=>!error?.partialOutput);
 }
 
@@ -58865,12 +58867,13 @@ function ceApplyApiPriorityConfigs(config, list) {
 // 返回按优先级过滤后的 API 配置数组（首个为主调用）
 function getApiConfigsToTry(config) {
   const routes = typeof frApiRoutes === 'function' && frApiRoutes('CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1');
-  if(routes)return routes;
+  if(routes)return typeof frAiPrioritizeRoutes==='function'?frAiPrioritizeRoutes(routes):routes;
   try {
     const pack = (typeof CE_CORE === 'object' && CE_CORE) ? CE_CORE['api-library'] : null;
     if (pack && pack.resolveConsumerConfig) config = pack.resolveConsumerConfig('CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1', config);
   } catch (_) {}
-  return ceNormalizeApiPriorityConfigs(config).filter(item => item.apiUrl && item.apiKey && item.apiModel);
+  const legacy=ceNormalizeApiPriorityConfigs(config).filter(item => item.apiUrl && item.apiKey && item.apiModel);
+  return typeof frAiPrioritizeRoutes==='function'?frAiPrioritizeRoutes(legacy):legacy;
 }
 
 function ceHasOriginalTimelineDedicatedApiConfig(config) {
@@ -62044,7 +62047,11 @@ async function ceRequestOffscreenTagAuditBatch(options = {}) {
   let lastError = null;
   let lastResponse = '';
   let lastThinking = '';
+  const routes=options.routes??(typeof getApiConfigsToTry==='function'?getApiConfigsToTry(config):[config]);
+  for(const [index,route] of routes.entries()) {
+  const hasNextRoute=index<routes.length-1;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    options.signal?.throwIfAborted();
     const controller = new AbortController();
     if(options.signal){frCanonTraceLinkSignal(options.signal,controller.signal,{stageKey:'tags',subject:batchCandidates.map(x=>x.name||x.id).join('、'),targetId:batchCandidates.length===1?String(batchCandidates[0].id||''):'',targetIds:batchCandidates.map(x=>String(x.id||'')).filter(Boolean)});if(options.signal.aborted)controller.abort();else options.signal.addEventListener('abort',()=>controller.abort(),{once:true});}
     controller._isTimeoutAbort = false;
@@ -62053,24 +62060,26 @@ async function ceRequestOffscreenTagAuditBatch(options = {}) {
       controller.abort();
     }, timeoutMs);
 
+    let modelResponded=false;
     try {
       const response = await apiCaller(
-        config.apiUrl,
-        config.apiKey,
-        config.apiModel,
+        route.apiUrl,
+        route.apiKey,
+        route.apiModel,
         messages,
-        controller.signal
+        controller.signal,{route,hasNextRoute}
       );
       clearTimeout(timeoutId);
 
       lastResponse = typeof response === 'string' ? response : String(response || '');
       const hasThinkingTag = /<thinking>[\s\S]*?<\/thinking>|<think>[\s\S]*?<\/think>/i.test(lastResponse);
       lastThinking = hasThinkingTag ? (ceExtractThinkingContent(lastResponse) || '') : '';
+      ceThrowIfApiFailureText(lastResponse, '标签校准');
+      modelResponded=true;
       if (!lastResponse.trim()) {
         throw new Error('离场标签校准响应为空');
       }
 
-      ceThrowIfApiFailureText(lastResponse, '标签校准');
       const parsed = ceExtractOffscreenTagAuditJson(lastResponse);
       if (!parsed) {
         throw new Error('离场标签校准响应解析失败');
@@ -62086,15 +62095,17 @@ async function ceRequestOffscreenTagAuditBatch(options = {}) {
       };
     } catch (e) {
       clearTimeout(timeoutId);
+      if(options.signal?.aborted||e?.name==='AbortError'&&!controller._isTimeoutAbort)throw e;
       const wrappedError = e instanceof Error ? e : new Error(String(e));
       wrappedError.ceRawResponse = lastResponse || wrappedError.ceRawResponse || '';
       wrappedError.ceThinking = lastThinking || wrappedError.ceThinking || '';
       wrappedError.ceRequestPrompt = requestPrompt;
       wrappedError.ceRequestPayload = requestPayload;
       lastError = wrappedError;
-      const canRetry = attempt < maxRetries;
+      const canRetry = (modelResponded||!hasNextRoute)&&attempt<maxRetries;
       if (!canRetry) break;
     }
+  }
   }
 
   throw lastError || new Error('离场标签校准失败');
@@ -62540,7 +62551,9 @@ async function ceEnsureOffscreenRosterModelTagStates(options = {}) {
   const apiCaller = (typeof genericApiCall === 'function' && genericApiCall.__ceOriginal)
     ? genericApiCall.__ceOriginal
     : genericApiCall;
-  const canUseModel = typeof apiCaller === 'function' && !!(config.apiUrl && config.apiModel);
+  const tagRoutes=typeof getApiConfigsToTry==='function'?getApiConfigsToTry(config):
+    config.apiUrl&&config.apiModel?[config]:[];
+  const canUseModel = typeof apiCaller === 'function' && tagRoutes.length>0;
   calibrationResult.canUseModel = canUseModel;
 
   const applyFallbackState = (candidate, reasonText) => {
@@ -62613,7 +62626,7 @@ async function ceEnsureOffscreenRosterModelTagStates(options = {}) {
         storyText,
         userInput,
         signal: options.signal,
-        config
+        config,routes:tagRoutes
       });
       batchReport.requestPrompt = String(batchResult.requestPrompt || '');
       batchReport.requestPayload = batchResult.requestPayload
@@ -72374,7 +72387,7 @@ async function executeConcurrentRequests({
           replayHistory
         });
         const groupResult = await executeOne(target, apiOverride, groupContext, {
-          disableBatchReplay: true
+          ...batchOptions,disableBatchReplay: true
         });
         const batchLabel = groupPacket.batchLabel || ('第' + (i + 1) + '组');
         const groupDelta = Array.isArray(groupResult && groupResult.delta) ? groupResult.delta : [];
@@ -72525,7 +72538,7 @@ async function executeConcurrentRequests({
         _eoApiKey,
         _eoApiModel,
         messages,
-        controller.signal,{route:apiOverride,purpose:dsWire?'json':undefined}
+        controller.signal,{route:apiOverride,purpose:dsWire?'json':undefined,hasNextRoute:batchOptions?.hasNextRoute}
       );
 
       if(timeoutId && typeof timeoutId.cancel==='function')timeoutId.cancel();else clearTimeout(timeoutId);
@@ -72682,7 +72695,7 @@ async function executeConcurrentRequests({
       // 检查是否需要重试
       // 超时abort可以重试，用户手动abort不重试
       const isTimeoutAbort = error.name === 'AbortError' && controller._isTimeoutAbort;
-      const canRetry = (error.name !== 'AbortError' || isTimeoutAbort) &&
+      const canRetry = !batchOptions?.hasNextRoute && (error.name !== 'AbortError' || isTimeoutAbort) &&
                        (!target.retryCount || target.retryCount < config.retryCount);
       if (canRetry) {
         target.retryCount = (target.retryCount || 0) + 1;
@@ -72700,7 +72713,7 @@ async function executeConcurrentRequests({
     }
   };
 
-  // 带备用API的包装函数：当所有重试耗尽（error返回）时切换备用API
+  // 传输失败后先用下一配置，当前接口的格式修正仍由 executeOne 处理。
   const executeOneWithFallback = async (target) => {
     if(signal?.aborted)return {target,success:false,error:'cancelled'};
     const apiConfigs = getApiConfigsToTry(config);
@@ -72711,7 +72724,7 @@ async function executeConcurrentRequests({
       target.originalTimelineFillRetryCount = 0;
       let result;
       try {
-        result = await executeOne(target, apiConfigs[ci]);
+        result = await executeOne(target, apiConfigs[ci],sharedContext,{hasNextRoute:ci<apiConfigs.length-1});
       } catch (err) {
         // AbortError（用户取消），不切换备用
         if (err && err.name === 'AbortError') throw err;
@@ -86811,6 +86824,7 @@ async function requestEntryDecision(options = {}) {
     const _entryApiConfigs = hasPrecomputedResponse ? getApiConfigsToTry(config).slice(0, 1) : getApiConfigsToTry(config);
     for (let _eci = 0; _eci < _entryApiConfigs.length; _eci++) {
       const _eCurCfg = _entryApiConfigs[_eci];
+      const hasNextRoute=_eci<_entryApiConfigs.length-1;
       responseText = null;
       lastError = null;
       parseResult = null;
@@ -86841,7 +86855,7 @@ async function requestEntryDecision(options = {}) {
               _eCurCfg.apiKey,
               _eCurCfg.apiModel,
               messages,
-              controller.signal,{route:_eCurCfg}
+              controller.signal,{route:_eCurCfg,hasNextRoute}
             );
             clearTimeout(timeoutId);
           } catch (error) {
@@ -86856,7 +86870,8 @@ async function requestEntryDecision(options = {}) {
             // 判断是否可重试（超时或网络错误）
             const isTimeoutAbort = error.name === 'AbortError' && controller._isTimeoutAbort;
             const isNetworkError = error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch');
-            const canRetry = (isTimeoutAbort || isNetworkError) && attempt < maxRetries;
+            if(isTimeoutAbort)error._ceTimeoutAbort=true;
+            const canRetry = !hasNextRoute && (isTimeoutAbort || isNetworkError) && attempt < maxRetries;
 
             if (canRetry) {
               const reason = isTimeoutAbort ? '超时' : '网络错误';
@@ -86934,7 +86949,7 @@ async function requestEntryDecision(options = {}) {
           throw lastError;
         }
       } catch (err) {
-        if (err.name === 'AbortError') throw err; // 用户取消，不切换备用
+        if (entryDecisionSignal?.aborted || err.name === 'AbortError'&&!err._ceTimeoutAbort) throw err;
         if (_eci < _entryApiConfigs.length - 1) {
           if (typeof showDanmaku === 'function') showDanmaku(`登场判断：API ${_eci + 1} 失败，切换备用 ${_eci + 2}`, 'warning');
           continue;
@@ -87410,11 +87425,11 @@ function getItemManagementCharacterRow(charId) {
   return null;
 }
 
-async function prepareItemManagementFallbackRows(operations) {
+async function prepareItemManagementFallbackRows(operations, loadoutIds=[]) {
   const frStrict = typeof frInCanonCommit === 'function' && frInCanonCommit();
   if (frStrict) frAssertCanonCommit();
   itemManagementFallbackRows = new Map();
-  if (!Array.isArray(operations) || operations.length === 0) return;
+  if ((!Array.isArray(operations) || operations.length === 0) && !loadoutIds.length) return;
 
   // 先把模型可能编造的假 id 归一化成真实 id（玩家 2026-10-30 韩立误报）。
   // 归一化就地改回 operations，后续所有按 id 取值的地方都跟着受益。
@@ -87444,7 +87459,7 @@ async function prepareItemManagementFallbackRows(operations) {
     if (op.owner && op.owner !== 'B1') ids.add(String(op.owner));
   });
 
-  for (const id of ids) {
+  for (const id of new Set([...ids,...loadoutIds])) {
     if (currentState && currentState['0'] && currentState['0'][id]) continue;
     /* ★★ 2026-11-01 玩家截图报错：「补演提交：离场物品角色档案不存在：C_HanLi」
      *
@@ -87457,15 +87472,15 @@ async function prepareItemManagementFallbackRows(operations) {
       continue;
     }
     try {
-      if (typeof getFullBiographyData !== 'function') { if (frStrict) throw new Error('补演提交：离场档案读取函数不可用'); continue; }
+      if (typeof getFullBiographyData !== 'function') { if (frStrict&&ids.has(id)) throw new Error('补演提交：离场档案读取函数不可用'); continue; }
       const data = await getFullBiographyData(id);
-      if (frStrict) { frAssertCanonCommit(); if (!data || typeof data !== 'object') throw new Error('补演提交：离场物品角色档案不存在：' + id); }
+      if (frStrict) { frAssertCanonCommit(); if (ids.has(id)&&(!data || typeof data !== 'object')) throw new Error('补演提交：离场物品角色档案不存在：' + id); }
       if (data && typeof data === 'object') {
         itemManagementFallbackRows.set(id, data);
         console.log('[物品管理] 已加载离场角色档案用于操作:', id);
       }
     } catch (e) {
-      if (frStrict) throw e;
+      if (frStrict&&ids.has(id)) throw e;
       console.warn('[物品管理] 读取离场角色档案失败:', id, e);
     }
   }
@@ -88335,7 +88350,10 @@ async function buildItemManagementPrompt(context) {
   }
 
   prompt += '\n\n【本轮物品核对名单】\n' + scopeTargets.map(target => target.id + ' ' + (target.name || '')).join('、')
-    + '\n逐个核对这些人物的储物袋、装备和功法物；第一层完整落实已确认散文（含已持有与修习，不限新获得）；第二层按原预设初始化或保守补齐基础配置，适配当前身份与境界。不得另造剧情，不恢复已消耗或失去物品；当前完整库存保留。范围内离场人物与在场人物使用相同的原物品指令，动态数值仍依原规则和实际变化更新。只输出原协议，不另造变量或输出块。';
+    + '\n逐个核对这些人物的储物袋、装备和功法物，实际得失、消耗和装备变化按本轮事实处理。范围内离场和在场人物使用相同的物品指令。保留原有库存，已消耗、遗失或转交的物品不得补发。只输出原协议。';
+  const firstNpcNames=scopeTargets.filter(target=>target.type==='npc'&&target.justCreated===true).map(target=>target.id+' '+(target.name||''));
+  if(firstNpcNames.length)
+    prompt += '\n【首次建档，可配置基础装备与私物】'+firstNpcNames.join('、')+'。'+FrEquipmentRuntime.core().NPC_ATTIRE_RULE;
   if (context.canonCompletionContext && typeof frCanonCompletionTools === 'function') prompt += frCanonCompletionTools().prompt(context.canonCompletionContext,'items');
   prompt = ceAppendNativeEvolutionStageContract(prompt, preset, 'item_management', undefined, {values, sharedContext: context});
   console.log('[物品管理] Prompt 构建完成，长度:', prompt.length);
@@ -90587,7 +90605,7 @@ async function ceRequestOriginalTimelineProposalWithPrompt(options = {}) {
     retryCount: Number.isFinite(opts.maxApiRetry) ? opts.maxApiRetry : (opts.config && opts.config.retryCount),
     parseRetryCount: Number.isFinite(opts.maxParseRetry) ? opts.maxParseRetry : (opts.config && opts.config.parseRetryCount)
   });
-  const apiConfigs = getApiConfigsToTry(requestConfig);
+  const apiConfigs = ceGetOriginalTimelineApiConfigsToTry(requestConfig);
   if (!apiConfigs.length) {
     return {
       skipped: true,
@@ -90607,6 +90625,7 @@ async function ceRequestOriginalTimelineProposalWithPrompt(options = {}) {
 
   for (let apiIndex = 0; apiIndex < apiConfigs.length; apiIndex++) {
     const currentApi = apiConfigs[apiIndex];
+    const hasNextRoute=apiIndex<apiConfigs.length-1;
     let apiRetryCount = 0;
     let parseRetryCount = 0;
 
@@ -90636,7 +90655,7 @@ async function ceRequestOriginalTimelineProposalWithPrompt(options = {}) {
             currentApi.apiKey,
             currentApi.apiModel,
             messages,
-            requestAbort.signal,{route:currentApi}
+            requestAbort.signal,{route:currentApi,hasNextRoute}
           );
         } catch (apiError) {
           if (apiError && typeof apiError === 'object' && requestAbort.isTimeoutAbort(apiError)) {
@@ -90687,7 +90706,7 @@ async function ceRequestOriginalTimelineProposalWithPrompt(options = {}) {
             prompt
           };
         }
-        if (apiRetryCount < maxApiRetry) {
+        if (!hasNextRoute && apiRetryCount < maxApiRetry) {
           apiRetryCount++;
           const retryMsg = `[原著年表] ${phaseLabel}API请求失败，重试 (${apiRetryCount}/${maxApiRetry})${isTimeoutAbort ? ' [超时重试]' : ''}`;
           console.warn(retryMsg, e);
@@ -91764,6 +91783,7 @@ async function requestMiscEvolutionPhase(options = {}) {
     let parseRetryCount = 0;
     while (true) {
       const _mCurCfg = _miscApiConfigs[_miscApiIdx];
+      const hasNextRoute=_miscApiIdx<_miscApiConfigs.length-1;
       try {
         const shouldUseThinkingPrefill = !dsWire && !!(
           sharedContext
@@ -91794,7 +91814,7 @@ async function requestMiscEvolutionPhase(options = {}) {
             _mCurCfg.apiModel,
             messages,
             requestAbort.signal,
-            {route:_mCurCfg,purpose:dsWire?'json':undefined,enforceTimeout:true,onRequestProgress:function(row){if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(miscProgress,row);}}
+            {route:_mCurCfg,purpose:dsWire?'json':undefined,enforceTimeout:true,hasNextRoute,onRequestProgress:function(row){if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(miscProgress,row);}}
           ),miscInterrupted]);
           requestAbort.signal.throwIfAborted();
         } catch (apiError) {
@@ -91876,7 +91896,7 @@ async function requestMiscEvolutionPhase(options = {}) {
         if (e && e.name === 'AbortError' && !isTimeoutAbort) {
           return { skipped: true, reason: 'cancelled', error: e.message || 'cancelled' };
         }
-        if (apiRetryCount < maxApiRetry) {
+        if (!hasNextRoute && apiRetryCount < maxApiRetry) {
           apiRetryCount++;
           const retryMsg = `[杂项演化] API请求失败，重试 (${apiRetryCount}/${maxApiRetry})${isTimeoutAbort ? ' [超时重试]' : ''}`;
           if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(miscProgress,{state:'retry',kind:'request',attempt:apiRetryCount,max:maxApiRetry});
@@ -93312,11 +93332,11 @@ async function ceExecuteItemOperationsWithUi(operations, options = {}) {
   if (frStrict) frAssertCanonCommit();
   const opts = options || {};
   const safeOperations = Array.isArray(operations) ? operations : [];
-  if (safeOperations.length === 0) {
+  if (safeOperations.length === 0 && !opts.npcLoadoutIds?.length) {
     return ceBuildEmptyItemExecutionResult();
   }
 
-  const executedOps = await executeItemOperations(safeOperations);
+  const executedOps = await executeItemOperations(safeOperations, {npcLoadoutIds:opts.npcLoadoutIds});
   if (frStrict) frAssertCanonCommit();
   const successCount = executedOps.filter(item => item && item.success).length;
   const failCount = executedOps.filter(item => !item || !item.success).length;
@@ -96722,11 +96742,12 @@ function reorderItemOperations(operations) {
  * @param {Array} operations - 操作数组
  * @returns {Array} 执行结果数组
  */
-async function executeItemOperations(operations) {
+async function executeItemOperations(operations, {npcLoadoutIds=[]}={}) {
   const frStrict = typeof frInCanonCommit === 'function' && frInCanonCommit();
   if (frStrict) frAssertCanonCommit();
   const results = [];
   const sortedOperations = reorderItemOperations(operations);
+  const scopedNpcIds=npcLoadoutIds.filter(id=>/^C\d+$/u.test(id));
   const normalizeTouchedContainers = (opLike) => {
     const touchedIds = [opLike?.from, opLike?.to, opLike?.owner]
       .map(id => String(id || '').trim())
@@ -96748,7 +96769,7 @@ async function executeItemOperations(operations) {
     }
   }
 
-  await prepareItemManagementFallbackRows(sortedOperations);
+  await prepareItemManagementFallbackRows(sortedOperations,scopedNpcIds);
   if (frStrict) frAssertCanonCommit();
   sortedOperations.forEach(op => normalizeTouchedContainers(op));
   const stock=typeof CE_CORE!=='undefined' && CE_CORE['inventory-stock'];
@@ -96830,10 +96851,11 @@ async function executeItemOperations(operations) {
     if (op.to) affectedCharIds.add(op.to);
     if (op.owner) affectedCharIds.add(op.owner);
   }
-  for(const cid of affectedCharIds){
+  const loadoutIds=new Set([...affectedCharIds,...scopedNpcIds]);
+  for(const cid of loadoutIds){
     const row=getItemManagementCharacterRow(cid);
     if(!row)continue;
-    const loadout=FrEquipmentRuntime.consolidate(row,currentState);
+    const loadout=affectedCharIds.has(cid)?FrEquipmentRuntime.consolidate(row,currentState):FrEquipmentRuntime.project(row);
     if(cid==='B1')continue;
     const bag=ceParseItemManagementNested(loadout.remarks.inventory,[]);
     const blocked=new Set(sortedOperations.filter(op=>op.owner===cid&&op.type==='unequipItem').map(op=>op.itemId));
@@ -96841,10 +96863,12 @@ async function executeItemOperations(operations) {
       !blocked.has(getManagedItemId(item))&&(Number(item?.['5']??item?.quantity)===1||
         FrEquipmentRuntime.core().isTreasureSet(item))),loadout.equipment,row)||[]){
       const settled=executeEquipItem({owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)});
-      if(!frStrict&&settled.success&&!settled.skipped)
-        results.push({...settled,type:'equipItem',operation:{type:'equipItem',owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)},reason:'已持有的可用装备中自动择优'});
+      if(settled.success&&!settled.skipped){
+        affectedCharIds.add(cid);
+        if(!frStrict)results.push({...settled,type:'equipItem',operation:{type:'equipItem',owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)},reason:'已持有的可用装备中自动择优'});
+      }
     }
-    if(!stock)continue;
+    if(!stock||!affectedCharIds.has(cid))continue;
     const remarks=ceReadItemManagementRemarks(row);
     const inventory=ceParseItemManagementNested(remarks.inventory,[]);
     const protectedNames=new Set(inventory.filter(item=>sortedOperations.some(op=>
@@ -96872,6 +96896,7 @@ async function executeItemOperations(operations) {
 
   // 严格提交由外层在所有阶段完成后统一保存。
   if (frStrict) { frAssertCanonCommit(); return results; }
+  if(!results.length)return results;
   // 保存状态
   try {
     if (typeof _internalSaveCurrentState === 'function') {
@@ -97114,6 +97139,7 @@ async function requestItemManagementPhase(options = {}) {
     let _itemApiErr = null;
     for (let _ici = 0; !hasPrecomputedResponse && _ici < _itemApiConfigs.length; _ici++) {
       const _iCurCfg = _itemApiConfigs[_ici];
+      const hasNextRoute=_ici<_itemApiConfigs.length-1;
       let _apiRetryCount = 0;
       let _parseRetryCount = 0;
 
@@ -97126,7 +97152,7 @@ async function requestItemManagementPhase(options = {}) {
           let response;
           try{
             response = await Promise.race([genericApiCall(_iCurCfg.apiUrl,_iCurCfg.apiKey,_iCurCfg.apiModel,messages,requestAbort.signal,
-              {route:_iCurCfg,purpose:dsWire?'json':undefined,enforceTimeout:true,onRequestProgress:function(row){if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(itemProgress,row);}}),itemInterrupted]);
+              {route:_iCurCfg,purpose:dsWire?'json':undefined,enforceTimeout:true,hasNextRoute,onRequestProgress:function(row){if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(itemProgress,row);}}),itemInterrupted]);
             requestAbort.signal.throwIfAborted();
           }catch(apiError){if(apiError&&requestAbort.isTimeoutAbort(apiError))apiError._ceTimeoutAbort=true;throw apiError;}
           finally{requestAbort.signal.removeEventListener('abort',rejectItemAbort);requestAbort.cleanup();}
@@ -97160,7 +97186,7 @@ async function requestItemManagementPhase(options = {}) {
         } catch (e) {
           if (e && e.name === 'AbortError' && !e._ceTimeoutAbort) throw e; // 用户取消，不切换备用；超时仍按原配置重试。
           _itemApiErr = e;
-          if (_apiRetryCount < maxApiRetry) {
+          if (!hasNextRoute && _apiRetryCount < maxApiRetry) {
             _apiRetryCount++;
             if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(itemProgress,{state:'retry',kind:'request',attempt:_apiRetryCount,max:maxApiRetry});
             const retryMsg = `[物品管理] API请求失败，重试 (${_apiRetryCount}/${maxApiRetry})`;
@@ -97189,29 +97215,19 @@ async function requestItemManagementPhase(options = {}) {
       return { proposalOnly: true, skipped: false, operations: parsed.operations || [],
         noOperations: !parsed.operations || parsed.operations.length === 0, thinking: parsed.thinking, completion: parsed.completion || {} };
     }
-    if (parsed.noOperations || parsed.operations.length === 0) {
-      console.log('[物品管理] 本轮无物品操作');
-      console.log('[物品管理] thinking:', parsed.thinking);
-      const finalResult = Object.assign(ceBuildEmptyItemExecutionResult(), {
-        executedOps: [],
-        thinking: parsed.thinking,
-        noOperations: true,
-        skipped: false,
-        successCount: 0,
-        failCount: 0,
-        error: null
-      });
-      window.lastItemManagementResult = finalResult;
-      return finalResult;
-    }
+    const loadoutTargets = options.canonTurnPlan&&typeof frCanonOrdinaryTargets==='function'
+      ? frCanonOrdinaryTargets(evolutionTargets,options.canonTurnPlan) : (evolutionTargets||[]);
+    const npcLoadoutIds=loadoutTargets.filter(target=>target.type==='npc').map(target=>target.id);
+    const operations=Array.isArray(parsed.operations)?parsed.operations:[];
 
-    console.log('[物品管理] 解析到', parsed.operations.length, '个操作');
+    console.log('[物品管理] 解析到', operations.length, '个操作');
     console.log('[物品管理] thinking:', parsed.thinking);
 
     // 执行操作（复用统一物品落地链路）
-    const itemExecutionResult = await ceExecuteItemOperationsWithUi(parsed.operations, {
+    const itemExecutionResult = await ceExecuteItemOperationsWithUi(operations, {
       syncState: true,
-      renderInventory: true
+      renderInventory: true,
+      npcLoadoutIds
     });
 
     const successCount = itemExecutionResult.successCount;
@@ -97364,12 +97380,6 @@ async function requestMergedEvolutionPhase(options = {}) {
   const apiConfigs = getApiConfigsToTry(config);
   if (!apiConfigs.length) throw new Error('合并演化接口未配置');
   const mergedStage=options.canonVariables?'canon-merged':'merged';
-  const work = [
-    options.enabledPhases?.entry !== false && '核对登退场与事迹',
-    options.enabledPhases?.items !== false && '结算物品变化',
-    options.enabledPhases?.misc !== false && '更新世界与任务',
-    !options.sharedOnly && '更新人物变量'
-  ].filter(Boolean).join('、');
   const mergedPhases=options.characterBatch?['characters']:options.sharedOnly
     ? ['entry','items','misc'].filter(phase=>options.enabledPhases?.[phase]!==false):null;
   if (typeof frCanonTraceTag === 'function') frCanonTraceTag(signal, mergedStage);
@@ -97399,7 +97409,8 @@ async function requestMergedEvolutionPhase(options = {}) {
   let parseError = null;
   let parsePack = null;
   let commandRepair = null;
-  for (const api of apiConfigs) {
+  for (const [routeIndex,api] of apiConfigs.entries()) {
+    const hasNextRoute=routeIndex<apiConfigs.length-1;
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       ceThrowIfConcurrentEvolutionAborted(signal);
       const bridge = ceCreateRequestAbortBridge(Math.max(45000, Number(config.requestTimeout) || 120000), signal || null);
@@ -97411,12 +97422,12 @@ async function requestMergedEvolutionPhase(options = {}) {
           parseError && typeof FrMergedEvolution.describeFailure === 'function'
           ? prompt + '\n\n【上一次输出不合格，请按此修正后重新完整输出】\n' + String(parseError.message||'')+'；'+FrMergedEvolution.describeFailure(parseError) + '\n注意：commands 每一项必须是单条原生函数调用，参数必须是标准 JSON —— 双引号、无尾逗号、字符串内换行要写成 \\n。请重新输出完整的 think / entry / commands'+(options.eventSteps?' / completion / eventCommands 五个键。':options.canonVariables?' / completion 四个键。':' 三个键。')
           : prompt;
-        options.onProgress?.(parseError ? work + ' · 修正返回格式' : work);
-        response = await Promise.race([genericApiCall(api.apiUrl, api.apiKey, api.apiModel, [{ role: 'user', content: attemptPrompt }], bridge.signal, { route:api,purpose:'json',enforceTimeout: true, requireCompleteText: options.canonVariables === true||prebuiltCompanion||options.sharedOnly===true||options.characterBatch===true }), interrupted]);
+        options.onProgress?.(parseError ? '修正格式' : '正在结算');
+        response = await Promise.race([genericApiCall(api.apiUrl, api.apiKey, api.apiModel, [{ role: 'user', content: attemptPrompt }], bridge.signal, { route:api,purpose:'json',enforceTimeout:true,hasNextRoute,requireCompleteText:options.canonVariables===true||prebuiltCompanion||options.sharedOnly===true||options.characterBatch===true }), interrupted]);
         bridge.signal.throwIfAborted(); ceThrowIfApiFailureText(response, '合并演化'); transportError = null;
         /* 解析也放进重试：坏一条命令不该让整轮归零。 */
         try {
-          options.onProgress?.(work + ' · 核对结果');
+          options.onProgress?.('核对结果');
           if(commandRepair){
             const repaired=FrMergedEvolution.repairCommands(commandRepair.value.commands,commandRepair.issues,response);
             response=JSON.stringify({...commandRepair.value,commands:repaired});
@@ -97460,6 +97471,7 @@ async function requestMergedEvolutionPhase(options = {}) {
         const timedOut = typeof bridge.isTimeoutAbort === 'function' && bridge.isTimeoutAbort(error);
         if (signal?.aborted || (error.name === 'AbortError' && !timedOut)) throw error;
         response = undefined; transportError = error;
+        if(hasNextRoute)break;
       } finally { bridge.signal.removeEventListener('abort', rejectAbort); bridge.cleanup(); }
       if (attempt < retryCount && retryDelay) await new Promise((resolve, reject) => {
         const done = () => { signal?.removeEventListener('abort', stopped); resolve(); };
@@ -110829,6 +110841,52 @@ function ceGetAuthoritativeTimeLocationInfo(stateToSync = currentState) {
   return {...value,timeText:value.timeText||'时间未知',locationText:value.locationText||'未知',fullText:value.fullText||'时间未知/未知'};
 }
 
+function ceFrOpeningStartDate(userInput, state, logs) {
+  if (!Array.isArray(logs) || !logs.some(ceIsOpeningArchiveLog) || logs.some(ceShouldCountAsEffectiveStoryFloor)) return '';
+  const before = wtParseTimelinePointStrict(ceGetAuthoritativeTimeLocationInfo(state).timeText);
+  if (!before?.hasMinute || before.year !== 1 || before.month !== 1 || before.day !== 1 || before.hour !== 8 || before.minute !== 0) return '';
+  const opening = String(userInput || '').match(/^\s*(?:(?:故事|剧情)从|开局(?:时间|日期)?(?:设为|定为|为|是|[:：])?)\s*(\d{1,6}(?:\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\.\d{1,2}\.\d{1,2}))(?:\s*(\d{1,2}[:：]\d{2}))?\s*(?:开始|开局|(?=[，。；,;\n]|$))/u);
+  const point = opening && wtParseTimelinePointStrict(opening[1] + (opening[2] ? ' ' + opening[2].replace('：', ':') : ''));
+  if (!point?.hasDay || point.dayIndex <= before.dayIndex) return '';
+  const [month, day, hour, minute] = [point.month, point.day, point.hasHour ? point.hour : before.hour, point.minute]
+    .map(value => String(value).padStart(2, '0'));
+  return `${wtFormatYearValue(point.year)}年${month}月${day}日 ${hour}:${minute}`;
+}
+
+function ceFrCorrectOpeningStoryDate(storyText, openingStart) {
+  if (!openingStart) return storyText;
+  const target = wtParseTimelinePointStrict(openingStart);
+  const header = frCanonReadAdoptedStoryHeader(storyText);
+  const adopted = header && wtParseTimelinePointStrict(header.time);
+  if (!target?.hasMinute || !adopted || adopted.year !== 1 || adopted.month !== 1 || adopted.day !== 1 || adopted.hour < 8) return storyText;
+  const shiftClock = (clock) => {
+    const point = wtParseTimelinePointStrict(clock.replace('：', ':'));
+    if (!point || point.year !== 1 || point.month !== 1 || point.day !== 1) return clock;
+    const date = new Date(0);
+    date.setUTCFullYear(target.year, target.month - 1, target.day);
+    date.setUTCHours(target.hour + point.hour - 8, target.minute + point.minute, 0, 0);
+    if (!Number.isFinite(date.getTime())) return clock;
+    const [month, day, hour, minute] = [date.getUTCMonth() + 1, date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes()]
+      .map(value => String(value).padStart(2, '0'));
+    return `${wtFormatYearValue(date.getUTCFullYear())}年${month}月${day}日 ${hour}:${minute}`;
+  };
+  const clock = /(\d{1,6}年\s*\d{1,2}月\s*\d{1,2}日\s*\d{1,2}[:：]\d{2})/u;
+  return String(storyText).replace(/<(?:think|thinking)>[\s\S]*?<\/(?:think|thinking)>|<ui_sys>[\s\S]*?<\/ui_sys>|【转场[｜|][^】]*】/gi, part => {
+    if (part.startsWith('【')) return part.replace(clock, shiftClock);
+    if (!/^<ui_sys>/i.test(part)) return part;
+    return part.replace(/<ti>[^<]*<\/ti>/gi, timeTag => timeTag.replace(clock, shiftClock));
+  });
+}
+
+function ceFrOpeningAdoptedStartDate(storyText, openingStart) {
+  if (!openingStart) return '';
+  const target = wtParseTimelinePointStrict(openingStart);
+  const acceptedTime = frCanonReadAdoptedStoryHeader(storyText)?.time;
+  const accepted = wtParseTimelinePointStrict(acceptedTime);
+  if (!target || !accepted || accepted.dayIndex !== target.dayIndex) return '';
+  return accepted.minuteIndex < target.minuteIndex ? acceptedTime : openingStart;
+}
+
 function ceResolveStoryTimeLocationDelta(storyText, stateToSync) {
   const header = frCanonReadAdoptedStoryHeader(storyText);
   if (!header) return null;
@@ -110851,6 +110909,12 @@ function ceResolveStoryTimeLocationDelta(storyText, stateToSync) {
   }
   if (next === before && locationText === previous.locationText && coordinates === previous.coordinates) return null;
   return { command: 'add', id: TIME_LOCATION_ROW_ID, data: { id: TIME_LOCATION_ROW_ID, '0': timeText + '/' + locationText + (coordinates ? ' ' + coordinates : '') } };
+}
+
+function ceFrOpeningStoryDelta(delta, storyText, state) {
+  const clock = ceResolveStoryTimeLocationDelta(storyText, state);
+  const changes = (delta || []).filter(operation => operation?.id !== TIME_LOCATION_ROW_ID);
+  return clock ? [...changes, clock] : changes;
 }
 
 function ceApplyAuthoritativeTimeLocationDisplay(info, targetObject = null) {
@@ -113883,6 +113947,7 @@ var CE_CORE = (function () {
           const msg = String(error && error.message ? error.message : error);
           errors.push(`第${attempt}次：${msg}`);
 
+          if(src.retryThrown===false)return {ok:false,value:lastValue,attempts:attempt,errors,reason:msg};
           const verdict = shouldRetry(error);
           if (!verdict.retry || attempt >= maxTotal) {
             return {
@@ -115167,16 +115232,38 @@ var CE_CORE = (function () {
     function createRequestBudget(options={}) {
       const now=options.now || Date.now,later=options.setTimeout || setTimeout,cancel=options.clearTimeout || clearTimeout;
       let rpm=15,parallel=5,timer=null,coolUntil=0,active=0,groups={};
-      const sent=[],queue=[],activeGroups=new Map();
+      const sent=[],queue=[],activeGroups=new Map(),routeCooldowns=new Map();
       const limit=group=>groups[group] ?? parallel;
       const abortError=()=>Object.assign(new Error('已取消排队请求'),{name:'AbortError'});
       function pump(){
         if(timer!==null){cancel(timer);timer=null;}
         const t=now();while(sent.length && sent[0].at<=t-60000)sent.shift();
+        for(const [route,until] of routeCooldowns)if(until<=t)routeCooldowns.delete(route);
         while(queue.length){
-          const index=queue.findIndex(row=>(activeGroups.get(row.group)||0)<limit(row.group));if(index<0)return;
-          const wait=Math.max(0,coolUntil-t,sent.length>=rpm?sent[sent.length-rpm].at+60000-t:0);
-          if(wait>0){timer=later(pump,wait+1);for(const row of queue)row.wait?.(wait);return;}
+          const sharedWait=Math.max(0,coolUntil-t,sent.length>=rpm?sent[sent.length-rpm].at+60000-t:0);
+          const waitFor=row=>Math.max(sharedWait,(routeCooldowns.get(row.route)||0)-t);
+          let index=-1,shortestWait=Infinity;
+          for(let i=0;i<queue.length;i++){
+            const row=queue[i];
+            const routeWait=(routeCooldowns.get(row.route)||0)-t;
+            if(row.hasNextRoute&&routeWait>0){
+              queue.splice(i--,1);
+              row.signal?.removeEventListener('abort',row.abort);
+              row.reject(Object.assign(new Error('当前接口仍在限流等待'),{status:429,retryAfterMs:routeWait}));
+              continue;
+            }
+            if((activeGroups.get(row.group)||0)>=limit(row.group))continue;
+            const wait=waitFor(row);
+            if(wait===0){index=i;break;}
+            shortestWait=Math.min(shortestWait,wait);
+          }
+          if(index<0){
+            if(Number.isFinite(shortestWait)){
+              timer=later(pump,shortestWait+1);
+              for(const row of queue){const wait=waitFor(row);if(wait>0)row.wait?.(wait);}
+            }
+            return;
+          }
           const [row]=queue.splice(index,1);if(row.signal?.aborted){row.reject(abortError());continue;}
           row.signal?.removeEventListener('abort',row.abort);active++;activeGroups.set(row.group,(activeGroups.get(row.group)||0)+1);sent.push({at:now(),group:row.group});row.admit?.();
           Promise.resolve().then(()=>{if(row.signal?.aborted)throw abortError();return row.work();}).then(row.resolve,row.reject).finally(()=>{active--;activeGroups.set(row.group,(activeGroups.get(row.group)||1)-1);pump();});
@@ -115185,11 +115272,18 @@ var CE_CORE = (function () {
       const bounded=(value,fallback)=>Math.max(1,Math.min(options.maxConcurrencyLimit??20,Math.floor(Number(value)||fallback)));
       return {
         configure(value={}){rpm=Math.max(1,Math.min(600,Math.floor(Number(value.requestsPerMinute)||15)));parallel=bounded(value.maxConcurrency,5);groups=Object.fromEntries(Object.entries(value.concurrencyByGroup||{}).map(([group,n])=>[group,bounded(n,parallel)]));pump();},
-        cooldown(ms=60000){coolUntil=Math.max(coolUntil,now()+Math.max(1000,Number(ms)||60000));pump();},
+        cooldown(ms=60000,route){
+          const until=now()+Math.max(1000,Number(ms)||60000);
+          if(route)routeCooldowns.set(route,Math.max(routeCooldowns.get(route)||0,until));
+          else coolUntil=Math.max(coolUntil,until);
+          pump();
+        },
+        cooldownRemaining(route){return Math.max(0,(routeCooldowns.get(route)||0)-now());},
         promote(){pump();},
         run(work,context={}){return new Promise((resolve,reject)=>{
           if(context.signal?.aborted){reject(abortError());return;}
-          const row={work,resolve,reject,group:context.group||'default',signal:context.signal,wait:context.onWait,admit:context.onAdmit};
+          const row={work,resolve,reject,group:context.group||'default',route:context.route,hasNextRoute:context.hasNextRoute,
+            signal:context.signal,wait:context.onWait,admit:context.onAdmit};
           row.abort=()=>{const index=queue.indexOf(row);if(index>=0){queue.splice(index,1);reject(abortError());pump();}};
           row.signal?.addEventListener('abort',row.abort,{once:true});queue.push(row);pump();
         });},
@@ -120634,12 +120728,21 @@ var CE_CORE = (function () {
     'use strict';
     const { parseTimePoint, parseTimePrecision } = require('interval');
 
+    const CHARACTER_STATUS_LIFECYCLE = [
+      '沿用万物有灵的覆盖顺序：逐条核对前态，先移除到期、解除、消退或结束条件已满足的状态，再新增当前仍在起作用的独立状态。',
+      '跨日或跳时优先核对已经到期的效果。脱战、离开术法范围、解除禁制、归还维持效果的宝物等行为已经满足结束条件时，本轮就删除旧状态。',
+      '毒已清、伤已愈、阵术散去、药效耗尽或临时来源失效时，删除对应状态。疗愈归正文、生平或摘要，恢复正常不另记增益，例如拔尽寒毒后不新写「寒毒尽清」。',
+      '仍有残毒、伤后虚弱、真实临时加成或本人正在承受的术法时，按当前影响继承或更新。沿用原截止时点与实际结束条件，不以「再次中毒」「状态变化」给已结束的效果续期。重新受伤、中毒或施法须有当期事实。',
+      '只记录本人当前承受的实际效果。修为、技能、物品状态、日常情绪、任务、守秘、盟约、他人遭遇和历史经历写各自字段。暂不能判断结束的实际状态沿用原记录和结束条件。',
+    ].join('\n');
+
     const CHARACTER_STATUS_RULE = [
       '第4列「Buff 与状态」是终态快照。写入时整列覆盖，只留当前仍生效的状态和已有明确激活条件的待生效状态；已结束的删掉，同名更新用新条目替换。无状态写「一切正常」。',
       '先承接上一份人物快照的第4列，再用本节点实际发生的事更新。未变化的状态沿用原名、效果和结束条件；确实解除或到期才删除。旧节点的描述用于辨别实际新增，不能代替刚核验的前态。打算、疑虑、守秘和已知事实各归原字段。',
       '一条一项，分号分隔。格式：状态名(简短效果|生效中或自YYYY.MM.DD HH:mm|至YYYY.MM.DD HH:mm或至明确条件)。可用状态名:Emoji，来源可省略，需区分时只补一两个词。示例：药力(修炼速度+10%|生效中|至0017.05.16 08:00)；腿伤(行走跛足|生效中|至伤口愈合)。',
       '数值效果只用实际属性名加正负数或百分比，如脚力-2、神识+5%，多项用逗号分隔。已有确定数值才写数值，无数值时写一句当下可感知的影响。绝对时间用游戏内时间，只有日期可用 YYYY.MM.DD；明确条件如伤口愈合由剧情确认后删除，触发型待生效写「待激活」并附触发条件，触发后改「生效中」。已知到期时间沿用原值，勿重设倒计时。',
       '历史经历、已知规律、物品库存、修为突破成果、临场情绪和姿态各归其原字段；只有仍在影响人物的临时效果才进第4列。第4列不写入白值、变量增减、原文变更依据或抽离操作。',
+      CHARACTER_STATUS_LIFECYCLE,
     ].join('\n');
 
     const statusDate = /^(?:\d{1,6}[-.]\d{1,2}[-.]\d{1,2}|\d{1,6}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*[日号])(?:\s*\d{1,2}[:：]\d{2})?$/u;
@@ -120692,7 +120795,7 @@ var CE_CORE = (function () {
     function statusLifecycle(entry, at) {
       if (entry.raw) return 'text';
       const { activation, ending } = entry;
-      if (endedStatus.test(activation) || endedStatus.test(ending)) return 'ended';
+      if (endedStatus.test(activation) || endedStatus.test(ending) || completedStatus(entry)) return 'ended';
       const now = statusTime(at);
       const start = activation.startsWith('自') ? statusTime(activation.slice(1).trim()) : null;
       const endText = ending.replace(/^(?:直至|截至|至)\s*/u, '');
@@ -120709,14 +120812,31 @@ var CE_CORE = (function () {
       return condition ? 'active' : 'text';
     }
 
+    function completedStatus({ name='', effectText='', ending='' }) {
+      const clearlyResolved=/(?:毒|伤|病|眩晕|麻痹|疲劳|诅咒|封禁)[^，。]{0,8}(?:尽清|全消|已清|已消|已解|清除|解除|痊愈|已愈|复原|尽退|已退)$/u.test(name);
+      const effectEnded=/(?:拔尽|驱尽|驱除干净|清除干净|已清除|已解除|已痊愈|完全恢复|全消|尽消|尽褪|已归还)/u.test(effectText);
+      const artificialEnd=/^(?:直至|直到|至)\s*(?:再中|再次|重新|下次|状态变化|状态改变)/u.test(ending);
+      const continuedEffect=/(?:仍有|仍在|依然|尚未|并未|残余|残留|残毒|未愈|未清|暂未|持续|药力未尽|额外增益|免疫|抗性|抗寒|抗毒|抵御|护体|[+＋][0-9])/u.test(effectText);
+      return clearlyResolved && (effectEnded || artificialEnd) && !continuedEffect;
+    }
+
+    function serializeStatus(entry) {
+      return entry.raw || entry.name + (entry.icon ? ':' + entry.icon : '') + '(' +
+        [entry.effectText, entry.activation, entry.ending, ...(entry.source ? [entry.source] : [])].join('|') + ')';
+    }
+
+    function pruneCompletedCharacterStatuses(value) {
+      if (typeof value !== 'string') return value;
+      const entries = statusEntries(value);
+      const kept = entries.filter(entry => !completedStatus(entry));
+      return kept.length === entries.length ? value : kept.map(serializeStatus).join('；') || '一切正常';
+    }
+
     function normalizeCharacterStatus(value, worldTime = '') {
       const at = String(worldTime || '').trim();
       const entries = statusEntries(value);
       if (entries.every(entry => entry.raw) && entries.length === 1) return entries[0].raw;
-      return entries.filter(entry => statusLifecycle(entry, at) !== 'ended').map(entry => entry.raw ||
-        entry.name + (entry.icon ? ':' + entry.icon : '') + '(' +
-        [entry.effectText, entry.activation, entry.ending, ...(entry.source ? [entry.source] : [])].join('|') + ')'
-      ).join('；') || '一切正常';
+      return entries.filter(entry => statusLifecycle(entry, at) !== 'ended').map(serializeStatus).join('；') || '一切正常';
     }
 
     function carryCharacterStatus(actual, previousProduct, nextProduct, worldTime) {
@@ -120759,7 +120879,9 @@ var CE_CORE = (function () {
     }
 
 
+    exports.CHARACTER_STATUS_LIFECYCLE = CHARACTER_STATUS_LIFECYCLE;
     exports.CHARACTER_STATUS_RULE = CHARACTER_STATUS_RULE;
+    exports.pruneCompletedCharacterStatuses = pruneCompletedCharacterStatuses;
     exports.normalizeCharacterStatus = normalizeCharacterStatus;
     exports.carryCharacterStatus = carryCharacterStatus;
     exports.activeCharacterStatuses = activeCharacterStatuses;
@@ -121003,10 +121125,16 @@ var CE_CORE = (function () {
       return {category, label, slotKey, indices:slotKey ? allowedEquipmentIndices(slotKey,item) : [], icon}
     }
 
+    function equipmentRealmName(owner) {
+      const raw = typeof owner === 'string' ? owner : owner?.['2'] || owner?.realm || ''
+      return String(raw).replace(/<[^>]*>/g,'').split(/[|｜]/)[0].trim().replace(/\s+/g,'')
+        .replace(/[（(]\d+(?:\.\d+)?[%％][）)]$/u,'')
+        .replace(/^((?:炼气|筑基|结丹|元婴|化神|炼虚|合体|大乘|渡劫)(?:期)?)[（(](?:未详|未知|未注明)[）)]$/u,"\u00241")
+    }
+
     /** 只读拥有者当前境界，不从身份、描述或法宝名称推断修为。 */
     function canEquipNatalTreasure (owner) {
-      const raw = typeof owner === 'string' ? owner : owner?.['2'] || owner?.realm || ''
-      const realm = String(raw).replace(/<[^>]*>/g,'').split(/[|｜]/)[0].trim().replace(/\s+/g,'').replace(/[（(]\d+(?:\.\d+)?[%％][）)]$/,'')
+      const realm = equipmentRealmName(owner)
       return /^(结丹|元婴|化神|炼虚|合体|大乘|渡劫)(?:期)?(?:初期|中期|后期|圆满|大圆满|巅峰)?$/.test(realm)
     }
 
@@ -121248,6 +121376,7 @@ var CE_CORE = (function () {
     exports.getEquipmentSlots = getEquipmentSlots;
     exports.allowedEquipmentIndices = allowedEquipmentIndices;
     exports.classifyItem = classifyItem;
+    exports.equipmentRealmName = equipmentRealmName;
     exports.canEquipNatalTreasure = canEquipNatalTreasure;
     exports.isTreasureSet = isTreasureSet;
     exports.coalesceTreasureSets = coalesceTreasureSets;
@@ -123261,7 +123390,7 @@ var CE_CORE = (function () {
     'use strict';
     const { validateCultivationArts, mergeCultivationArts, readCultivationArts, cultivationArtStateEqual, CULTIVATION_ARTS, CULTIVATION_ARTS_RULE } = require('cultivation-arts');
     const { PREBUILT_TERMINAL_TEXT_RULE, PREBUILT_PROFILE_ESTIMATE_RULE, missingPrebuiltProfileFields, patchPrebuiltProfile, prebuiltProfilePlace, isRetiredCharacterColumn, isRetiredCharacterOperation, projectCharacterColumns, projectActorProfile, projectCharacterRecords, projectOrdinarySettlement, splitCharacterRelationshipLines } = require('character-profile');
-    const { entrySpan, parseTimePoint, normalizeNodeTiming, nodeTimingWindow } = require('interval');
+    const { entrySpan, parseTimePoint, parseTimePrecision, normalizeNodeTiming, nodeTimingWindow } = require('interval');
     const { CHARACTER_STATUS_RULE, carryCharacterStatus } = require('character-status');
     const { characterNamesFromTitle, eventCodeFromTitle } = require('vector-input');
     const { coalesceTreasureSets, equipmentEligibility, getEquipmentSlots, isTreasureSet, SUPPORTED_ITEM_TYPES } = require('equipment-layout');
@@ -123891,28 +124020,57 @@ var CE_CORE = (function () {
       if (new Set(decisions.map(row=>row?.id)).size !== decisions.length) return null;
       const sceneClock=prebuiltSceneClock(boundary.range.end);
       const sceneDay=sceneClock.slice(0,10);
-      const sceneDayStart=parseTimePoint(sceneDay);
+      const sceneDayStart=parseTimePoint(sceneDay||(parseTimePrecision(boundary.range.end)==='day'?boundary.range.end:null));
+      const startClock=prebuiltSceneClock(boundary.range.start);
+      const rangeStart=startClock?parseTimePoint(startClock):null;
+      const impacts=activePrebuiltImpacts(ledger.eventProgress);
+      const missingPointerReason='进度指针尚未确认经过本节点';
       const pointerPositions=new Map();
-      if(Array.isArray(boundary.storyAnalysis.prebuiltThrough)){
-        const reached=new Set(boundary.storyAnalysis.prebuiltThrough);
+      const inferredHistory=new Set();
+      const hasModelPointer=Array.isArray(boundary.storyAnalysis.prebuiltThrough);
+      if(hasModelPointer||exceptionMode){
+        const reached=new Set([...(hasModelPointer?boundary.storyAnalysis.prebuiltThrough:[]),...confirmations.keys()]);
         const covered=new Set(eligibility?.coveredEventIds||[]);
         const watches=new Map([...(ledger.eventWatches||[]),...(boundary.storyAnalysis.eventWatches||[]),...(eligibility?.eventWatches||[])].map(row=>[row.eventId,row.status]));
-        for(const event of events){
+        const affectedNames=new Set([...impacts,...(boundary.storyAnalysis.influences||[])].map(row=>row.name));
+        const observedByEvent=new Map((boundary.storyAnalysis.eventProgress||[]).map(row=>[row.eventId,row]));
+        const lastEnteredSameDay=events.findLastIndex(event=>event.prebuilt.formatVersion===6&&
+          event.prebuilt.nodes.some(node=>node.at===sceneDay&&
+            (reached.has(node.id)||node.milestones?.some(step=>reached.has(step.id))||
+              observedByEvent.get(codeOf(event))?.nodes?.some(row=>row.nodeId===node.id&&row.state==='done'))));
+        for(const [index,event] of events.entries()){
           if(event.prebuilt.formatVersion!==6)continue;
           const code=codeOf(event);
-          const markers=event.prebuilt.nodes.flatMap(node=>node.milestones?.map(step=>step.id)||[node.id]);
+          const nodes=event.prebuilt.nodes;
+          const markers=nodes.flatMap(node=>node.milestones?.map(step=>step.id)||[node.id]);
           const reachedIndex=markers.findLastIndex(id=>reached.has(id));
           const old=ledger.eventProgress?.find(row=>row.eventId===code);
-          const observed=boundary.storyAnalysis.eventProgress?.find(row=>row.eventId===code);
-          // A missing marker is common for already-ended background history. The covered
-          // historical product is authoritative only when there is no contrary evidence.
-          const cleanHistory=exceptionMode&&crossEvent&&covered.has(code)&&reachedIndex<0&&sceneDayStart!==null&&
-            (entrySpan(event)?.max??Infinity)<sceneDayStart&&!event.timingChange&&
-            (!old||old.resolved===true)&&(!observed||observed.resolved===true&&observed.status==='completed')&&
+          const observed=observedByEvent.get(code);
+          const eligibleHistory=exceptionMode&&crossEvent&&covered.has(code)&&!event.timingChange&&
+            (!observed||observed.resolved===true&&observed.status==='completed')&&
             !['suspected','confirmed'].includes(watches.get(code))&&
-            !event.prebuilt.nodes.some(node=>answers.has(node.id)&&answers.get(node.id)?.status!=='ready')&&
+            !nodes.some(node=>node.npc.some(person=>affectedNames.has(person.name))||
+              answers.has(node.id)&&answers.get(node.id)?.status!=='ready')&&
             !(eligibility.decisions||[]).some(row=>['break','needs_context'].includes(row.canonAdvance)&&row.eventIds?.includes(code));
-          pointerPositions.set(code,new Set(cleanHistory?markers:markers.slice(0,reachedIndex+1)));
+          const onlyUnconfirmedPointer=old?.status==='ongoing'&&!old.changes?.length&&old.nodes?.some(node=>node.prebuilt==='pending')&&
+            old.nodes.every(node=>node.state==='done'&&node.prebuilt==='applied'||node.state==='todo'&&node.prebuilt==='pending'&&
+              node.handling===missingPointerReason&&!node.impact&&!node.contributions?.length);
+          const cleanHistory=eligibleHistory&&(reachedIndex<0||onlyUnconfirmedPointer)&&sceneDayStart!==null&&
+            (entrySpan(event)?.max??Infinity)<sceneDayStart&&(!old||old.resolved===true||onlyUnconfirmedPointer);
+          // A settled clock establishes prior history. Within this round, require entry
+          // into a later event before using the end clock to settle earlier events.
+          const cutoff=index<lastEnteredSameDay?end:rangeStart;
+          const sameDayHistory=eligibleHistory&&!!sceneClock&&parseTimePoint(event.time_end)===sceneDayStart&&
+            nodes.at(-1).at===sceneDay&&cutoff!==null&&
+            (!old||old.resolved===true&&old.status==='completed'||onlyUnconfirmedPointer)&&nodes.every(node=>{
+              if(node.at!==sceneDay)return (parseTimePoint(node.at)??Infinity)<sceneDayStart;
+              const closing=node.milestones?.at(-1);
+              const time=nodeTimingWindow(node.at,closing?.timing??node.timing);
+              return time&&time.max<cutoff;
+            });
+          if(hasModelPointer||reachedIndex>=0||cleanHistory||sameDayHistory)
+            pointerPositions.set(code,new Set(cleanHistory||sameDayHistory?markers:markers.slice(0,reachedIndex+1)));
+          if((cleanHistory||sameDayHistory)&&reachedIndex<markers.length-1)inferredHistory.add(code);
         }
       }
       const deferredSameDay=new Set();
@@ -123964,7 +124122,7 @@ var CE_CORE = (function () {
       const player = new Set(Object.entries(characters || {}).filter(([, value]) => value?.id === 'B1' || value?.isPlayer)
         .flatMap(([name, value]) => [name, ...(value.aliases || [])]));
       plan.playerNames = player;
-      plan.impacts = activePrebuiltImpacts(ledger.eventProgress);
+      plan.impacts = impacts;
       plan.changedActors = new Set(plan.impacts.map(row=>row.name));
       const priorActorNode=new Map(),globalStates=new Map(),partialDependencies=new Map();
       for (const event of events) {
@@ -124025,10 +124183,10 @@ var CE_CORE = (function () {
           const reachedMilestoneId=node.milestones?.findLast(step=>pointer?.has(step.id)||step.id===prior?.reachedMilestoneId)?.id;
           if(deferredSameDay.has(data.eventId))answer={status:'pending',reason:'同日先行事件尚未完成，本事件没有已发生的证据'};
           else if(pointer&&!reached&&answer?.resolution!=='cancelled'&&answer?.resolution!=='pending')
-            answer={status:'pending',reason:'进度指针尚未确认经过本节点'};
+            answer={status:'pending',reason:answer&&answer.status!=='ready'?answer.reason:missingPointerReason};
           if(!answer&&exceptionMode)answer=future||sameDayGrouped&&!reached||node.timing&&!reached&&eventOpen
             ? {status:'pending',reason:future?'尚未到预制节点日期':'同日合并节点的末项尚未确认'}
-            : {status:'ready',reason:'时间已到，边界未发现偏离'};
+            : {status:'ready',reason:inferredHistory.has(data.eventId)?'实际时钟已经过前序预制节点，边界未发现偏离':'时间已到，边界未发现偏离'};
           if (!['ready', 'mutated', 'pending','uncertain'].includes(answer?.status) || !text(answer.reason)) return reject(node.id+' 缺少可执行的预制判断');
           if (answer.status === 'ready' && future) return reject(node.id+' 尚未到期却被标为已发生');
           if (node.npc.some(person => player.has(person.name))) return null;
@@ -134635,7 +134793,7 @@ var CE_CORE = (function () {
   __define('container-equipment', function (exports, require) {
     'use strict';
     const { resolveCultivationSpeedCell, techniqueSpeedBaseline } = require('cultivation-speed');
-    const { classifyItem, equipmentEligibility, isTreasureSet } = require('equipment-layout');
+    const { classifyItem, equipmentEligibility, equipmentRealmName, isTreasureSet } = require('equipment-layout');
     const { numericSetting } = require('numeric-settings');
     // Pure, single-item container contract. No character totals, storage, or migration.
     const ATTRIBUTES = new Set([
@@ -134926,7 +135084,7 @@ var CE_CORE = (function () {
       if (!parsed.ok) return null;
       const equipped = current && parseItemContainerEquipment(current);
       if (current && (!equipped?.ok || equipped.attribute !== parsed.attribute)) return null;
-      const realm = String(columns?.['2'] || '').split('|')[0].trim().replace(/[（(]\s*\d+(?:\.\d+)?\s*%\s*[）)]$/u, '').trim();
+      const realm = equipmentRealmName(columns);
       let attrs = columns?.['11'];
       if (typeof attrs === 'string') {
         try { attrs = JSON.parse(attrs); } catch (_) { return null; }
@@ -144563,11 +144721,17 @@ function frAdaptMortalNamingRules(preset) {
 }
 
 function frAdaptCharacterStatusRules(preset) {
-  const ruleText = typeof CE_CORE === 'object' && CE_CORE?.['character-status']?.CHARACTER_STATUS_RULE;
+  const status = typeof CE_CORE === 'object' && CE_CORE?.['character-status'];
+  const ruleText = status?.CHARACTER_STATUS_RULE;
   if (!ruleText) return preset;
+  const previousText = status.CHARACTER_STATUS_LIFECYCLE && ruleText.endsWith('\n'+status.CHARACTER_STATUS_LIFECYCLE)
+    ? ruleText.slice(0,-status.CHARACTER_STATUS_LIFECYCLE.length-1) : null;
   for (const rule of preset.sharedRules || []) {
-    if (rule.id !== 'rule-8' || typeof rule.content !== 'string' || !rule.content.includes('## Buff核心定位')) continue;
-    const content = rule.content.replace(/<Buff规则>[\s\S]*?<\/Buff规则>/u, '<Buff规则>\n'+ruleText+'\n</Buff规则>');
+    if (rule.id !== 'rule-8' || typeof rule.content !== 'string') continue;
+    const block = '<Buff规则>\n'+ruleText+'\n</Buff规则>';
+    const content = rule.content.includes('## Buff核心定位')
+      ? rule.content.replace(/<Buff规则>[\s\S]*?<\/Buff规则>/u, block)
+      : previousText ? rule.content.replace('<Buff规则>\n'+previousText+'\n</Buff规则>',block) : rule.content;
     if (content === rule.content) continue;
     frPresetCompatBackup(frPresetCompatMeta(preset),'sharedRules',rule);
     rule.content = content.replace(/第4列与 `buffs`/gu,'第4列').replace(/第4列与 buffs/gu,'第4列');
@@ -148957,14 +149121,15 @@ async function ceBridgeCallModel(payload) {
   var wantJson = Boolean(payload && payload.json);
 
   var apiConfigs = await ceBridgeGetApiConfigs();
+  if(typeof frAiPrioritizeRoutes==='function')apiConfigs=frAiPrioritizeRoutes(apiConfigs);
   if (apiConfigs.length === 0) throw new Error('没有可用接口配置');
 
   var routeRunner=typeof CE_CORE!=='undefined'?CE_CORE?.['api-library']?.runApiChain:null;
-  return routeRunner?routeRunner(apiConfigs,api=>ceBridgeCallModelOnRoute(payload,messages,wantJson,api),payload?.signal):
+  return routeRunner?routeRunner(apiConfigs,(api,index)=>ceBridgeCallModelOnRoute(payload,messages,wantJson,api,index<apiConfigs.length-1),payload?.signal):
     ceBridgeCallModelOnRoute(payload,messages,wantJson,apiConfigs[0]);
 }
 
-async function ceBridgeCallModelOnRoute(payload,messages,wantJson,api) {
+async function ceBridgeCallModelOnRoute(payload,messages,wantJson,api,hasNextRoute) {
   var caller = (typeof genericApiCall === 'function' && genericApiCall.__ceOriginal)
     ? genericApiCall.__ceOriginal : genericApiCall;
   if (typeof caller !== 'function') throw new Error('genericApiCall 不可用');
@@ -148988,7 +149153,7 @@ async function ceBridgeCallModelOnRoute(payload,messages,wantJson,api) {
   };
   if(boundaryStage)noteBoundary('开始',{chars:messages.reduce((sum,message)=>sum+String(message.content||'').length,0),timeoutMs});
   try {
-    var raw = await Promise.race([Promise.resolve().then(function(){controller.signal.throwIfAborted();return caller(api.apiUrl, api.apiKey, api.apiModel, messages, controller.signal,{route:api,purpose:wantJson?'json':undefined,max_tokens:Math.max(256,Math.min(262144,Number(requestSettings.maxOutputTokens)||65536)),
+    var raw = await Promise.race([Promise.resolve().then(function(){controller.signal.throwIfAborted();return caller(api.apiUrl, api.apiKey, api.apiModel, messages, controller.signal,{route:api,hasNextRoute,purpose:wantJson?'json':undefined,max_tokens:Math.max(256,Math.min(262144,Number(requestSettings.maxOutputTokens)||65536)),
       ...(boundaryStage?{onRequestProgress:function(row){if(row?.state&&row.state!==lastRequestState){lastRequestState=row.state;noteBoundary(row.state);}}}:{})});}),interrupted]);
     var text = String(raw == null ? '' : raw);
     // 去掉思维标签，避免污染 JSON 解析
@@ -150801,7 +150966,7 @@ async function frRunRequiredCanonPreparation(record,opts,config,valid){
   record.controller.signal.addEventListener('abort',function(){record.releaseOrdinary(null);},{once:true});
   var ordinary=async function(){var base=await record.ordinaryReady;if(!base||!valid())throw frCanonEarlyAbort();return base;};
   var dispatch=ceBridgeProseDispatchConfig(config);
-  var base={host:host,signal:record.controller.signal,worldTime:ledger?.worldTime||start,targetTime:time,bodyTimeKnown:!!time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,archiveName:record.archiveName,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:rows,onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],mutationNotes:ledger?.mutationNotes||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,materials:ceBridgeMaterialsFor('replay',config),bodyTimeKnown:!!time,canonPushBoundaryVersion:1,ordinaryIndependent:true,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}};
+  var base={host:host,signal:record.controller.signal,worldTime:opts.openingStart||ledger?.worldTime||start,targetTime:time,bodyTimeKnown:!!time,timeline:timeline,storyText:frCanonMainStoryText(opts.storyText),playerInput:opts.userInput||'',logId:record.logId,archiveName:record.archiveName,canonicalNames:ceBridgeCanonSearchScope(timeline,[]).allowlist,characters:ceBridgeReadCharacters(collectTitleNames(timeline),rows),beforeStateRows:rows,onScene:ceBridgeReadOnScene(),location:ceBridgeReadLocation(),debts:ledger?.debts,openEvents:ledger?.openEvents||[],eventProgress:ledger?.eventProgress||[],eventWatches:ledger?.eventWatches||[],mutationNotes:ledger?.mutationNotes||[],previousTurn:ledger?.lastTurn,hooks:ledger?.hooks,options:{...dispatch,materials:ceBridgeMaterialsFor('replay',config),bodyTimeKnown:!!time,canonPushBoundaryVersion:1,ordinaryIndependent:true,onProseReady:async function(packet){await ordinary();return record.deliver?.(packet);},onStage:function(name,detail,view){if(record.traceRun&&typeof frCanonTraceEvent==='function'){frCanonTraceEvent(record.traceRun,'stage',name,detail);if(view)frCanonTracePublish(record.traceRun,view.kind==='prose'?'人物正文 · '+view.block.name:name,view);}}}};
   base.turnNo=(Number(ledger?.turnNo)||0)+1;
   base.prebuiltActorDifferences=ledger?.prebuiltActorDifferences||[];
   // This live entry point reserves canon actors before the ordinary runner can start.
@@ -151545,6 +151710,26 @@ function frResolveRetrievalRerankRoute(canon,globalConfig={}) {
   return {enabled:true,source:hasOwn?'canon':'global',config:hasOwn?{...config,apiChainSource:'canon'}:config};
 }
 
+function frAiRateLimitRoute(endpoint, apiKey) {
+  try {
+    var url=new URL(endpoint);
+    if(url.protocol==='https:'||url.protocol==='http:')return JSON.stringify([url.origin,String(apiKey??'')]);
+  }catch(_){}
+}
+
+function frAiPrioritizeRoutes(routes) {
+  if(!frAiRequestBudget?.cooldownRemaining||routes.length<2)return routes;
+  var available=[],cooling=[];
+  for(var route of routes){
+    var wait=frAiRequestBudget.cooldownRemaining(frAiRateLimitRoute(route.apiUrl,route.apiKey));
+    if(wait)cooling.push({route,wait});
+    else available.push(route);
+  }
+  // Use the configured order while routes can send. If all fail, the final
+  // wait belongs to the route that becomes available soonest.
+  return [...available,...cooling.sort((a,b)=>b.wait-a.wait).map(row=>row.route)];
+}
+
 async function frScheduleAiRequest(work,signal,kind,options={}) {
   signal?.throwIfAborted();
   var own=typeof ceBridgeLoadConfig==='function'?await ceBridgeLoadConfig():{};
@@ -151598,16 +151783,25 @@ async function frScheduleAiRequest(work,signal,kind,options={}) {
     };
     return attemptOnce();
   };
-  var runTransport=function(work){return !isCanon&&(kind==='embedding'||kind==='rerank'||options.enforceTimeout)?withTransientRetry(work,signal):work();};
+  var runTransport=function(work){return !options.hasNextRoute&&!isCanon&&(kind==='embedding'||kind==='rerank'||options.enforceTimeout)?withTransientRetry(work,signal):work();};
   if(typeof CE_CORE==='undefined' || !CE_CORE['request-budget'])return runTransport(boundedWork);
   if(!frAiRequestBudget)frAiRequestBudget=CE_CORE['request-budget'].createRequestBudget();
-  frAiRequestBudget.configure({requestsPerMinute:own.requestsPerMinute || 15,maxConcurrency:native.maxConcurrency || 5,concurrencyByGroup:{ordinary:native.maxConcurrency || 5,canon:own.maxConcurrency || 5}});
+  // Providers can share quotas across multiple model routes for the same credential.
+  var budget=frAiRequestBudget,rateLimitRoute=frAiRateLimitRoute(options.endpoint,options.apiKey);
+  budget.configure({requestsPerMinute:own.requestsPerMinute || 15,maxConcurrency:native.maxConcurrency || 5,concurrencyByGroup:{ordinary:native.maxConcurrency || 5,canon:own.maxConcurrency || 5}});
+  var requestWithCooldown=async function(){
+    try{return await boundedWork();}
+    catch(error){
+      if(Number(error?.status||error?.httpStatus)===429)budget.cooldown(error.retryAfterMs,rateLimitRoute);
+      throw error;
+    }
+  };
   var row=signal && frAiRequestWaits.get(signal) || {total:0,waiting:false,started:0};
   row.started=Date.now();row.waiting=true;if(signal)frAiRequestWaits.set(signal,row);
   var run=signal && typeof frCanonTraceSignals!=='undefined' && frCanonTraceSignals.get(signal),reported=false,countedWait=false;
   var finishWait=function(){if(row.waiting){row.total+=Date.now()-row.started;row.waiting=false;}if(run&& countedWait){run.queuedRequests=Math.max(0,(run.queuedRequests||1)-1);countedWait=false;}};
   report('queued');
-  var send=async function(){row.started=Date.now();row.waiting=true;reported=false;report('queued');try{return await frAiRequestBudget.run(boundedWork,{signal:signal,group:group,onAdmit:function(){finishWait();report('running');if(run){run.networkStats=run.networkStats || {};run.networkStats[kind]=(run.networkStats[kind] || 0)+1;frCanonTraceEvent(run,'network','发出辅助AI请求',{kind:kind,counts:run.networkStats});}},onWait:function(ms){report('queued',ms);if(run&&!reported){reported=true;countedWait=true;run.queuedRequests=(run.queuedRequests||0)+1;frCanonTraceEvent(run,'queue','请求排队',{kind:kind,waitMs:ms,limit:own.requestsPerMinute || 15});}}});}finally{finishWait();}};
+  var send=async function(){row.started=Date.now();row.waiting=true;reported=false;report('queued');try{return await budget.run(requestWithCooldown,{signal:signal,group:group,route:rateLimitRoute,hasNextRoute:options.hasNextRoute,onAdmit:function(){finishWait();report('running');if(run){run.networkStats=run.networkStats || {};run.networkStats[kind]=(run.networkStats[kind] || 0)+1;frCanonTraceEvent(run,'network','发出辅助AI请求',{kind:kind,counts:run.networkStats});}},onWait:function(ms){report('queued',ms);if(run&&!reported){reported=true;countedWait=true;run.queuedRequests=(run.queuedRequests||0)+1;frCanonTraceEvent(run,'queue','请求排队',{kind:kind,waitMs:ms,limit:own.requestsPerMinute || 15});}}});}finally{finishWait();}};
   return runTransport(send);
 }
 function frAiUpstreamError(data,status,retryAfter) {
@@ -151617,7 +151811,10 @@ function frAiUpstreamError(data,status,retryAfter) {
   var code=Number(status)>=400?Number(status):Number(raw && (raw.code || raw.status));
   if(code===429 || /rate.?limit|too many requests|requests? per min|rpm|请求.*[超限额]/i.test(message))code=429;
   var error=new Error('API请求失败'+(code?' ('+code+')':'')+'：'+message);error.status=code;
-  if(code===429 && frAiRequestBudget){var seconds=Number(retryAfter);var date=Date.parse(retryAfter);frAiRequestBudget.cooldown(Number.isFinite(seconds)&& seconds>0?seconds*1000:Number.isFinite(date)?Math.max(1000,date-Date.now()):60000);}
+  if(code===429){
+    var seconds=Number(retryAfter),date=Date.parse(retryAfter);
+    error.retryAfterMs=Number.isFinite(seconds)&&seconds>0?seconds*1000:Number.isFinite(date)?Math.max(1000,date-Date.now()):60000;
+  }
   return error;
 }
 
@@ -151649,7 +151846,7 @@ function frCeRequestOwnership(config,preset) {
 }
 
 // 独立系统的宿主调度入口。普通变量演化只提供服务，不拥有本系统启停。
-var FR_BUILD_ID = "FRI-8140be97aecf";
+var FR_BUILD_ID = "FRI-1a49ae9442b4";
 function frCanonReadAdoptedStoryHeader(storyText) {
   const source = String(storyText || '').replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '');
   const contents = [...source.matchAll(/<content>[\s\S]*?<\/content>/gi)];
@@ -152662,6 +152859,7 @@ async function frExecuteCanonCharacterBatch(input) {
       var parsed=null,response='';
       var run;
       for(var apiIndex=0;apiIndex<apiConfigs.length;apiIndex++){
+      var hasNextRoute=apiIndex<apiConfigs.length-1;
       run=await ceBridgeCore().retry.withRetry(async function(attemptInfo){
         var previous=attemptInfo&&attemptInfo.previous;
         var api=apiConfigs[apiIndex];var caller=genericApiCall.__ceOriginal || genericApiCall;
@@ -152669,7 +152867,7 @@ async function frExecuteCanonCharacterBatch(input) {
         var retryPrompt=previous&&previous.text?prompt+'\n'+previous.text:prompt;
         if(dsWire)retryPrompt=frEvolutionWirePrompt(retryPrompt,input.preset,withCompletion);
         response=await caller(api.apiUrl,api.apiKey,api.apiModel,[{role:'user',content:retryPrompt}],controller.signal,
-          {route:api,purpose:dsWire?'json':undefined,max_tokens:Math.max(256,Math.min(262144,Number(own.maxOutputTokens)||65536))});
+          {route:api,hasNextRoute,purpose:dsWire?'json':undefined,max_tokens:Math.max(256,Math.min(262144,Number(own.maxOutputTokens)||65536))});
         if(typeof ceThrowIfApiFailureText==='function')ceThrowIfApiFailureText(response,'补演人物批量转换');
         var wire=dsWire?frEvolutionWireReply(response,input.preset,withCompletion):null;
         if(wire?.error)return {ok:false,reason:wire.error};
@@ -152685,6 +152883,7 @@ async function frExecuteCanonCharacterBatch(input) {
         if(crossed.length)return {ok:false,reason:'人物批量转换越过本批目标：'+crossed.join('、'),correction:{expected:ids,items:crossed.map(function(bad){return {label:'越界目标 '+bad,actual:bad,expected:ids.join('、'),hint:'只许修改本批 ID'};}),hint:'删掉越界指令，只保留本批人物的更新'}};
         return {ok:true,value:response};
       },{signal:controller.signal,config:{maxRetries:Math.max(Number(config.retryCount)||0,Number(config.parseRetryCount)||0)},
+        retryThrown:!hasNextRoute,
         // 上面的回调把不合格当成 {ok:false,...} 返回，交给 withRetry 带着纠正段重试。
         // 没有这个 validate，返回值会被当成功，越界指令就漏过去了。
         validate:function(value){if(!value||value.ok!==false)return {ok:true};return {ok:false,reason:String(value.reason||'人物批量转换不合格'),correction:value.correction||null};},
@@ -152884,7 +153083,7 @@ async function frApplyCanonOrdinaryEventSteps(steps, targetMap, boundary) {
     }
     var changes=await ceApplyCharacterDeltaWithStateSync(step.characterDelta,{targetMap:stepTargets,syncState:false,ensureArchiveEntries:true});
     if(!changes||changes.error)throw new Error('逐事件人物落地失败：'+step.key+' '+String(changes?.error||''));
-    var items=await executeItemOperations(step.itemOperations);
+    var items=await executeItemOperations(step.itemOperations,{npcLoadoutIds:step.actors.map(actor=>actor.id)});
     if(!Array.isArray(items)||items.length!==step.itemOperations.length||items.some(row=>!row?.success))throw new Error('逐事件物品落地失败：'+step.key);
     itemReceipts.push(...items);
     for(var actor of step.actors)if(actor.biography.length)await frAppendCanonBiography(boundary.archiveName,targetMap.get(actor.id),actor.biography.join('\n'));
@@ -154307,7 +154506,7 @@ async function frCommitCanonProposal(input, proposal) {
       // 这里已经写进数据库、回读验证过了，缺了就是真写坏，必须严格。
   frAssertCanonNpcProfiles(savedProfiles, { allowSoft: false });
       frAssertCanonCommit();
-      var items = await executeItemOperations(proposal.itemOperations || []);
+      var items = await executeItemOperations(proposal.itemOperations || [],{npcLoadoutIds:targets.filter(target=>target.type==='npc').map(target=>target.id)});
       if (!Array.isArray(items) || items.some(function(op) { return !op || op.success !== true; })) throw new Error('物品操作未完整成功');
       if (proposal.prebuiltReadback && (proposal.itemOperations || []).length) {
         if (items.length !== proposal.itemOperations.length) throw new Error('预制物品落地回执不完整');
@@ -154315,9 +154514,11 @@ async function frCommitCanonProposal(input, proposal) {
         var readInventory = function(owner) {
           var ownerEntry = (itemArchive.data.state.worldBookEntries || []).find(row => row.key === owner || row.id === owner);
           var ownerRow = typeof ownerEntry?.content === 'string' ? JSON.parse(ownerEntry.content) : ownerEntry?.content;
-          var ownerItems = parseNestedJsonString(parseRemarksString(ownerRow?.['9'] || '').inventory, []);
+          var ownerRemarks = parseRemarksString(ownerRow?.['9'] || '');
+          var ownerItems = parseNestedJsonString(ownerRemarks.inventory, []);
           if (!ownerRow || !Array.isArray(ownerItems)) throw new Error('预制物品所属角色背包无法回读：' + owner);
-          return ownerItems;
+          var equipment = parseNestedJsonString(ownerRemarks.equipment, {});
+          return ownerItems.concat(Object.values(equipment).flatMap(slots=>Array.isArray(slots)?slots.filter(Boolean):[]));
         };
         for (var expectedItem of proposal.itemOperations.filter(op => op.type === 'createItem')) {
           // 原生执行器会重排物品命令，按操作和归属配对回执。
@@ -163993,7 +164194,7 @@ try {
           }
         }
 
-        async function genericApiCallStream(apiUrl, apiKey, model, messages, signal, useGeminiBuild, streamElement, route) {
+        async function genericApiCallStream(apiUrl, apiKey, model, messages, signal, useGeminiBuild, streamElement, route, hasNextRoute) {
           const requestProfile=route?.requestProfile;
           const performStreamRequest=async(requestSignal=signal)=>{
           if (streamElement) {
@@ -164036,7 +164237,8 @@ try {
               } catch (e) {
                 errorDetail = errorText;
               }
-              throw new Error(`API 请求失败 (${response.status}): ${errorDetail}`);
+              throw (typeof frAiUpstreamError==='function'&&frAiUpstreamError({error:errorDetail},response.status,response.headers?.get('Retry-After'))) ||
+                new Error(`API 请求失败 (${response.status}): ${errorDetail}`);
             }
 
             const reader = response.body.getReader();
@@ -164107,7 +164309,7 @@ try {
           return completeResponse;
         
           };
-          return typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performStreamRequest,signal,'stream'):await performStreamRequest();
+          return typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performStreamRequest,signal,'stream',{endpoint:apiUrl,apiKey,hasNextRoute}):await performStreamRequest();
         }
 
         function generateFullStateSnapshotString() {
@@ -169031,9 +169233,11 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
           const routes=frApiRoutes('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2','embeddingApiPresetId');
           if(routes==null)return fetchEmbeddingOnce(inputData,config,signal);
           // Existing vectors can only be searched or extended by the same embedding model.
-          const compatible=routes.filter(route=>route.apiModel===routes[0]?.apiModel);
-          return CE_CORE['api-library'].runApiChain(compatible,route=>
-            fetchEmbeddingOnce(inputData,{...config,apiUrl:route.apiUrl,apiKey:route.apiKey,apiModel:route.apiModel,route},signal),signal);
+          const matched=routes.filter(route=>route.apiModel===routes[0]?.apiModel);
+          const compatible=typeof frAiPrioritizeRoutes==='function'?frAiPrioritizeRoutes(matched):matched;
+          return CE_CORE['api-library'].runApiChain(compatible,(route,index)=>
+            fetchEmbeddingOnce(inputData,{...config,apiUrl:route.apiUrl,apiKey:route.apiKey,apiModel:route.apiModel,route,
+              hasNextRoute:index<compatible.length-1},signal),signal);
         }
 
         async function fetchEmbeddingOnce(inputData, config, signal) {
@@ -169114,7 +169318,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
             throw new Error('API 响应格式异常，未找到 data.data.embedding');
             };
             return typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performRequest,signal,'embedding',{
-              onProgress:config.onRequestProgress}):await performRequest();
+              endpoint:fetchUrl,apiKey:config.apiKey,hasNextRoute:config.hasNextRoute,onProgress:config.onRequestProgress}):await performRequest();
           }
         }
 
@@ -169122,9 +169326,9 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
         async function fetchRerank(query, documents, config, signal) {
           const canonSlot=config.apiChainSource==='canon';
           return frRunApiRoutes(canonSlot?'CULTIVATION_CANON_BRIDGE_CONFIG_V1':'CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2',
-            canonSlot?'retrievalRerankApiPresetId':'rerankApiPresetId',config,route=>
+            canonSlot?'retrievalRerankApiPresetId':'rerankApiPresetId',config,(route,index,hasNextRoute)=>
               fetchRerankOnce(query,documents,{...config,rerankUrl:route.apiUrl||config.rerankUrl,
-                rerankModel:route.apiModel||config.rerankModel,apiKey:route.apiKey,route},signal),signal);
+                rerankModel:route.apiModel||config.rerankModel,apiKey:route.apiKey,route,hasNextRoute},signal),signal);
         }
 
         async function fetchRerankOnce(query, documents, config, signal) {
@@ -169187,7 +169391,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
           return data.results.map(item=>({...item,index:item.index+offset}));
           };
           const batchResults=typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performRequest,signal,'rerank',{
-            onProgress:config.onRequestProgress}):await performRequest();
+            endpoint:fetchUrl,apiKey:config.apiKey,hasNextRoute:config.hasNextRoute,onProgress:config.onRequestProgress}):await performRequest();
           combinedResults.push(...batchResults);
           }
           return combinedResults.sort((a,b)=>b.relevance_score-a.relevance_score || a.index-b.index);
@@ -177287,8 +177491,8 @@ listEl.appendChild(fragment);
             }
             return content;
             };
-            return typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performRequest,signal,'chat',{onProgress:options.onRequestProgress,
-              enforceTimeout:options.enforceTimeout===true}):await performRequest();
+            return typeof frScheduleAiRequest==='function'?await frScheduleAiRequest(performRequest,signal,'chat',{endpoint:apiUrl,apiKey,
+              hasNextRoute:options.hasNextRoute,onProgress:options.onRequestProgress,enforceTimeout:options.enforceTimeout===true}):await performRequest();
           } catch (error) {
             if(canonTraceRequest)frCanonTraceRequestError(canonTraceRequest,error);
             if (error.name === 'AbortError') {
@@ -177851,6 +178055,8 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
             if(frPreparedMain?.canonGuidance)await frCanonRestoreGuidanceDisplay(frPreparedMain.canonGuidance,{signal:frTurnController.signal});
             if(!frPreparedMain){
             let archive = await db.archives.get(currentArchiveName);
+            const openingStart = !isSummaryRequest && !isHiddenSystem
+              ? ceFrOpeningStartDate(cleanMessageText, currentState, archive?.data?.logs) : '';
             const geographyContext = generateGeographyString();
             let vectorContextString = '';
             if (!isSummaryRequest && !isHiddenSystem && cleanMessageTextForAI) {
@@ -178038,7 +178244,7 @@ if (!isSummaryRequest && !isHiddenSystem && typeof buildWorldEvolutionTimelinePr
   })();
 }
 if(__wtTimelinePromptPromise && typeof ceBuildCanonGuidanceForStory==='function'){
-  var __ceEarlyTime=ceGetAuthoritativeTimeLocationInfo(currentState).timeText;
+    var __ceEarlyTime=openingStart||ceGetAuthoritativeTimeLocationInfo(currentState).timeText;
   var __ceEarlyInput=String(userInputText || '');
   try{if(typeof ceResolveUserInputInfo==='function')__ceEarlyInput=String((ceResolveUserInputInfo(userInputText) || {}).value || __ceEarlyInput);}catch(e){}
   __ceCanonGuidanceTask={archiveName:currentArchiveName,currentTime:__ceEarlyTime,userInput:__ceEarlyInput};
@@ -178332,7 +178538,7 @@ try {
     var ceCanonTimeRow = currentState && currentState['4'] && currentState['4'][0];
     if (ceCanonTimeRow) ceCanonRawTime = String(ceCanonTimeRow['0'] || '');
   } catch (e) {}
-  var ceCanonTime = ceParseAuthoritativeTimeLocation(ceCanonRawTime).timeText;
+  var ceCanonTime = openingStart||ceParseAuthoritativeTimeLocation(ceCanonRawTime).timeText;
 
   // 玩家这一轮说了什么。宿主有专门的多级兜底，直接用它。
   var ceCanonUserInput = '';
@@ -178527,6 +178733,9 @@ if (worldBookContext) {
               lastMainVectorContext = vectorContextString || '';
             }
             let finalPrompt = promptBase;
+            if (openingStart) {
+              finalPrompt += `\n\n【玩家指定的开局时间】本轮故事从 ${openingStart} 开始。正文和状态栏从这个时间继续推进。`;
+            }
             if (isSummaryRequest) {
               finalPrompt += `\n\n### 玩家输入：\n${cleanMessageText}`;
             } else {
@@ -178535,7 +178744,7 @@ if (worldBookContext) {
             finalPrompt = processTextWithRules(finalPrompt, PLACEMENT_MAP.PROMPT_HISTORY, 'regular');
             finalPrompt += `\n\{\{setvar::玩家输入::${fullUserContentForAI}\}\}`;
             frMainPromptWatch();
-            frPreparedMain={geographyContext,systemNotificationsForThinking,initialState,logsForPrompt,worldBookContext,finalPrompt,
+            frPreparedMain={geographyContext,systemNotificationsForThinking,initialState,logsForPrompt,worldBookContext,finalPrompt,openingStart,
               worldviewTrace:frWorldviewTurn?.trace,canonGuidance:frCanonGuidanceSnapshot(ceCanonGuidanceBlock,frTurnController.signal)};
             if(!isSummaryRequest&&!isHiddenSystem&&userLogData)frFailedMainPrompt={archiveName:currentArchiveName,userLogId:userLogData.id,userLogContent:userLogData.content,input:cleanMessageText,stateText:JSON.stringify(currentState),actionsText:JSON.stringify(actionQueue),editRevision:frMainPromptEditRevision,bundle:frPreparedMain};
             }
@@ -178630,6 +178839,13 @@ if (worldBookContext) {
             }
             frMainStage='正文正则与内容解析';
             let processedResponse = processTextWithRules(correctedApiResponse, PLACEMENT_MAP.AI_OUTPUT, 'chain');
+            let openingClock = '';
+            if (frPreparedMain.openingStart) {
+              const reconciledOpening = ceFrCorrectOpeningStoryDate(processedResponse, frPreparedMain.openingStart);
+              openingClock = reconciledOpening !== processedResponse ? frPreparedMain.openingStart
+                : ceFrOpeningAdoptedStartDate(processedResponse, frPreparedMain.openingStart);
+              processedResponse = reconciledOpening;
+            }
             let {
               thinkingContent,
               tableThinkContent,
@@ -178935,7 +179151,7 @@ if(frGeneratedStory){frGeneratedStory.content=processedHtmlContent;frGeneratedSt
 const frCanonTimingEnabled=(await ceBridgeLoadConfig()).enabled!==false;
 if(frCanonTimingEnabled){timers.canon={label:'原著补演',startTime:Date.now(),endTime:null,charCount:0,active:true};renderTimers();}
 if(typeof frPrepareRequiredCanonBoundary==='function'){
-  frEarlyPreparation=await frPrepareRequiredCanonBoundary({storyText:finalStoryContentForDisplay,userInput:cleanMessageText||'',logId:newLogId,signal:frTurnController.signal,adoptedFloor:frGeneratedStory});
+  frEarlyPreparation=await frPrepareRequiredCanonBoundary({storyText:finalStoryContentForDisplay,userInput:cleanMessageText||'',openingStart:openingClock,logId:newLogId,signal:frTurnController.signal,adoptedFloor:frGeneratedStory});
 }
 frMainStage='变量与状态保存';
 if(frGeneratedStory)frGeneratedStory.stage=frMainStage;
@@ -179530,7 +179746,7 @@ try {
               }
 
               await applyVariableAndUiUpdates(
-                variableResult.delta,
+                openingClock ? ceFrOpeningStoryDelta(variableResult.delta, finalStoryContentForDisplay, currentState) : variableResult.delta,
                 variableResult.smallSummary,
                 variableResult.largeSummary,
                 initialState,

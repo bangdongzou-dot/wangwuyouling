@@ -1,0 +1,181 @@
+/* Scoped warm ink / brass settings. Modal body is the only page scroller. */
+/* Chat actions sit above the legacy overlay; keep them behind this modal. */
+body:has(#concurrent-evolution-settings-overlay.fr-evolution-settings.visible) #chat-view > :is(#variable-diff-btn,#thinking-log-btn,#world-evolution-diff-btn,#fr-canon-story-btn) { visibility:hidden; pointer-events:none; }
+#concurrent-evolution-settings-overlay.fr-evolution-settings { --fe-bg:var(--fr-ui-panel); --fe-card:var(--fr-ui-raised); --fe-input:var(--fr-ui-inset); --fe-line:var(--fr-ui-line); --fe-gold:var(--fr-ui-accent); --fe-text:var(--fr-ui-text); --fe-muted:var(--fr-ui-muted); padding:20px; box-sizing:border-box; }
+.fr-evolution-settings .concurrent-evolution-settings { width:min(1000px,100%); max-width:1000px; max-height:calc(100dvh - 40px); padding:0; display:flex; flex-direction:column; overflow:hidden; background:var(--fe-bg); color:var(--fe-text); border:1px solid var(--fe-line); border-radius:16px; box-shadow:0 24px 90px #0008; }
+.fr-evolution-settings .modal-header,.fr-evolution-settings .modal-footer { flex:none; padding:18px 24px; background:var(--fe-card); border-color:var(--fe-line); }
+.fr-evolution-settings .modal-header h3 { color:var(--fe-gold); font-size:20px; letter-spacing:.04em; margin:0; }
+.fr-evolution-settings .modal-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.fr-evolution-settings .modal-header .modal-close-btn { position:static; width:44px; height:44px; flex:0 0 44px; transform:none; margin:0; }
+.fr-evolution-settings .modal-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:24px; scrollbar-color:#9b7c4b var(--fe-bg); overscroll-behavior:contain; }
+.fr-evolution-settings * { box-sizing:border-box; }
+.fr-evolution-settings [hidden] { display:none!important; }
+.fr-evolution-settings .fr-evo-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); flex:none; padding:6px 18px 0; gap:4px; background:var(--fe-card); border-bottom:1px solid var(--fe-line); }
+.fr-evolution-settings button.fr-evo-tab { border:0; border-bottom:3px solid transparent; border-radius:6px 6px 0 0; background:transparent; color:var(--fe-muted); padding:12px 8px; font-size:15px; min-height:48px; }
+.fr-evolution-settings button.fr-evo-tab[aria-selected=true] { color:var(--fe-gold); background:var(--fr-ui-selected); border-bottom-color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-panel-title { font-size:23px; color:var(--fe-text); margin:0 0 6px; text-align:left; }
+.fr-evolution-settings .fr-evo-panel-description { color:var(--fe-muted); margin:0 0 22px; }
+.fr-evolution-settings .settings-section { background:var(--fe-card); border:1px solid var(--fe-line); border-radius:12px; padding:20px; margin:0 0 16px; min-width:0; }
+.fr-evolution-settings .settings-section h4 { color:var(--fe-gold); font-size:17px; margin:0 0 15px; text-align:left; }
+.fr-evolution-settings p,.fr-evolution-settings label { line-height:1.65; }
+.fr-evolution-settings .hint,.fr-evolution-settings .evo-freq-warning,.fr-evolution-settings .fr-evo-meta { color:var(--fe-muted); font-size:13px; line-height:1.7; overflow-wrap:anywhere; opacity:1; }
+.fr-evolution-settings .evo-freq-warning { border-left:2px solid #b48a47; padding-left:12px; }
+.fr-evolution-settings button,.fr-evolution-settings input:not([type=checkbox]):not([type=radio]),.fr-evolution-settings select { min-height:44px; font-size:14px; }
+.fr-evolution-settings button { cursor:pointer; min-width:44px; white-space:normal; overflow-wrap:anywhere; }
+.fr-evolution-settings button:disabled { opacity:.5; cursor:not-allowed; }
+.fr-evolution-settings :is(button,input,select,textarea,summary):focus-visible { outline:2px solid #f8d991; outline-offset:3px; }
+.fr-evolution-settings :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { background:var(--fe-input); color:var(--fe-text); border:1px solid var(--fe-line); border-radius:7px; max-width:100%; padding:10px 12px; }
+.fr-evolution-settings input:is([type=checkbox],[type=radio]) { accent-color:var(--fe-gold); flex:none; width:19px; height:19px; }
+.fr-evolution-settings .toggle-label { min-height:44px; gap:10px; display:flex; align-items:center; }
+.fr-evolution-settings .small-btn { border:1px solid var(--fe-line); background:var(--fr-ui-selected); color:var(--fe-text); border-radius:7px; padding:8px 14px; }
+.fr-evolution-settings .primary-btn { background:var(--fr-ui-action); color:var(--fr-ui-action-text); border:1px solid var(--fr-ui-action); font-weight:700; border-radius:7px; padding:10px 22px; }
+.fr-evolution-settings .input-row { display:flex; flex-wrap:wrap; gap:16px; }
+.fr-evolution-settings .input-group { min-width:0; flex:1 1 180px; }
+.fr-evolution-settings .input-group label { display:block; margin-bottom:6px; }
+.fr-evolution-settings .input-group select,.fr-evolution-settings .input-group input:not([type=checkbox]):not([type=radio]) { width:100%; }
+.fr-evolution-settings .preset-buttons,.fr-evolution-settings .test-buttons,.fr-evolution-settings .focus-evo-controls { display:flex; flex-wrap:wrap; gap:8px; }
+.fr-evolution-settings .fr-evo-original-mode { display:none!important; }
+.fr-evolution-settings #concurrent-evo-merged-settings > h4 { display:none; }
+.fr-evolution-settings .fr-evo-mode-cards { border:0; padding:0; margin:0 0 16px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.fr-evolution-settings .fr-evo-mode-cards legend { color:var(--fe-gold); font-size:17px; font-weight:700; margin-bottom:14px; }
+.fr-evolution-settings .fr-evo-mode-card { display:flex; align-items:flex-start; gap:12px; border:1px solid var(--fe-line); background:var(--fe-input); padding:18px; border-radius:10px; cursor:pointer; min-height:132px; }
+.fr-evolution-settings .fr-evo-mode-card:has(input:checked) { border-color:var(--fe-gold); background:var(--fr-ui-selected); box-shadow:inset 0 0 0 1px var(--fe-gold); }
+.fr-evolution-settings .fr-evo-mode-words { display:flex; flex-direction:column; gap:8px; }
+.fr-evolution-settings .fr-evo-mode-words strong { font-size:18px; color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-mode-words span,.fr-evolution-settings .fr-evo-mode-words small { color:var(--fe-muted); font-size:13px; }
+.fr-evolution-settings .fr-evo-preset-filters { display:flex; gap:8px; margin-bottom:16px; }
+.fr-evolution-settings .fr-evo-filter { padding:8px 18px; border:1px solid var(--fe-line); border-radius:8px; background:var(--fe-bg); color:var(--fe-muted); }
+.fr-evolution-settings .fr-evo-filter[aria-pressed=true] { color:var(--fe-gold); background:var(--fr-ui-selected); border-color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-preset-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
+.fr-evolution-settings .fr-evo-preset-card { display:flex; flex-wrap:wrap; align-content:start; text-align:left; gap:8px; padding:16px; background:var(--fe-bg); color:var(--fe-text); border:1px solid var(--fe-line); border-radius:10px; }
+.fr-evolution-settings .fr-evo-preset-card strong { width:100%; font-size:16px; }
+.fr-evolution-settings .fr-evo-preset-card[aria-pressed=true] { background:var(--fr-ui-selected); border-color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-badge { color:var(--fe-gold); border:1px solid var(--fe-line); border-radius:5px; padding:2px 7px; font-size:12px; }
+.fr-evolution-settings .fr-evo-preset-detail { border-top:1px solid var(--fe-line); padding-top:20px; overflow-wrap:anywhere; }
+.fr-evolution-settings .fr-evo-rule-chips { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.fr-evolution-settings .fr-evo-rule-chip { color:var(--fe-gold); background:var(--fr-ui-selected); border:1px solid var(--fe-line); border-radius:24px; padding:8px 16px; }
+.fr-evolution-settings .fr-evo-rule-chip small { color:var(--fe-muted); }
+.fr-evolution-settings details { border-top:1px solid var(--fe-line); padding:8px 0; }
+.fr-evolution-settings summary { min-height:44px; padding:10px 4px; cursor:pointer; color:var(--fe-gold); overflow-wrap:anywhere; }
+.fr-evolution-settings pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--fe-input); padding:14px; border-radius:7px; font-size:13px; line-height:1.6; }
+.fr-evolution-settings .fr-evo-status { color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-rule-dialog { width:min(960px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); padding:24px; background:var(--fe-bg); color:var(--fe-text); border:1px solid var(--fe-gold); border-radius:12px; overflow-y:auto; }
+.fr-evolution-settings .fr-evo-rule-dialog::backdrop { background:#000b; }
+.fr-evolution-settings .fr-evo-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.fr-evolution-settings .fr-evo-dialog-header h3 { margin:0; color:var(--fe-gold); font-size:18px; }
+.fr-evolution-settings .fr-evo-rule-editor { display:grid; grid-template-columns:220px minmax(0,1fr); gap:18px; margin-top:18px; }
+.fr-evolution-settings .fr-evo-rule-list { display:flex; flex-direction:column; gap:6px; max-height:440px; overflow-y:auto; }
+.fr-evolution-settings .fr-evo-rule-row { flex:none; text-align:left; color:var(--fe-text); background:var(--fe-card); border:1px solid var(--fe-line); padding:10px; border-radius:6px; }
+.fr-evolution-settings .fr-evo-rule-row[aria-pressed=true] { background:#574127; border-color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-rule-content { min-width:0; }
+.fr-evolution-settings .fr-evo-rule-content textarea { display:block; width:100%; resize:vertical; font-size:14px; line-height:1.7; min-height:300px; }
+.fr-evolution-settings .fr-evo-rule-label { display:block; font-weight:700; color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-dialog-footer { display:flex; justify-content:flex-end; margin-top:18px; }
+@media(max-width:600px) {
+  #concurrent-evolution-settings-overlay.fr-evolution-settings { padding:8px; }
+  .fr-evolution-settings .concurrent-evolution-settings { max-height:calc(100dvh - 16px); border-radius:12px; }
+  .fr-evolution-settings .modal-header,.fr-evolution-settings .modal-footer { padding:14px; }
+  .fr-evolution-settings .modal-header h3 { font-size:18px; }
+  .fr-evolution-settings .modal-body { padding:14px; }
+  .fr-evolution-settings .fr-evo-tabs { grid-template-columns:repeat(2,minmax(0,1fr)); padding:4px 8px 0; }
+  .fr-evolution-settings button.fr-evo-tab { font-size:14px; padding:10px 4px; }
+  .fr-evolution-settings .settings-section { padding:14px; }
+  .fr-evolution-settings .fr-evo-mode-cards,.fr-evolution-settings .fr-evo-preset-cards { grid-template-columns:minmax(0,1fr); }
+  .fr-evolution-settings .fr-evo-mode-card { min-height:115px; padding:14px; }
+  .fr-evolution-settings .fr-evo-rule-editor { grid-template-columns:minmax(0,1fr); }
+  .fr-evolution-settings .fr-evo-rule-list { max-height:170px; }
+  .fr-evolution-settings .fr-evo-rule-dialog { padding:16px; }
+  .fr-evolution-settings .toggle-label { flex-wrap:wrap; }
+}
+
+/* Information hierarchy: state → decision → detail. All controls remain native. */
+.fr-evolution-settings .concurrent-evolution-settings { background:var(--fe-bg); box-shadow:0 24px 100px #000b,inset 0 1px #f4d6a022; }
+.fr-evolution-settings .modal-header { padding:20px 26px 15px; background:transparent; border-bottom:0; }
+.fr-evolution-settings .modal-header h3 { font-size:21px; font-weight:650; letter-spacing:.08em; }
+.fr-evolution-settings .modal-header .modal-close-btn { border-radius:50%; border:1px solid var(--fe-line); color:var(--fe-muted); background:var(--fe-card); }
+.fr-evolution-settings .fr-evo-tabs { background:transparent; padding:0 24px 0; gap:18px; }
+.fr-evolution-settings button.fr-evo-tab { border-radius:0; padding:14px 4px; letter-spacing:.04em; font-weight:600; }
+.fr-evolution-settings button.fr-evo-tab[aria-selected=true] { background:transparent; border-bottom-color:var(--fe-gold); }
+.fr-evolution-settings .modal-body { padding:26px; }
+.fr-evolution-settings .fr-evo-panel-title { font-size:24px; font-weight:650; letter-spacing:.03em; }
+.fr-evolution-settings .fr-evo-panel-description { margin-top:8px; margin-bottom:24px; font-size:14px; }
+.fr-evolution-settings .settings-section { padding:22px; border-color:var(--fe-line); background:var(--fe-card); margin-bottom:18px; border-radius:12px; box-shadow:0 3px 10px #0002; }
+.fr-evolution-settings .settings-section h4 { font-size:16px; letter-spacing:.04em; margin-bottom:16px; }
+.fr-evolution-settings .hint { margin:6px 0 14px; }
+.fr-evolution-settings .fr-evo-running { position:relative; padding:20px 22px; border-color:var(--fe-gold); background:var(--fr-ui-selected); }
+.fr-evolution-settings .fr-evo-running h4 { margin:0 0 3px; color:var(--fe-muted); font-size:12px; letter-spacing:.12em; }
+.fr-evolution-settings .fr-evo-running .fr-evo-master-toggle { justify-content:space-between; gap:18px; margin:0; font-size:18px; font-weight:600; color:var(--fe-text); }
+.fr-evolution-settings .fr-evo-master-toggle input { order:2; }
+.fr-evolution-settings .fr-evo-running .evo-freq-warning { border:0; margin:5px 60px 0 0; padding:0; font-size:12px; }
+.fr-evolution-settings .fr-evo-mode-cards { gap:14px; }
+.fr-evolution-settings .fr-evo-mode-cards legend { font-size:16px; letter-spacing:.04em; }
+.fr-evolution-settings .fr-evo-mode-card { position:relative; border-color:var(--fe-line); padding:20px 18px; min-height:140px; background:var(--fe-input); transition:border-color .16s ease,background-color .16s ease; }
+.fr-evolution-settings .fr-evo-mode-card:has(input:checked) { background:var(--fr-ui-selected); border-color:var(--fe-gold); box-shadow:inset 0 0 0 1px #e3bd7466; }
+.fr-evolution-settings .fr-evo-mode-words strong { font-size:19px; }
+.fr-evolution-settings .fr-evo-mode-words small { margin-top:5px; font-size:12px; color:#d7c7af; }
+.fr-evolution-settings .fr-evo-mode-card input[type=radio] { appearance:none; -webkit-appearance:none; border:1px solid #c7a46b; background:var(--fe-input); width:19px; height:19px; border-radius:50%; margin-top:3px; }
+.fr-evolution-settings .fr-evo-mode-card input[type=radio]:checked { background:radial-gradient(circle,#e5be73 0 5px,#2a2118 6px); }
+.fr-evolution-settings .toggle-label { padding:4px 0; margin-bottom:4px; color:var(--fe-text); }
+.fr-evolution-settings .toggle-label input.fr-evo-switch[type=checkbox] { appearance:none; -webkit-appearance:none; display:inline-block; position:relative; width:42px; height:24px; min-width:42px; margin:0; border-radius:20px; border:1px solid #9c8057; background:#191612; cursor:pointer; transition:background-color .16s ease,border-color .16s ease; }
+.fr-evolution-settings .toggle-label input.fr-evo-switch[type=checkbox]::before { content:''; position:absolute; left:3px; top:3px; height:16px; width:16px; border-radius:50%; background:#c8b798; box-shadow:0 1px 4px #0006; transition:transform .16s ease,background-color .16s ease; }
+.fr-evolution-settings .toggle-label input.fr-evo-switch[type=checkbox]:checked { background:#d9b56c; border-color:#efd08a; }
+.fr-evolution-settings .toggle-label input.fr-evo-switch[type=checkbox]:checked::before { transform:translateX(18px); background:#2b2117; }
+.fr-evolution-settings .toggle-label input.fr-evo-switch[type=checkbox]:disabled { opacity:.45; cursor:not-allowed; }
+.fr-evolution-settings .fr-evo-stage-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.fr-evolution-settings .fr-evo-stage-controls > h4,.fr-evolution-settings .fr-evo-stage-controls > p { grid-column:1/-1; margin:0; }
+.fr-evolution-settings label.fr-evo-stage-card { display:flex; justify-content:space-between; align-items:center; min-width:0; padding:18px; border:1px solid var(--fe-line); border-radius:10px; background:var(--fe-input); gap:14px; }
+.fr-evolution-settings .fr-evo-stage-card:has(input:checked) { border-color:var(--fe-gold); background:var(--fr-ui-selected); }
+.fr-evolution-settings .fr-evo-stage-words { display:flex; flex-direction:column; gap:7px; }
+.fr-evolution-settings .fr-evo-stage-words strong { font-size:16px; }
+.fr-evolution-settings .fr-evo-stage-words small { color:var(--fe-muted); font-size:12px; line-height:1.6; font-weight:400; }
+.fr-evolution-settings details.fr-evo-disclosure { padding:0; margin:0 0 18px; border:1px solid var(--fe-line); border-radius:10px; background:var(--fe-card); overflow:hidden; }
+.fr-evolution-settings .fr-evo-disclosure > summary { padding:17px 20px; min-height:56px; font-size:14px; font-weight:600; color:var(--fe-text); }
+.fr-evolution-settings .fr-evo-disclosure > summary small { display:block; color:var(--fe-muted); font-size:12px; font-weight:400; margin-top:4px; }
+.fr-evolution-settings .fr-evo-disclosure[open] > summary { border-bottom:1px solid var(--fe-line); color:var(--fe-gold); }
+.fr-evolution-settings .fr-evo-disclosure > .settings-section { border:0; border-radius:0; background:transparent; box-shadow:none; margin:0; }
+.fr-evolution-settings .fr-evo-disclosure > .settings-section > h4 { display:none; }
+.fr-evolution-settings .fr-evo-advanced { margin-top:16px; }
+.fr-evolution-settings .fr-evo-advanced > .input-row,.fr-evolution-settings .fr-evo-advanced > .toggle-label,.fr-evolution-settings .fr-evo-advanced > .hint { margin:14px 18px; }
+.fr-evolution-settings .input-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.fr-evolution-settings .fr-evo-retry-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.fr-evolution-settings .input-group { margin:0; }
+.fr-evolution-settings .input-group label { font-size:13px; color:var(--fe-muted); }
+.fr-evolution-settings .fr-evo-retry-grid > .input-group > label { display:flex; flex-direction:column; gap:8px; margin:0; }
+.fr-evolution-settings .input-row input { width:100%; }
+.fr-evolution-settings .fr-evo-error-policy { border-left:3px solid var(--fe-gold); }
+.fr-evolution-settings .fr-evo-preset-cards { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.fr-evolution-settings .fr-evo-preset-card { padding:18px 14px; gap:10px; min-height:126px; }
+.fr-evolution-settings .fr-evo-preset-card strong { color:var(--fe-text); font-size:17px; }
+.fr-evolution-settings .fr-evo-preset-detail { padding-top:24px; margin-top:24px; }
+.fr-evolution-settings .fr-evo-preset-detail > p { max-width:72ch; }
+.fr-evolution-settings .fr-evo-rule-chips { gap:10px; margin:20px 0; }
+.fr-evolution-settings .fr-evo-rule-chip { padding:9px 16px; border-radius:8px; background:var(--fr-ui-selected); border-color:var(--fe-line); }
+.fr-evolution-settings .fr-evo-compatibility { color:var(--fe-muted); }
+.fr-evolution-settings .fr-evo-compatibility > summary { color:var(--fe-muted); font-size:13px; }
+.fr-evolution-settings .fr-evo-footer-note { margin:0 auto 0 0; color:var(--fe-muted); font-size:12px; }
+.fr-evolution-settings .modal-footer { display:flex; justify-content:flex-end; align-items:center; gap:16px; padding:16px 26px; background:var(--fe-input); }
+@media(max-width:800px) {
+  .fr-evolution-settings .fr-evo-preset-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .fr-evolution-settings .fr-evo-retry-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  .fr-evolution-settings .modal-header { padding:14px 16px 10px; }
+  .fr-evolution-settings .modal-header h3 { font-size:18px; }
+  .fr-evolution-settings .fr-evo-tabs { padding:0 14px; gap:0 14px; }
+  .fr-evolution-settings button.fr-evo-tab { padding:11px 2px; }
+  .fr-evolution-settings .modal-body { padding:18px 14px; }
+  .fr-evolution-settings .fr-evo-panel-title { font-size:21px; }
+  .fr-evolution-settings .settings-section { padding:18px 15px; }
+  .fr-evolution-settings .fr-evo-running .evo-freq-warning { margin-right:0; }
+  .fr-evolution-settings .fr-evo-mode-card { min-height:128px; }
+  .fr-evolution-settings .fr-evo-stage-controls,.fr-evolution-settings .input-row,.fr-evolution-settings .fr-evo-retry-grid { grid-template-columns:minmax(0,1fr); }
+  .fr-evolution-settings .fr-evo-stage-card { flex-wrap:nowrap; }
+  .fr-evolution-settings .fr-evo-preset-card { padding:14px 10px; }
+  .fr-evolution-settings .fr-evo-preset-card strong { font-size:16px; }
+  .fr-evolution-settings .fr-evo-disclosure > summary { padding:15px; }
+  .fr-evolution-settings .modal-footer { padding:14px 16px; }
+  .fr-evolution-settings .modal-footer .primary-btn { padding:10px 16px; }
+}
+@media(prefers-reduced-motion:reduce) { .fr-evolution-settings * { transition:none!important; } }
+.fr-evolution-settings .fr-evo-preset-card:disabled { opacity:.4;filter:saturate(.2);cursor:not-allowed;box-shadow:none;border-color:#746b583d; }
+.fr-evolution-settings .fr-evo-preset-card:disabled:hover { transform:none; }
