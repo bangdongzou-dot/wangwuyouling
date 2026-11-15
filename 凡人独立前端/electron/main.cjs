@@ -122,6 +122,8 @@ const WEB_DIR = () => path.join(app.getPath('userData'), 'web');
 const WEB_HTML = () => path.join(WEB_DIR(), 'index.html');
 const WEB_HTML_BAK = () => path.join(WEB_DIR(), 'index.html.bak');
 const WEB_META = () => path.join(WEB_DIR(), 'active.json');
+const WEB_META_BAK = () => path.join(WEB_DIR(), 'active.json.bak');
+const BUILTIN_HTML = path.join(__dirname, '..', 'dist', 'index.html');
 
 function ensureWebDir() {
   const d = WEB_DIR();
@@ -129,49 +131,48 @@ function ensureWebDir() {
   return d;
 }
 
-/* 读出当前生效的版本信息。
- *   有外部热更文件 → 用 active.json 里记的版本
- *   没有 → 用内置版本
- *
- * ★ 2026-11-01：两个分支都要给出 **sha256 身份指纹**。
- *   否则「版本号相同但内容不同」的判定在「还没热更过、用的是内置包」时失效。
- */
-function readActiveInfo() {
-  const html = WEB_HTML();
-  if (fs.existsSync(html)) {
-    let ver = BUILTIN_VERSION;
-    let sha = '';
-    let notes = '';
-    let localCandidate = false;
+function readHotInfo(html, metaPath) {
+  try {
+    if (!fs.existsSync(html) || fs.statSync(html).size <= 1024 * 1024) return null;
+    const header = Buffer.alloc(1024);
+    const fd = fs.openSync(html, 'r');
+    let length;
     try {
-      const meta = JSON.parse(fs.readFileSync(WEB_META(), 'utf8'));
-      if (meta && meta.version) ver = String(meta.version);
-      if (meta && meta.sha256) sha = String(meta.sha256);
-      if (meta && meta.notes) notes = String(meta.notes);
-      if (meta) localCandidate = meta.localCandidate === true;
-    } catch (e) { /* 元数据坏了不影响加载，只是版本号不准 */ }
-    // active.json 是老版本写的、没记 sha256 时，用内置指纹兜底：
-    // 至少能判断「本地这份和远端那份是不是同一个包」
-    if (!sha && BUILTIN_SHA256) sha = BUILTIN_SHA256;
-    return { source: 'hot', version: ver, sha256: sha, notes, path: html, localCandidate };
+      length = fs.readSync(fd, header, 0, header.length, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const stamp = header.toString('utf8', 0, length)
+      .match(/<!--\s*凡人卡独立前端\s*·\s*build\s+[\d\-T:.Z]+\s*·\s*v?([\d.]+)\s*-->/)?.[1];
+    let meta;
+    try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_) {}
+    const metadataMatches = !stamp || stamp === meta?.version;
+    return {
+      version: stamp || String(meta?.version || BUILTIN_VERSION),
+      sha256: (metadataMatches && meta?.sha256) || sha256(fs.readFileSync(html)),
+      notes: metadataMatches ? String(meta?.notes || '') : '',
+      localCandidate: metadataMatches && meta?.localCandidate === true,
+      installedAt: metadataMatches ? meta?.installedAt : undefined,
+    };
+  } catch (error) {
+    console.error('[热更新] 检查外部文件失败:', error.message);
+    return null;
   }
-  return { source: 'builtin', version: BUILTIN_VERSION, sha256: BUILTIN_SHA256, notes: '', path: '' };
 }
 
-/* 决定这次启动加载哪个 html。外部文件存在且大小合理就用它。 */
-function resolveEntry() {
+// 选择启动文件与检查更新时使用同一个版本身份。同版本仍优先热更修正。
+function readActiveInfo() {
   const html = WEB_HTML();
-  try {
-    if (fs.existsSync(html)) {
-      const st = fs.statSync(html);
-      // 11 MB 左右的单文件，小于 1 MB 基本可以断定是坏文件
-      if (st.size > 1024 * 1024) return html;
-      console.error('[热更新] 外部文件过小，判定损坏，回退内置:', st.size);
-    }
-  } catch (e) {
-    console.error('[热更新] 检查外部文件失败，回退内置:', e && e.message);
-  }
-  return path.join(__dirname, '..', 'dist', 'index.html');
+  const hot = readHotInfo(html, WEB_META());
+  if (hot && compareVersion(hot.version, BUILTIN_VERSION) >= 0)
+    return { ...hot, source: 'hot', path: html };
+  return { source: 'builtin', version: BUILTIN_VERSION, sha256: BUILTIN_SHA256, notes: '', path: BUILTIN_HTML };
+}
+
+function writeUpdateMetadata(file, { version, sha256, notes, installedAt, localCandidate }) {
+  fs.writeFileSync(file, JSON.stringify({
+    version, sha256, notes, installedAt, ...(localCandidate ? { localCandidate } : {}),
+  }, null, 2), 'utf8');
 }
 
 // ---------------------------------------------------------------------------
@@ -735,8 +736,17 @@ async function downloadAndApply(onProgress) {
 
     // 先把当前生效的那份备份起来，新版本起不来时能回滚
     const html = WEB_HTML();
-    if (fs.existsSync(html)) {
-      try { fs.copyFileSync(html, WEB_HTML_BAK()); } catch (e) {}
+    try {
+      const active = readActiveInfo();
+      fs.rmSync(WEB_META_BAK(), { force: true });
+      if (active.source === 'hot') {
+        fs.copyFileSync(html, WEB_HTML_BAK());
+        writeUpdateMetadata(WEB_META_BAK(), active);
+      } else {
+        fs.rmSync(WEB_HTML_BAK(), { force: true });
+      }
+    } catch (error) {
+      logWindowFailure('update-backup-failed', { message: String(error.code || error.message) });
     }
 
     // 写临时文件再原子替换，避免下到一半断电留下半个文件
@@ -745,12 +755,12 @@ async function downloadAndApply(onProgress) {
     fs.renameSync(tmp, html);
 
     // 版本元数据
-    fs.writeFileSync(WEB_META(), JSON.stringify({
+    writeUpdateMetadata(WEB_META(), {
       version: info.version,
       sha256: info.sha256 || sha256(buf),
       notes: info.notes || '',
       installedAt: new Date().toISOString(),
-    }, null, 2), 'utf8');
+    });
 
     updateState.available = null;
     updateState.progress = 100;
@@ -776,24 +786,25 @@ async function downloadAndApply(onProgress) {
   }
 }
 
-/* 回滚：把备份恢复回来，删掉坏的新版本 */
-function rollback() {
+/* 回滚时恢复同一份 HTML 和版本身份。选到哪一份就继续加载哪一份。 */
+function rollback(restoreBackup = true) {
   try {
     const bak = WEB_HTML_BAK();
-    if (fs.existsSync(bak)) {
+    const prior = restoreBackup && readHotInfo(bak, WEB_META_BAK());
+    if (prior && compareVersion(prior.version, BUILTIN_VERSION) >= 0) {
       fs.copyFileSync(bak, WEB_HTML());
-      try { fs.unlinkSync(WEB_META()); } catch (e) {}
+      writeUpdateMetadata(WEB_META(), prior);
       console.error('[热更新] 已回滚到上一版');
-      return true;
+      return WEB_HTML();
     }
-    // 没有备份就把热更文件删掉，下次启动用内置版本
-    try { fs.unlinkSync(WEB_HTML()); } catch (e) {}
-    try { fs.unlinkSync(WEB_META()); } catch (e) {}
-    console.error('[热更新] 无备份，已删除热更文件，回到内置版本');
-    return true;
+    fs.rmSync(WEB_HTML(), { force: true });
+    fs.rmSync(WEB_META(), { force: true });
+    console.error('[热更新] 已回到内置版本');
+    return BUILTIN_HTML;
   } catch (e) {
+    logWindowFailure('update-rollback-failed', { code: e.code, message: e.message });
     console.error('[热更新] 回滚失败:', e && e.message);
-    return false;
+    return null;
   }
 }
 
@@ -834,10 +845,23 @@ function createMainWindow() {
   Menu.setApplicationMenu(null);
 
   // 优先外部热更文件，回退内置
-  const entry = resolveEntry();
-  const isHot = entry === WEB_HTML();
-  console.log('[启动] 加载:', isHot ? '热更新版本' : '内置版本', entry);
-  mainWindow.loadFile(entry);
+  const active = readActiveInfo();
+  let entry = active.path;
+  let recovering = false;
+  let restoredHot = false;
+  console.log('[启动] 加载:', active.source === 'hot' ? '热更新版本' : '内置版本', entry);
+  async function recoverHotEntry() {
+    const win = mainWindow;
+    if (recovering || entry !== WEB_HTML() || !win || win.isDestroyed()) return;
+    recovering = true;
+    // Windows 可能仍锁着加载失败的文件。先结束该页面的读取，再恢复磁盘上的版本。
+    await win.loadURL('about:blank').catch(() => {});
+    if (win.isDestroyed()) return;
+    entry = rollback(!restoredHot) || BUILTIN_HTML;
+    restoredHot = entry === WEB_HTML();
+    recovering = false;
+    win.loadFile(entry).catch(() => {});
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -908,14 +932,7 @@ function createMainWindow() {
       }).catch(error => logWindowFailure('oom-recovery-failed', { message: String(error && error.message || error) }));
       return;
     }
-    if (isHot && rollback()) {
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-          return;
-        }
-      } catch (er) {}
-    }
+    recoverHotEntry();
   });
 
   // 页面加载失败 → 同上回滚
@@ -924,14 +941,9 @@ function createMainWindow() {
     // Story iframes fail independently; aborted navigation also isn't a corrupt update.
     if (isMainFrame !== true || code === -3) return;
     console.error('[启动] 页面加载失败:', code, desc, url);
-    if (isHot && rollback()) {
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-        }
-      } catch (er) {}
-    }
+    recoverHotEntry();
   });
+  mainWindow.loadFile(entry).catch(() => {});
 
   // 外链走系统浏览器，不在游戏窗口里打开
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -990,7 +1002,7 @@ ipcMain.handle('fr-update:apply', async () => {
   return r;
 });
 
-ipcMain.handle('fr-update:rollback', () => ({ ok: rollback() }));
+ipcMain.handle('fr-update:rollback', () => ({ ok: Boolean(rollback()) }));
 
 // ---------------------------------------------------------------------------
 // 生命周期
