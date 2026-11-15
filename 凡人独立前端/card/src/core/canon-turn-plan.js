@@ -291,7 +291,9 @@ export async function prepareCanonTurnPlanBoundary(src={}){
   if(ordinaryUnreachedEventIds.length)turnPlan.ordinaryUnreachedEventIds=ordinaryUnreachedEventIds;
   turnPlan.eventWatches=mergeEventWatches(ledger.eventWatches,[...(storyAnalysis.eventWatches||[]),...(src.activatedEvents||[]).map(row=>({...row,status:'confirmed'}))]);
   turnPlan.watchEvents=referenceEvents.filter(event=>turnPlan.eventWatches.some(row=>row.eventId===codeOf(event))).map(event=>({eventId:codeOf(event),title:event.title}));
-  return routePrebuiltBoundary({ok:true,inputStamp,resolvedInputStamp:canonBoundaryInputStamp({...src,targetTime:range.end}),range,storyAnalysis,turnPlan,analysisActors,candidates,boundaryBackground,retrievalReceipt,ordinaryCandidates:src.ordinaryTargetRefs||[]});
+  return routePrebuiltBoundary({ok:true,inputStamp,resolvedInputStamp:canonBoundaryInputStamp({...src,targetTime:range.end}),range,storyAnalysis,turnPlan,analysisActors,candidates,boundaryBackground,retrievalReceipt,ordinaryCandidates:src.ordinaryTargetRefs||[]},
+    {...ledger,turnNo:ledger.turnNo??Math.max(0,(Number(src.turnNo)||1)-1),lastTurn:src.previousTurn||ledger.lastTurn,
+      eventProgress:progress,mutationNotes:src.mutationNotes||ledger.mutationNotes});
 }
 
 /** 普通阶段已保存的新事实只对实际依赖候选合批复核；不写状态或修改原准备对象。 */

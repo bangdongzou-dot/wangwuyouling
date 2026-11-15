@@ -342,8 +342,41 @@ export function activePrebuiltImpacts(progress) {
   return [...active.values()];
 }
 
+function openingElapsedMarkers(boundary, ledger, products) {
+  const start=parseTimePoint(prebuiltSceneClock(boundary.range?.start));
+  const plan=boundary.turnPlan, analysis=boundary.storyAnalysis;
+  if(start===null||ledger.lastTurn||ledger.turnNo>0||!analysis?.prebuiltExceptions||
+      plan.turnAdvanceTier==='outsideRange')return {};
+  const history={};
+  const blockedEvents=new Set([...(ledger.eventWatches||[]),...(plan.eventWatches||[]),...(analysis.eventWatches||[])]
+    .filter(row=>['suspected','confirmed'].includes(row.status)).map(row=>row.eventId));
+  const affectedNames=new Set((analysis.influences||[]).map(row=>row.name));
+  const exceptions=new Set((analysis.prebuiltNodes||[]).filter(row=>row.status!=='ready').map(row=>row.id));
+  for(const event of boundary.candidates){
+    const code=codeOf(event), span=entrySpan(event), product=products.get(code);
+    if(!product||!span||start<=span.min||start>=span.max||event.timingChange||blockedEvents.has(code)||
+        ledger.eventProgress?.some(row=>row.eventId===code)||ledger.mutationNotes?.some(row=>row.eventId===code)||
+        analysis.eventProgress?.some(row=>row.eventId===code&&
+          (row.timingChange||row.status==='changed'||row.nodes?.some(node=>node.state==='mutated'))))continue;
+    const reached=new Set();
+    for(const node of product.nodes){
+      if(exceptions.has(node.id)||node.dependsOn.some(id=>!reached.has(id))||node.actors.some(name=>affectedNames.has(name))||
+          (plan.decisions||[]).some(row=>row.canonAdvance==='break'&&row.eventIds?.includes(code)&&node.actors.includes(row.name)))break;
+      for(const marker of node.milestones||[node]){
+        const window=nodeTimingWindow(node.at,marker.timing??(marker.id===node.id?node.timing:null));
+        const last=window?.max??entrySpan({time_start:node.at,time_end:node.at})?.max;
+        if(last==null||last>=start||exceptions.has(marker.id))break;
+        reached.add(marker.id);
+      }
+      if(!reached.has(node.id))break;
+    }
+    if(reached.size)history[code]=[...reached];
+  }
+  return history;
+}
+
 // Eligibility is shared by ordinary and prebuilt replay. A matching product is a delivery method, not a task.
-export function routePrebuiltBoundary(boundary) {
+export function routePrebuiltBoundary(boundary, ledger) {
   const candidates=boundary?.candidates || [];
   let plan=boundary?.turnPlan;
   // Older freezes may keep the confirmed tier only in their analysis projection.
@@ -368,6 +401,12 @@ export function routePrebuiltBoundary(boundary) {
   const products=prebuiltBoundaryEvents(candidates);
   const matched=candidates.length>0&&products.length===candidates.length;
   const productsById=new Map(products.map(event=>[event.code,event]));
+  const openingElapsed=matched?(ledger?openingElapsedMarkers(boundary,ledger,productsById):plan.openingElapsed||{}):{};
+  const openingPeople=new Set();
+  for(const [code,markers] of Object.entries(openingElapsed)){
+    progressEvents.add(code);
+    productsById.get(code)?.nodes.filter(node=>markers.includes(node.id)).forEach(node=>node.actors.forEach(name=>openingPeople.add(name)));
+  }
   const endClock=prebuiltSceneClock(boundary.range?.end);
   const sameDay=matched&&products.every(event=>event.formatVersion===6)&&/^sameEvent/u.test(plan.turnAdvanceTier)&&!!endClock&&
     parseTimePoint(boundary.range?.start)!==null&&parseTimePoint(boundary.range.start)>=parseTimePoint(endClock.slice(0,10));
@@ -411,12 +450,13 @@ export function routePrebuiltBoundary(boundary) {
     }
   }
   const progressOnly=progressEvents.size&&!jobs.size&&!analysis.worldEvents?.length;
-  const refs=new Set([...(sameDay||progressOnly?[]:involved),...jobs.values()].flatMap(row=>[row.actorRef,row.name]).concat(plan.deferredRefs));
+  const refs=new Set([...(sameDay||progressOnly?[]:involved),...jobs.values(),
+    ...actors.filter(row=>openingPeople.has(row.name))].flatMap(row=>[row.actorRef,row.name]).concat([...openingPeople],plan.deferredRefs));
   const corridorBranches=(plan.decisions||[]).map(({actorRef,name,canonAdvance,eventIds,sourceRefs,requiredMaterials})=>({
     actorRef,name,eventIds,sourceRefs,requiredMaterials,
     branch:canonAdvance==='needs_context'?'evidence':canonAdvance==='break'?'break':'hold',
   }));
-  plan={...plan,canonJobs:[...jobs.values()],canonOwnedRefs:[...refs],corridorBranches,
+  plan={...plan,openingElapsed,canonJobs:[...jobs.values()],canonOwnedRefs:[...refs],corridorBranches,
     ...(sameDay&&!jobs.size?{mode:progressOnly?'progress_only':'none'}:{}),
     ordinaryTargetRefs:(boundary.ordinaryCandidates||plan.ordinaryTargetRefs||[]).filter(ref=>!refs.has(ref))};
   boundary={...boundary,turnPlan:plan};
@@ -426,7 +466,7 @@ export function routePrebuiltBoundary(boundary) {
   }
   if(!plan.canonJobs.length && !boundary?.storyAnalysis?.worldEvents?.length&&!progressEvents.size)return unrouted();
   if (!matched) return boundary;
-  if(progressOnly)return {...boundary,turnPlan:{...plan,route:'prebuilt',mode:'progress_only',prebuiltMode:'direct',prebuiltActorRefs:[]}};
+  if(progressOnly&&!Object.keys(openingElapsed).length)return {...boundary,turnPlan:{...plan,route:'prebuilt',mode:'progress_only',prebuiltMode:'direct',prebuiltActorRefs:[]}};
   const prebuiltMode=corridorBranches.some(row=>row.branch==='break')||analysis.influences?.length ||
     analysis.prebuiltNodes?.some(row=>['mutated','uncertain'].includes(row.status))?'repair':'direct';
   return {...boundary,turnPlan:{...plan,route:'prebuilt',mode:'prebuilt',prebuiltMode,prebuiltActorRefs:plan.canonOwnedRefs}};
@@ -613,8 +653,11 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
   const worldJobs=new Set((boundary?.storyAnalysis?.worldEvents || []).map(row=>row.code));
   const confirmations=new Map((boundary.storyAnalysis.prebuiltReached||[]).map(row=>[row.id,row]));
   const progressEvents=new Set([...confirmations.values()].map(row=>row.eventId));
+  const openingPositions=new Map(Object.entries(eligibility?.openingElapsed||{}).map(([code,ids])=>[code,new Set(ids)]));
+  for(const code of openingPositions.keys())progressEvents.add(code);
   const crossEvent=eligibility?.turnAdvanceTier==='crossEvent';
-  const wantsActor=(name,code)=>!scoped || jobs.some(job=>job.name===name && (job.eventIds || []).includes(code));
+  const wantsActor=(name,code,nodeId)=>!scoped||openingPositions.get(code)?.has(nodeId)||
+    jobs.some(job=>job.name===name && (job.eventIds || []).includes(code));
   if(scoped && (eligibility.deferredRefs?.length || (!jobs.length&&!worldJobs.size&&!progressEvents.size)))return null;
   const decisions = boundary?.storyAnalysis?.prebuiltNodes;
   const exceptionMode=boundary?.storyAnalysis?.prebuiltExceptions===true;
@@ -635,7 +678,7 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
   const rangeStart=startClock?parseTimePoint(startClock):null;
   const impacts=activePrebuiltImpacts(ledger.eventProgress);
   const missingPointerReason='进度指针尚未确认经过本节点';
-  const pointerPositions=new Map();
+  const pointerPositions=new Map(openingPositions);
   const inferredHistory=new Set();
   const hasModelPointer=Array.isArray(boundary.storyAnalysis.prebuiltThrough);
   if(hasModelPointer||exceptionMode){
@@ -679,7 +722,8 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
           return time&&time.max<cutoff;
         });
       if(hasModelPointer||reachedIndex>=0||cleanHistory||sameDayHistory)
-        pointerPositions.set(code,new Set(cleanHistory||sameDayHistory?markers:markers.slice(0,reachedIndex+1)));
+        pointerPositions.set(code,new Set(cleanHistory||sameDayHistory?markers:
+          [...(openingPositions.get(code)||[]),...markers.slice(0,reachedIndex+1)]));
       if((cleanHistory||sameDayHistory)&&reachedIndex<markers.length-1)inferredHistory.add(code);
     }
   }
@@ -723,7 +767,7 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
     const at=parseTimePoint(node.at);
     if(at===null||at>end)continue;
     for(const person of node.npc){
-      if(!wantsActor(person.name,codeOf(event)))continue;
+      if(!wantsActor(person.name,codeOf(event),node.id))continue;
       const latest=latestActorNode.get(person.name);
       if(!latest||latest.at<=at)latestActorNode.set(person.name,{id:node.id,at});
     }
@@ -754,9 +798,11 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
       const revisiting=new Set(answer?.resolution==='cancelled'?(prior?.actors||[]):[
         ...(answer?.actors||[]),...(answer?.withdrawnActors||[]),
       ]);
-      const npc=originalNode.npc.filter(person=>wantsActor(person.name,data.eventId)&&
+      const opening=openingPositions.get(data.eventId);
+      const elapsedAtOpening=opening?.has(originalNode.id);
+      const npc=originalNode.npc.filter(person=>wantsActor(person.name,data.eventId,originalNode.id)&&
         (!completed.has(person.name)||revisiting.has(person.name)));
-      const worldAllowed=!scoped || crossEvent || worldJobs.has(data.eventId);
+      const worldAllowed=!scoped || crossEvent || worldJobs.has(data.eventId)||elapsedAtOpening;
       const remaining=originalNode.npc.filter(person=>!completed.has(person.name)&&!npc.some(row=>row.name===person.name)).map(person=>person.name);
       const node={...originalNode,npc};
       const explicit = Boolean(answer);
@@ -774,9 +820,11 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
       if(!npc.length&&!worldAllowed){
         const pointer=pointerPositions.get(data.eventId);
         const reachedMilestoneId=node.milestones?.findLast(step=>pointer?.has(step.id)||step.id===prior?.reachedMilestoneId)?.id;
-        if(progressEvents.has(data.eventId)&&!reachedMilestoneId&&!confirmations.has(node.id)&&!prior)continue;
+        if(progressEvents.has(data.eventId)&&!opening&&!reachedMilestoneId&&!confirmations.has(node.id)&&!prior)continue;
         plan.pending.push({code:data.eventId,node:{...originalNode,npc:originalNode.npc.filter(person=>!completed.has(person.name))},world:[],remainingActors:remaining,worldPending:prior?.worldPending===true,
-          reason:reachedMilestoneId&&confirmations.has(reachedMilestoneId)?'已确认阶段进展，本轮无需新增人物补演':'本轮没有这些人物的补演任务',prior,reachedMilestoneId});
+          reason:opening?.has(reachedMilestoneId)?'开局时钟已过该里程碑，节点尚未完成':
+            reachedMilestoneId&&confirmations.has(reachedMilestoneId)?'已确认阶段进展，本轮无需新增人物补演':
+            answer?.reason||(opening?'尚未确认节点已发生':'本轮没有这些人物的补演任务'),prior,reachedMilestoneId});
         states.set(node.id,prior?.prebuilt==='partial'?'partial':'pending');
         if(prior?.prebuilt==='partial')partialDependencies.set(node.id,{all:originalNode.npc.map(person=>person.name),done:[...completed],worldPending:prior.worldPending===true,mutated:Boolean(prior.impact?.actors?.length)});
         continue;
@@ -796,7 +844,8 @@ export function planPrebuiltTurn({ boundary, ledger, characters, beforeStateRows
         answer={status:'pending',reason:answer&&answer.status!=='ready'?answer.reason:missingPointerReason};
       if(!answer&&exceptionMode)answer=future||sameDayGrouped&&!reached||node.timing&&!reached&&eventOpen
         ? {status:'pending',reason:future?'尚未到预制节点日期':'同日合并节点的末项尚未确认'}
-        : {status:'ready',reason:inferredHistory.has(data.eventId)?'实际时钟已经过前序预制节点，边界未发现偏离':'时间已到，边界未发现偏离'};
+        : {status:'ready',reason:elapsedAtOpening?'开局时钟已经过本节点，边界未发现偏离':
+          inferredHistory.has(data.eventId)?'实际时钟已经过前序预制节点，边界未发现偏离':'时间已到，边界未发现偏离'};
       if (!['ready', 'mutated', 'pending','uncertain'].includes(answer?.status) || !text(answer.reason)) return reject(node.id+' 缺少可执行的预制判断');
       if (answer.status === 'ready' && future) return reject(node.id+' 尚未到期却被标为已发生');
       if (node.npc.some(person => player.has(person.name))) return null;
@@ -1793,7 +1842,8 @@ export function buildPrebuiltPayload(plan, end, range) {
     const latest=new Map();
     for (const original of event.prebuilt.nodes) if (reached.has(original.id)) {
       const node=newNodes.get(original.id)?.node||original;
-      for (const person of node.npc) if(!plan.eligibleJobs || plan.eligibleJobs.some(job=>job.name===person.name&&job.eventIds?.includes(code)))latest.set(person.name,{node,person});
+      const openingHistory=plan.eligibility?.openingElapsed?.[code]?.includes(node.id) && newNodes.has(node.id);
+      for (const person of node.npc) if(openingHistory || !plan.eligibleJobs || plan.eligibleJobs.some(job=>job.name===person.name&&job.eventIds?.includes(code)))latest.set(person.name,{node,person});
     }
     for(const row of newNodes.values())if(row.livePrefix)for(const person of row.node.npc)latest.set(person.name,{node:row.node,person});
     const closed=entrySpan(event).max<=parseTimePoint(end) && !plan.pending.some(row=>row.code===code);

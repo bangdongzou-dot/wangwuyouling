@@ -1058,7 +1058,7 @@ export async function runCanonTurn(input) {
       if(!resumed.ok)return finish(CE_TURN_STATUS.boundaryFailed,{trace,range:turnRange,reason:resumed.reason});
       preparedBoundary=resumed;
     }
-    preparedBoundary=routePrebuiltBoundary(preparedBoundary);
+    preparedBoundary=routePrebuiltBoundary(preparedBoundary,ledger);
     const prebuiltRoute=preparedBoundary.turnPlan?.route==='prebuilt';
     if(prebuiltRoute&&!activePrebuiltRepair)activePrebuiltRepair={checkpoint:{},failures:[],requests:[],targets:[{stage:PREBUILT_REPAIR_STAGES.boundary}]};
     // 完整边界是已完成阶段产物，立即更新接续快照；下游抛错不能让它只活在局部变量里。
@@ -1118,7 +1118,7 @@ export async function runCanonTurn(input) {
         if(!nodes)return finish(CE_TURN_STATUS.boundaryFailed,{trace,range:turnRange,
           reason:prebuiltCapacityReason(activePrebuiltRepair.failures)||'预制节点例外尚未核定，已保留本轮预制任务'});
         preparedBoundary=routePrebuiltBoundary({...preparedBoundary,storyAnalysis:{...preparedBoundary.storyAnalysis,
-          prebuiltNodes:nodes,prebuiltExceptions:true,prebuiltUnavailable:false}});
+          prebuiltNodes:nodes,prebuiltExceptions:true,prebuiltUnavailable:false}},ledger);
         continuationInput.preparedBoundary=preparedBoundary;
         rejected='';
         plan=planPrebuiltTurn({boundary:preparedBoundary,ledger,timeline:src.timeline,characters:src.characters,beforeStateRows:src.beforeStateRows,onScene:src.onScene,onReject:reason=>{rejected=reason;}});

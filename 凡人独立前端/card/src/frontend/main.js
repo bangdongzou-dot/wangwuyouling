@@ -16322,17 +16322,15 @@ function filterKnowledgeVectorRecords(allRecordsRaw, knowledgeSearchGlobalConfig
           return '';
         }
 
-        // 检查向量检索配置（使用与 getVectorContext 相同的逻辑）
         const vectorConfig = (await dbGet('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2')) || {};
-        const embedApiUrl = vectorConfig.embeddingUrl || (
-            vectorConfig.apiUrl?.includes('/chat/completions') ?
-            vectorConfig.apiUrl.replace('/chat/completions', '/embeddings') :
-            vectorConfig.apiUrl
-        );
-        const embedApiKey = vectorConfig.embeddingKey || vectorConfig.apiKey;
-
-        if (!embedApiUrl || !embedApiKey) {
-          console.log('[正文优化RAG] 知识库Embedding API未配置（请在"世界档案和向量API设置"中配置），跳过RAG注入');
+        const embedConfig = frResolveVectorRetrievalEmbedding({
+          apiUrl: vectorConfig.embeddingUrl || vectorConfig.apiUrl,
+          apiKey: vectorConfig.embeddingKey || vectorConfig.apiKey,
+          apiModel: vectorConfig.embeddingModel || vectorConfig.apiModel,
+          provider: vectorConfig.provider || 'api',
+        });
+        if (!embedConfig) {
+          console.log('[正文优化RAG] 向量化接口未配置，跳过RAG注入');
           return '';
         }
 
@@ -16413,14 +16411,6 @@ function filterKnowledgeVectorRecords(allRecordsRaw, knowledgeSearchGlobalConfig
           const minSimilarity = parseFloat(vectorConfig.vectorMinScore) || 0.4;
 
           console.log('[正文优化RAG] 向量检索配置:', { topK, injectCount, minSimilarity });
-
-          // 2. 构建 embedding 配置
-          const embedConfig = {
-            apiUrl: vectorConfig.embeddingUrl || vectorConfig.apiUrl,
-            apiKey: vectorConfig.embeddingKey || vectorConfig.apiKey,
-            apiModel: vectorConfig.embeddingModel || vectorConfig.apiModel,
-            provider: vectorConfig.provider || 'api'
-          };
 
           // 3. 从 Dexie 获取向量（过滤过期记录）
           const allVectors = await db.vectors.toArray();
@@ -85725,13 +85715,24 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
         }
 
         // 获取文本向量
+        function frVectorEmbeddingRoutes() {
+          const routes=frApiRoutes('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2','embeddingApiPresetId');
+          if(routes==null)return null;
+          // Existing vectors can only be searched or extended by the same embedding model.
+          return routes.filter(route=>route.apiModel===routes[0]?.apiModel);
+        }
+
+        function frResolveVectorRetrievalEmbedding(config) {
+          const routes=config.provider==='local'?null:frVectorEmbeddingRoutes();
+          if(routes===null)return config.apiUrl&&config.apiKey?{...config,embeddingRoutes:null}:null;
+          return routes.some(route=>route.apiKey)?{embeddingRoutes:routes}:null;
+        }
+
         async function fetchEmbedding(inputData, config, signal) {
           if(config.provider==='local')return fetchEmbeddingOnce(inputData,config,signal);
-          const routes=frApiRoutes('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2','embeddingApiPresetId');
-          if(routes==null)return fetchEmbeddingOnce(inputData,config,signal);
-          // Existing vectors can only be searched or extended by the same embedding model.
-          const matched=routes.filter(route=>route.apiModel===routes[0]?.apiModel);
-          const compatible=typeof frAiPrioritizeRoutes==='function'?frAiPrioritizeRoutes(matched):matched;
+          const routes=config.embeddingRoutes===undefined?frVectorEmbeddingRoutes():config.embeddingRoutes;
+          if(routes===null)return fetchEmbeddingOnce(inputData,config,signal);
+          const compatible=typeof frAiPrioritizeRoutes==='function'?frAiPrioritizeRoutes(routes):routes;
           return CE_CORE['api-library'].runApiChain(compatible,(route,index)=>
             fetchEmbeddingOnce(inputData,{...config,apiUrl:route.apiUrl,apiKey:route.apiKey,apiModel:route.apiModel,route,
               hasNextRoute:index<compatible.length-1},signal),signal);
@@ -87078,16 +87079,17 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
             signal.throwIfAborted();
             const method = knowledgeSearchGlobalConfig.vectorSearchMethod || 'semantic';
 
-            const embedApiUrl =
-              knowledgeSearchGlobalConfig.embeddingUrl ||
-              (knowledgeSearchGlobalConfig.apiUrl?.includes('/chat/completions')
-                ? knowledgeSearchGlobalConfig.apiUrl.replace('/chat/completions', '/embeddings')
-                : null);
-            const embedApiKey = knowledgeSearchGlobalConfig.embeddingKey || knowledgeSearchGlobalConfig.apiKey;
-
-            if (!embedApiUrl || !embedApiKey) {
-              const errorMsg = '⚠️ 向量检索未配置 (URL/Key 缺失)，请在设置中配置Embedding API';
-              searchReceipt('unconfigured',false,false,'原检索Embedding接口未配置');
+            const embedConfig = frResolveVectorRetrievalEmbedding({
+              apiUrl: knowledgeSearchGlobalConfig.embeddingUrl ||
+                (knowledgeSearchGlobalConfig.apiUrl?.includes('/chat/completions')
+                  ? knowledgeSearchGlobalConfig.apiUrl.replace('/chat/completions', '/embeddings')
+                  : null),
+              apiKey: knowledgeSearchGlobalConfig.embeddingKey || knowledgeSearchGlobalConfig.apiKey,
+              apiModel: knowledgeSearchGlobalConfig.embeddingModel || 'text-embedding-3-small',
+            });
+            if (!embedConfig) {
+              const errorMsg = '⚠️ 向量化接口未配置，请在「接口与模型」中分配可用的向量化接口';
+              searchReceipt('unconfigured',false,false,'没有可用的向量化接口');
               updateLogUI(errorMsg);
               return '';
             }
@@ -87368,12 +87370,6 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
             }
             // 每个必需人物都有独立查询；明确归属的现有资料另行保留，不与可选召回竞争名额。
             for(const name of requiredCharacterNames)if(!searchQueries.includes(name))searchQueries.push(name);
-
-            const embedConfig = {
-              apiUrl: embedApiUrl,
-              apiKey: embedApiKey,
-              apiModel: knowledgeSearchGlobalConfig.embeddingModel || 'text-embedding-3-small',
-            };
 
             const uniqueItemsMap = new Map();
             const keywordLogs = {};

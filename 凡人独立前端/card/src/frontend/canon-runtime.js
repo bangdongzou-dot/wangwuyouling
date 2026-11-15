@@ -1389,6 +1389,40 @@ function frCanonEncodeSourceRow(row, original) {
   return result;
 }
 
+function frCanonRecoverPrebuiltResources(row, actor, steps, gaps) {
+  const attributesOf=data=>{
+    let value=data?.['11'];
+    if(typeof value==='string'){
+      try{value=JSON.parse(value);}catch(_){return null;}
+    }
+    return value==null?{}:typeof value==='object'&&!Array.isArray(value)?value:null;
+  };
+  const current=attributesOf(row);
+  if(!current)return row;
+  const first=steps[0];
+  const before=attributesOf(first?.before), productBefore=attributesOf(first?.productBefore);
+  const terminal=attributesOf(actor.terminalColumns);
+  const touches=(op,name)=>op.kind==='attribute'&&op.subject===name;
+  const dead=/死亡|陨落|身死/.test(String(row['4']||''));
+  const result={...current};
+  for(const name of ['血量','法力']){
+    if(!gaps.includes(name+'属性未定义或无效'))continue;
+    const changed=(actor.variables||[]).some(op=>touches(op,name))||steps.some(step=>
+      (step.details.fields||[]).some(({path})=>path[0]==='11'&&(!path[1]||path[1]===name))||
+      (step.legacyOperations||step.details.operations||[]).some(op=>touches(op,name)));
+    const source=before?.[name]??productBefore?.[name]??(!changed&&actor.status!=='变异'?terminal?.[name]:null);
+    if(!Number.isFinite(source?.current)||!Number.isFinite(source?.max))continue;
+    const old=current[name];
+    const value=Number.isFinite(old?.current)&&old.current>=0?old.current:source.current;
+    const minMax=name==='血量'&&!dead?Number.MIN_VALUE:0;
+    const max=Number.isFinite(old?.max)&&old.max>=minMax?old.max:source.max;
+    if(value<0||max<value||max<minMax)continue;
+    result[name]={...old,current:value,max};
+  }
+  return result.血量===current.血量&&result.法力===current.法力?row:
+    {...row,'11':row['11']==null||typeof row['11']==='string'?JSON.stringify(result):result};
+}
+
 function frCanonAssignSourceIds(row,id){
   var notes=row['9'];
   if(!notes||typeof notes!=='object')return;
@@ -1809,18 +1843,29 @@ async function frPrepareCanonPrebuiltProposal(payload, input) {
     var storedData = frCanonStoredActorRow(archive, id);
     var data = sourceRows.find(row=>row.id===id)?.data||storedData;
     if (!data) throw new Error(actor.name+'缺少当前人物档案');
-    const fatal=frCanonNpcProfileGapTiers(data, {complete:false,allowIncompletePrebuiltProfile:true}).fatal;
-    if(fatal.length)throw new Error(actor.name+'的人物档案缺少必要字段：'+fatal.join('、'));
     if (!core.samePrebuiltActorBaseline(boundary.settlementBase.afterRows?.[id],storedData))
       throw new Error(actor.name+'的普通结算后快照与当前档案不一致');
     var ordinaryTouched=(boundary.settlementBase.records || []).some(row =>
       [row.operation?.id, row.operation?.data?.['0'], row.operation?.owner, row.operation?.from, row.operation?.to].includes(id));
     if (ordinaryTouched && (!actor.ordinaryState || !core.samePrebuiltActorBaseline(actor.ordinaryState.afterRow,storedData)))
       throw new Error(actor.name+'的预制修订未使用本轮普通结算后快照');
+    var ownSources=sourceSteps.filter(step=>step.name===actor.name);
+    const profileOptions={complete:false,allowIncompletePrebuiltProfile:true};
+    let fatal=frCanonNpcProfileGapTiers(data,profileOptions).fatal;
+    if(fatal.includes('血量属性未定义或无效')||fatal.includes('法力属性未定义或无效')){
+      const recovered=frCanonRecoverPrebuiltResources(data,actor,ownSources,fatal);
+      if(recovered!==data){
+        const patch=sourceRows.find(row=>row.id===id);
+        if(patch)patch.data=recovered;
+        else sourceRows.push({id,before:storedData,data:recovered});
+        data=recovered;
+        fatal=frCanonNpcProfileGapTiers(data,profileOptions).fatal;
+      }
+    }
+    if(fatal.length)throw new Error(actor.name+'的人物档案缺少必要字段：'+fatal.join('、'));
     var target = { id, name: actor.name, type: 'npc', data: structuredClone(storedData),
       sceneType: currentState['0']?.[id] ? 'onscene' : 'offscene' };
     if(typeof actor.presentAtEnd==='boolean')scenePlacements.push({id,present:actor.presentAtEnd});
-    var ownSources=sourceSteps.filter(step=>step.name===actor.name);
     if(ownSources.some(step=>step.legacy)){
       var working=frCanonSourceRow(data);
       working['9']=ceBridgeCore()['equipment-layout'].coalesceTreasureSets(working['9']);
@@ -2849,7 +2894,8 @@ async function frCommitCanonProposal(input, proposal) {
         for (var target of targets) {
           var expected = proposal.prebuiltReadback[target.id], actual = frCanonStoredActorRow(profileArchive, target.id);
           var attrs = typeof actual?.['11'] === 'string' ? JSON.parse(actual['11']) : actual?.['11'];
-          if (!actual || Object.entries(expected.fields).some(([key, value]) => actual[key] !== value) ||
+          if (!actual || Object.entries(expected.fields).some(([key, value]) => actual[key] !== value &&
+              !ceBridgeCore()['cultivation-arts'].cultivationArtStateEqual(actual[key],value)) ||
               Object.entries(expected.attributes).some(([key, value]) => attrs?.[key]?.current !== value)) {
             throw new Error('预制变量未通过实际回读：' + target.name);
           }
