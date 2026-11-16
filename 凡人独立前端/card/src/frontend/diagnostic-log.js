@@ -11,6 +11,48 @@
     scope:'超出本阶段写入范围',model_request:'模型请求未完成',validation:'回包校验未通过',
     not_selected:'重跑选择未匹配到待处理任务',input_capacity:'请求材料超过长度上限',
   };
+  // Only fixed categories cross the storage/export boundary. Never persist raw messages or stacks.
+  const failureKinds = {
+    ordinary_pending:['普通变量尚未完成或未保存','先查看本轮变量演化的失败详情'],
+    baseline_missing:['缺少结算快照','请提供本轮补演面板的失败详情'],
+    context_changed:['存档或楼层状态已变化','核对当前存档与回合，不要覆盖新状态'],
+    receipt_conflict:['已有回执或人物终态不一致','请提供本轮补演面板的失败详情'],
+    identity_conflict:['人物身份无法唯一匹配','核对人物档案的姓名、别名与编号'],
+    profile_invalid:['人物档案或初始快照不完整','核对预制成品的人物基础档案'],
+    item_application:['物品指令或落地校验失败','查看物品演化与转移详情'],
+    actor_application:['人物指令或回读校验失败','查看人物变量演化详情'],
+    storage_quota:['本机存储空间不足','备份存档后检查可用磁盘空间'],
+    storage_failure:['本机存储操作失败','备份存档并提供当次运行日志'],
+    request_aborted:['请求被取消','核对是否主动停止了本轮任务'],
+    network_failure:['网络请求失败','检查接口连通性和代理状态'],
+    script_reference:['脚本引用异常','提供此诊断和正在使用的版本'],
+    script_type:['脚本类型异常','提供此诊断和正在使用的版本'],
+    script_range:['脚本范围异常','提供此诊断和正在使用的版本'],
+    script_syntax:['脚本语法异常','提供此诊断和正在使用的版本'],
+    commit_unclassified:['落地阶段未分类错误','复制补演面板的具体失败提示，分享前移除隐私信息'],
+    unclassified:['未分类运行错误','提供具体错误提示，分享前移除隐私信息'],
+  };
+  function classifyFailure(value, fallback='unclassified') {
+    const message=typeof value==='string'?value:typeof value?.message==='string'?value.message:'';
+    const name=typeof value?.name==='string'?value.name:'';
+    if(name==='QuotaExceededError'||/QuotaExceededError/.test(message))return 'storage_quota';
+    if(name==='AbortError')return 'request_aborted';
+    const script={ReferenceError:'script_reference',TypeError:'script_type',RangeError:'script_range',SyntaxError:'script_syntax'};
+    if(script[name])return script[name];
+    const rules=[
+      [/普通变量未保存|普通演化还有未完成|重点演化未保存/,'ordinary_pending'],
+      [/缺少普通结算快照/,'baseline_missing'],
+      [/已切换存档|正文已变化|存档楼层不一致|楼层已变化/,'context_changed'],
+      [/已经完成账本提交|已有其他来源的人物补演回执|已保存人物与本轮成品不一致|重点演化意外写入补演人物/,'receipt_conflict'],
+      [/匹配到多份人物档案|同名或别名人物无法唯一定位|姓名或编号冲突/,'identity_conflict'],
+      [/人物档案不完整|预制初始快照无法写入|没有可用的初始快照/,'profile_invalid'],
+      [/逐事件物品|物品指令不合格/,'item_application'],
+      [/逐事件人物|逐事件经历回读失败|成品终态与增减无法安全转换/,'actor_application'],
+      [/Failed to fetch|NetworkError|ERR_NETWORK|网络请求失败/,'network_failure'],
+      [/IndexedDB|DatabaseClosedError|TransactionInactiveError|数据库.*失败/,'storage_failure'],
+    ];
+    return rules.find(([pattern])=>pattern.test(message))?.[1]||fallback;
+  }
   const systems = [
     [/预制|补演|年表/, '原著补演'], [/重点演化|CE_|变量|物品阶段/, '变量演化'],
     [/世界观/, '世界观指导'], [/向量|知识检索/, '向量检索'], [/数据库|存档|Dexie/, '存档'],
@@ -41,6 +83,7 @@
     const {system,level,event} = row;
     const safe = {system,level,event,at:number(row.at)};
     if(number(row.round)>0)safe.round=row.round;
+    if(Object.hasOwn(failureKinds,row.failureKind)){safe.failureKind=row.failureKind;safe.failureLabel=failureKinds[row.failureKind][0];safe.nextStep=failureKinds[row.failureKind][1];}
     if (event === '预制回包校验' || event === '预制任务未完成') {
       Object.assign(safe,{
         stage:stages.has(row.stage) ? row.stage : undefined,
@@ -97,6 +140,7 @@
         .map(id => id.match(/^E-\d+-N\d+/u)[0]) : [],
       ...(roundRefs.has(row.logId)?{round:roundRefs.get(row.logId)}:{}),
       attempt:number(row.attempt), chars:number(row.chars), elapsedMs:number(row.elapsedMs),
+      failureKind:row.status==='failed'?classifyFailure(row.reason,row.stage==='预制成品落地'?'commit_unclassified':'unclassified'):undefined,
       status:row.status === 'failed' ? 'failed' : 'accepted', code:codes.has(row.code) ? row.code : undefined,
     });
   }
@@ -115,7 +159,7 @@
     const selected = prune(entries, Math.min(settings.retention, [1,24,168].includes(hours) ? hours : 24))
       .filter(row => (round===undefined||round===(row.round||0))&&(!issuesOnly || row.level !== 'info')).map(row => ({...row}));
     const appVersion=/^\d+\.\d+\.\d+(?:-[\w.]+)?$/u.test(host.__FR_APP_VERSION__||'') ? host.__FR_APP_VERSION__ : undefined;
-    return {kind:'fanren-diagnostics',version:1,appVersion,exportedAt:new Date().toISOString(),
+    return {kind:'fanren-diagnostics',version:2,appVersion,exportedAt:new Date().toISOString(),
       ...(round===undefined?{hours,issuesOnly}:{round,startedAt:selected[0]?.at,endedAt:selected.at(-1)?.at}),entries:selected};
   }
   function clear() { entries = []; persist(); }
@@ -125,16 +169,16 @@
       const label = typeof args[0] === 'string' ? args[0].match(/^\[([^\]\r\n]{1,36})\]/u)?.[1] : '';
       const system = systems.find(([pattern]) => label && pattern.test(label))?.[1] || '游戏运行';
       const http = args.slice(0,2).map(value=>typeof value==='string'?value.match(/\bHTTP\s+([45]\d{2})\b/u)?.[1]:undefined).find(Boolean);
-      record({system,level:level==='warn'?'warning':'error',event:level==='warn'?'运行警告':'运行错误',httpStatus:http?Number(http):undefined});
+      record({system,level:level==='warn'?'warning':'error',event:level==='warn'?'运行警告':'运行错误',failureKind:args.map(value=>classifyFailure(value)).find(kind=>kind!=='unclassified')||'unclassified',httpStatus:http?Number(http):undefined});
       return original.apply(console,args);
     };
   }
   host.addEventListener('error', event => {
     const name = event.error?.name;
     const code = /^(?:Type|Range|Reference|Syntax|URI|Eval)?Error$/u.test(name||'') ? name : undefined;
-    record({system:'游戏运行',level:'error',event:'脚本异常',code,line:number(event.lineno),column:number(event.colno)});
+    record({system:'游戏运行',level:'error',event:'脚本异常',failureKind:classifyFailure(event.error),code,line:number(event.lineno),column:number(event.colno)});
   });
-  host.addEventListener('unhandledrejection', () => record({system:'游戏运行',level:'error',event:'后台任务异常'}));
+  host.addEventListener('unhandledrejection', event => record({system:'游戏运行',level:'error',event:'后台任务异常',failureKind:classifyFailure(event.reason)}));
   for (const [type, event] of [['online','网络恢复'],['offline','网络断开']]) {
     host.addEventListener(type, () => record({system:'模型与网络',level:type==='offline'?'warning':'info',event}));
   }
@@ -183,8 +227,8 @@
       const title=document.createElement('strong');
       title.textContent=[row.stage||row.system,row.subject].filter(Boolean).join(' · ');
       const detail=document.createElement('p');
-      detail.textContent=[issueLabels[row.code]||row.event,row.attempt?'第 '+row.attempt+' 次':null,
-        row.nodes?.join('、'),row.httpStatus?'HTTP '+row.httpStatus:null,row.line?'第 '+row.line+' 行':null].filter(Boolean).join(' · ');
+      detail.textContent=[issueLabels[row.code]||failureKinds[row.failureKind]?.[0]||row.event,row.attempt?'第 '+row.attempt+' 次':null,
+        row.nodes?.join('、'),row.httpStatus?'HTTP '+row.httpStatus:null,row.line?'第 '+row.line+' 行':null,failureKinds[row.failureKind]?.[1]].filter(Boolean).join(' · ');
       item.append(badge,title,time,detail);
       return item;
     }

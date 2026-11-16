@@ -17772,8 +17772,15 @@ div#gourd-progress-text {
 #fr-timeline-panel-prebuilt .fr-prebuilt-match[data-match="true"] {color:#bbdbb6;border-color:#557052;background:#334a3052}
 #fr-timeline-panel-prebuilt .fr-prebuilt-empty {padding:24px;color:var(--fr-library-muted);text-align:center}
 #fr-timeline-collaboration .fr-prebuilt-changes{border-top:1px solid var(--fr-library-border);padding:8px 12px 10px}
-#fr-timeline-collaboration .fr-prebuilt-changes summary{cursor:pointer;color:var(--hover-color,#e1c891);width:max-content;max-width:100%}
-#fr-timeline-collaboration .fr-prebuilt-changes h5{margin:12px 0 4px;color:var(--text-secondary,#b9ae96)}
+/* Use the library's paired ink/surface palette, not --hover-color (a surface token).
+   The prebuilt cards retain their dark bronze surface in both day/night themes. */
+#fr-timeline-collaboration .fr-prebuilt-changes summary{cursor:pointer;color:var(--fr-library-gold,#e4c68b);width:max-content;max-width:100%;font-weight:600;border-radius:3px}
+#fr-timeline-collaboration .fr-prebuilt-changes summary::marker{color:currentColor}
+#fr-timeline-collaboration .fr-prebuilt-changes summary:hover{color:var(--fr-library-text,#efe5d0)}
+#fr-timeline-collaboration .fr-prebuilt-changes summary:focus-visible{outline:2px solid var(--fr-library-gold,#e4c68b);outline-offset:3px}
+#fr-timeline-collaboration .fr-prebuilt-changes{color:var(--fr-library-text,#efe5d0)}
+#fr-timeline-collaboration #fr-timeline-panel-prebuilt .fr-prebuilt-card-head strong{color:var(--fr-library-text,#efe5d0)}
+#fr-timeline-collaboration .fr-prebuilt-changes h5{margin:12px 0 4px;color:var(--fr-library-muted,#c1b49d)}
 #fr-timeline-collaboration .fr-prebuilt-changes ul{list-style:none;margin:0;padding:0}
 #fr-timeline-collaboration .fr-prebuilt-changes li{display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px solid #8c785325}
 #fr-timeline-collaboration .fr-prebuilt-changes li small{flex:none;border:1px solid #8c785366;border-radius:4px;padding:1px 5px}

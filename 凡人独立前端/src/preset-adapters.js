@@ -269,6 +269,35 @@
       },
     };
 
+    // A preset detail page edits only its own snapshot, never the global active selection.
+    window.FRProseRoutePresets.open = function(routeId) {
+      var id = window.FRProseRoutePresets.get(routeId), source = id === BUILTIN_ID ? builtinPresetTemplate() :
+        id ? readAll().presets.find(function(p){return p.id===id;}) : activePreset();
+      if (!source) throw new Error('绑定预设已不存在，请重新选择');
+      var draft=JSON.parse(JSON.stringify(source)), locked=id===BUILTIN_ID;
+      var dialog=document.createElement('dialog');dialog.className='fr-evo-rule-dialog';
+      dialog.setAttribute('aria-label','正文预设编辑与查看');
+      dialog.style.cssText='width:min(1000px,92vw);max-height:88vh;background:var(--bg-panel,#20242d);color:var(--text-primary,#eee);border:1px solid var(--border-color,#666);border-radius:12px;padding:24px';
+      var heading=document.createElement('h3');heading.textContent='正文预设 · '+source.name;dialog.append(heading);
+      var note=document.createElement('p');note.textContent=locked?'内置预设只读，可复制为自定义后编辑。':'保存只更新这份预设，不改变当前默认预设或其他接口的绑定。';dialog.append(note);
+      var editor=document.createElement('div');editor.className='fr-evo-rule-editor';editor.style.cssText='display:grid;grid-template-columns:minmax(160px,28%) 1fr;gap:16px;height:55vh';
+      var list=document.createElement('div');list.style.overflow='auto';var content=document.createElement('div');content.style.overflow='auto';editor.append(list,content);dialog.append(editor);
+      function edit(index){content.replaceChildren();var entry=draft.entries[index];if(!entry)return;
+        var title=document.createElement('input');title.value=entry.name;title.disabled=locked;title.setAttribute('aria-label','条目名称');title.style.width='100%';
+        var role=document.createElement('select');role.setAttribute('aria-label','消息角色');['system','user','assistant'].forEach(function(value){var option=document.createElement('option');option.value=value;option.textContent=value;role.append(option);});role.value=entry.role||'system';role.disabled=locked;
+        var label=document.createElement('label'),enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=entry.enabled!==false;enabled.disabled=locked;label.append(enabled,document.createTextNode('启用此条目'));
+        var text=document.createElement('textarea');text.value=entry.content||'';text.readOnly=locked;text.rows=18;text.style.cssText='display:block;width:100%;height:calc(100% - 70px);box-sizing:border-box;margin-top:12px';text.setAttribute('aria-label','提示词内容');
+        title.oninput=function(){entry.name=title.value;list.children[index].textContent=title.value;};role.onchange=function(){entry.role=role.value;};enabled.onchange=function(){entry.enabled=enabled.checked;};text.oninput=function(){entry.content=text.value;};content.append(title,role,label,text);
+      }
+      (draft.entries||[]).forEach(function(entry,index){var btn=document.createElement('button');btn.type='button';btn.className='fr-evo-rule-row';btn.textContent=entry.name||'条目 '+(index+1);btn.style.cssText='display:block;width:100%;text-align:left;margin-bottom:6px';btn.onclick=function(){edit(index);};list.append(btn);});edit(0);
+      var footer=document.createElement('div');footer.style.cssText='display:flex;gap:12px;margin-top:18px';dialog.append(footer);
+      var saveButton=document.createElement('button');saveButton.type='button';saveButton.className='primary-btn';saveButton.textContent=locked?'复制为自定义并绑定此接口':'保存预设';
+      saveButton.onclick=function(){var data=readAll();if(locked){draft.id=uid('pset');draft.name=source.name+' · 自定义';data.presets.push(draft);}else{var index=data.presets.findIndex(function(p){return p.id===draft.id;});if(index<0){note.textContent='预设已删除，无法保存，请重新打开。';return;}data.presets[index]=draft;}
+        if(!writeAll(data)){note.textContent='保存失败，请检查浏览器存储空间。';return;}if(locked)window.FRProseRoutePresets.set(routeId,draft.id);window.dispatchEvent(new CustomEvent('fr:prose-presets-changed'));dialog.close();};
+      var close=document.createElement('button');close.type='button';close.className='small-btn';close.textContent='关闭';close.onclick=function(){dialog.close();};footer.append(saveButton,close);
+      dialog.addEventListener('close',function(){dialog.remove();});document.body.append(dialog);dialog.showModal();
+    };
+
     function load() {
       var p = activePreset();
       return p ? p.entries.slice() : [];

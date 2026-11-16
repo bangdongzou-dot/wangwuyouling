@@ -1406,27 +1406,31 @@ function drawConsumerChain(host, consumer, onChange) {
     });
     label.append(select);
     row.append(label);
-    const prosePresets = consumer.key === 'FR_STANDALONE_CONFIG_V1' && id && window.FRProseRoutePresets;
-    if (prosePresets && presets.some(preset => preset.id === id)) {
-      const presetLabel = document.createElement('label');
-      presetLabel.textContent = '正文预设';
-      const picker = document.createElement('select');
-      picker.setAttribute('aria-label',caption.textContent+' · 正文预设');
-      for (const item of [{id:'',name:'跟随当前正文预设'},...prosePresets.options(id)]) {
-        const option = document.createElement('option');
-        option.value = item.id;
-        option.textContent = item.name;
-        picker.append(option);
-      }
-      const selected = prosePresets.get(id);
-      if (Array.from(picker.options).some(option => option.value === selected)) picker.value = selected;
-      picker.addEventListener('change',() => prosePresets.set(id,picker.value));
-      presetLabel.append(picker);
-      row.append(presetLabel);
+    const routePresets = consumer.key === 'FR_STANDALONE_CONFIG_V1' ? window.FRProseRoutePresets :
+      consumer.key === 'CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1' && consumer.idField === 'apiPresetId' && !consumer.path && !consumer.slotId ? window.FREvolutionRoutePresets : null;
+    if (routePresets && id && presets.some(preset => preset.id === id)) {
+      const name = consumer.key === 'FR_STANDALONE_CONFIG_V1' ? '正文预设' : '变量预设';
+      const presetLabel = document.createElement('label'); presetLabel.textContent = name;
+      const picker = document.createElement('select'); picker.setAttribute('aria-label', caption.textContent+' · '+name);
+      picker.disabled = true;
+      Promise.resolve().then(() => routePresets.options(id)).then(items => {
+        picker.replaceChildren();
+        const selected = routePresets.get(id);
+        const choices = [{id:'',name:'跟随当前'+name},...items];
+        if(selected&&!choices.some(item=>item.id===selected))choices.push({id:selected,name:'绑定预设已删除，请重新选择',disabled:true});
+        for(const item of choices){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;option.disabled=!!item.disabled;picker.append(option);}
+        picker.value=selected;picker.disabled=false;
+      }).catch(error => { picker.title=String(error.message||error); });
+      picker.addEventListener('change',()=>routePresets.set(id,picker.value));
+      presetLabel.append(picker);row.append(presetLabel);
+      const presetDetail=document.createElement('button');presetDetail.type='button';presetDetail.textContent='预设详情';presetDetail.className='fr-api-chain-button';
+      presetDetail.setAttribute('aria-label',caption.textContent+' · '+name+'编辑与查看');
+      presetDetail.addEventListener('click',async()=>{presetDetail.disabled=true;try{await routePresets.open(id);}catch(error){window.alert(String(error.message||error));}finally{presetDetail.disabled=false;}});
+      row.append(presetDetail);
     }
     if(id&&presets.some(preset=>preset.id===id)){
       const detail=document.createElement('button');
-      detail.type='button';detail.textContent='详情';
+      detail.type='button';detail.textContent=routePresets?'接口详情':'详情';
       detail.className='fr-api-chain-button';
       detail.setAttribute('aria-label',consumer.label+' · '+caption.textContent+'详情');
       detail.addEventListener('click',()=>{

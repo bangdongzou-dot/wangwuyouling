@@ -821,6 +821,32 @@ function logWindowFailure(kind, details) {
   } catch (_) {}
 }
 
+// Bounded numeric diagnostics only: never retain renderer text, URLs or archive data.
+function collectRuntimeMemory() {
+  try {
+    return (app.getAppMetrics() || []).map(metric => ({
+      pid: metric.pid, type: metric.type,
+      workingSetSizeKB: Number(metric.memory && metric.memory.workingSetSize) || 0,
+      privateBytesKB: Number(metric.memory && metric.memory.privateBytes) || 0,
+      peakWorkingSetSizeKB: Number(metric.memory && metric.memory.peakWorkingSetSize) || 0,
+    }));
+  } catch (_) { return []; }
+}
+function writeRuntimeMemorySample() {
+  const metrics = collectRuntimeMemory();
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'runtime-memory.log');
+    if (fs.existsSync(file) && fs.statSync(file).size >= 1024 * 1024) {
+      fs.copyFileSync(file, file + '.previous');
+      fs.writeFileSync(file, '');
+    }
+    fs.appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), metrics }) + '\n');
+  } catch (_) {}
+  return metrics;
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -848,7 +874,19 @@ function createMainWindow() {
   const active = readActiveInfo();
   let entry = active.path;
   let recovering = false;
+  let recoveryScheduled = false;
   let restoredHot = false;
+  let entryLoadedSuccessfully = false;
+  let crashRecoveryPending = false;
+  let lastMemorySample = writeRuntimeMemorySample();
+  const memoryTimer = setInterval(() => { lastMemorySample = writeRuntimeMemorySample(); }, 15000);
+  if (memoryTimer.unref) memoryTimer.unref();
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.getURL() !== 'about:blank') {
+      entryLoadedSuccessfully = true;
+    }
+  });
+  mainWindow.once('closed', () => { clearInterval(memoryTimer); lastMemorySample = []; });
   console.log('[启动] 加载:', active.source === 'hot' ? '热更新版本' : '内置版本', entry);
   async function recoverHotEntry() {
     const win = mainWindow;
@@ -861,6 +899,24 @@ function createMainWindow() {
     restoredHot = entry === WEB_HTML();
     recovering = false;
     win.loadFile(entry).catch(() => {});
+  }
+
+  function scheduleHotEntryRecovery() {
+    const win = mainWindow;
+    if (recovering || recoveryScheduled || !win || win.isDestroyed()) return;
+    recoveryScheduled = true;
+    // Never navigate while Electron is notifying renderer-death observers.
+    // A new task also coalesces crash/load-failure notifications for this entry.
+    setImmediate(async () => {
+      try {
+        if (mainWindow !== win || win.isDestroyed() || entryLoadedSuccessfully) return;
+        await recoverHotEntry();
+      } catch (error) {
+        logWindowFailure('startup-recovery-failed', { message: String(error && error.message || error) });
+      } finally {
+        recoveryScheduled = false;
+      }
+    });
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -910,38 +966,46 @@ function createMainWindow() {
     try { console.warn('[启动] 渲染日志启用失败（不影响游戏）:', e && e.message); } catch (_) {}
   }
 
-  // 内存分配失败不代表更新文件损坏，不能把已安装修复一起降级。
+  // Runtime crashes are not evidence of a corrupt update. Keep the installed file
+  // and metadata; only failure before the first successful load may use rollback.
   mainWindow.webContents.on('render-process-gone', (e, details) => {
-    logWindowFailure('render-process-gone', { reason: details && details.reason, exitCode: details && details.exitCode });
-    console.error('[启动] 渲染进程异常:', details && details.reason);
-    if (details && details.reason === 'oom') {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      dialog.showMessageBox(mainWindow, {
+    const reason = details && details.reason;
+    logWindowFailure('render-process-gone', {
+      reason, exitCode: details && details.exitCode,
+      entryLoadedSuccessfully, version: active.version, sha256: active.sha256,
+      lastMemorySample, currentMemorySample: collectRuntimeMemory(),
+    });
+    console.error('[启动] 渲染进程异常:', reason);
+    if (reason === 'clean-exit') return;
+    if (reason === 'oom' || entryLoadedSuccessfully) {
+      const win = mainWindow;
+      if (!win || win.isDestroyed() || crashRecoveryPending) return;
+      crashRecoveryPending = true;
+      dialog.showMessageBox(win, {
         type: 'error',
         title: '游戏页面已停止',
-        message: '游戏页面因内存分配失败而停止。',
-        detail: '当前游戏版本和已保存的数据保持原样。重新打开后可读取存档，未完成的本轮需要重试。错误原因已记录到本地日志。',
+        message: reason === 'oom' ? '游戏页面因内存分配失败而停止。' : '游戏页面发生运行异常。',
+        detail: '当前游戏版本和已保存的数据保持原样，不会自动降级。重新打开后可读取存档，未完成的本轮需要检查。错误原因与最近内存指标已记录到本地日志。',
         buttons: ['重新打开当前版本', '退出游戏'],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true,
+        defaultId: 0, cancelId: 1, noLink: true,
       }).then(({ response }) => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        if (response === 0) mainWindow.loadFile(entry);
+        if (win.isDestroyed()) return;
+        if (response === 0) win.loadFile(entry).catch(error => logWindowFailure('runtime-reload-failed', { message: String(error && error.message || error) }));
         else app.quit();
-      }).catch(error => logWindowFailure('oom-recovery-failed', { message: String(error && error.message || error) }));
+      }).catch(error => logWindowFailure('runtime-recovery-failed', { message: String(error && error.message || error) }))
+        .finally(() => { crashRecoveryPending = false; });
       return;
     }
-    recoverHotEntry();
+    scheduleHotEntryRecovery();
   });
 
   // 页面加载失败 → 同上回滚
   mainWindow.webContents.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
     logWindowFailure('did-fail-load', { code, desc, isMainFrame });
     // Story iframes fail independently; aborted navigation also isn't a corrupt update.
-    if (isMainFrame !== true || code === -3) return;
+    if (isMainFrame !== true || code === -3 || entryLoadedSuccessfully) return;
     console.error('[启动] 页面加载失败:', code, desc, url);
-    recoverHotEntry();
+    scheduleHotEntryRecovery();
   });
   mainWindow.loadFile(entry).catch(() => {});
 

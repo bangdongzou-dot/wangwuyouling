@@ -25,6 +25,8 @@
   var PERSONAL_RULE_ID = 'fr-equipment-layout-personal-v1'
   var ITEMS_RULE_ID = 'fr-equipment-layout-items-v1'
   var MERGED_RULE_ID = 'fr-equipment-layout-merged-v1'
+  var ITEM_CONSERVATION_RULE_ID = "fr-item-location-conservation-v1"
+  var ITEM_CONSERVATION_RULE = "【同一物品实例的背包—装备守恒】\n- 适用于所有可装备物品：武器、护甲、饰品、普通法宝、飞舟/飞行法宝、功法与成套器物，不限于功法或成套法宝。背包是未装备的剩余库存，不是包含装备的持有总目录；同一实例已在装备槽内，就不得另在背包保留同一份。\n- 先核对 owner、已有物品 ID/实例、品阶/属性、来源与数量，再判断同一物；同名不等于同一实例，不同品阶、属性、来源或已有多件数量不能擅自合并。别名/改名也不产生新物品。\n- 单纯装备、卸下、换槽、属性更新或完整快照重述不改变总持有量。背包→装备时只搬实际装备数量，背包减去同量；卸下时只归还一次并清空原槽；替换时旧物归包、新物入槽，不能把已装备物品又创建一遍。确有两件的同名物允许一件装备、一件备用，库存数量只写未装备余量。\n- 游戏命令式更新优先复用已有 ID，通过既有 equipItem/unequipItem/transferItem 等命令完成移动；不要为同一移动额外 createItem，也不要再手工复制一份目标库存。游戏实时剧情中的新取得、交付、消耗或丢失必须有本轮已成立事实，禁止为消除数量报错虚构掉落、补偿、损毁或转移。\n- 输出完整状态时同时检查 inventory 与 equipment，按同一实例合计数量；只有位置变化时前后总量相等。校验发现重复，应根据已知前态和明确事件修正多写的一份，不反复原样输出或编造数量变化。无法判定是否为同一实例时保留差异、依据上下文修订，不凭名称盲删。\n- 年表编辑器依其专属规则允许补足文学省略的既有持有事实，但“补全”不等于又获得一件，已装备的既有物不能再次放入背包；已交付或耗尽的物品不能补回。此年表专属依据不得套用到游戏实时正文变量。"
   var META_KEY = 'equipmentLayoutVersion'
   var CONTRACT_VERSION = 1
   /* 不可混淆的机器标记：用来判断某条规则是不是"本模块的合同"。
@@ -706,6 +708,12 @@
       if (mr.added) report.addedRules.push('merged_variables:' + MERGED_RULE_ID)
       if (mr.replacedOwn) report.dedupedRules.push('merged_variables:' + MERGED_RULE_ID)
       if (mr.warning) report.warnings.push('merged_variables:' + mr.warning)
+    }
+
+    // 共享守恒合同：四套运行预设与编辑器两套派生规则共用；旧自定义内容不覆盖。
+    installRule(out.itemSharedRules, ITEM_CONSERVATION_RULE_ID, '物品实例与位置守恒', ITEM_CONSERVATION_RULE)
+    if (prompts && isObject(prompts.merged_variables) && Array.isArray(prompts.merged_variables.rules) && prompts.merged_variables.enabled !== false) {
+      installRule(prompts.merged_variables.rules, ITEM_CONSERVATION_RULE_ID, '物品实例与位置守恒', ITEM_CONSERVATION_RULE)
     }
 
     /* 4) meta：用独立标记，不抢占 frPresetCompat 的其他标记 */

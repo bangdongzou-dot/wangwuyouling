@@ -1157,6 +1157,7 @@ function frReplaySameWorldProgress(old,prompt,session){
 function frReplayResolve(req, prompt) {
   var session=req&& req._run&& req._run._replay;
   if(!session)return {reused:false,prompt:prompt};
+  if(session.selection?.fullTurn){session.realCalls=Number(session.realCalls||0)+1;return {reused:false,prompt:prompt};}
   session.cache=(session.cache||[]).filter(function(old){return frReplaySemanticOwned(old,session);});
   frReplayNormalizeRequest(req);
   if(session.selection.replay?.prebuiltRepair &&
@@ -1403,12 +1404,29 @@ async function frReplayStamp(archive,memory){
   }catch(_){}
   // 先让出一帧，保证卡顿前 UI 已经刷新过一次（玩家能看到「正在核对」）。
   await new Promise(function(r){setTimeout(r,0);});
-  var copy=structuredClone(archive);
-  // 展示缓存与待办提示不参与游戏边界；真实变量、正文、快照和回执仍全部校验。
-  if(copy?.data?.state){delete copy.data.state.npcAvatars;if(JSON.stringify(copy.data.state.rpgMaps)==='{}')delete copy.data.state.rpgMaps;}
-  (copy?.data?.logs||[]).forEach(function(log){delete log.detailedEvolutionHtml;delete log.canonPending;});
-  function ordered(value){if(Array.isArray(value))return value.map(ordered);if(value&& typeof value==='object'){var out={};Object.keys(value).sort().forEach(key=>out[key]=ordered(value[key]));return out;}return value;}
-  var raw=JSON.stringify(ordered([copy,memory.state,memory.map,memory.bonded]));
+  // Project only excluded display fields. Do not clone and recursively rebuild the
+  // entire history merely to sort its keys; stringify visits one shallow object at a time.
+  var copy=Object.assign({},archive);
+  if(archive?.data){
+    copy.data=Object.assign({},archive.data);
+    if(archive.data.state){
+      copy.data.state=Object.assign({},archive.data.state);
+      delete copy.data.state.npcAvatars;
+      if(JSON.stringify(copy.data.state.rpgMaps)==='{}')delete copy.data.state.rpgMaps;
+    }
+    if(Array.isArray(archive.data.logs))copy.data.logs=archive.data.logs.map(function(log){
+      var projected=Object.assign({},log);delete projected.detailedEvolutionHtml;delete projected.canonPending;return projected;
+    });
+  }
+  var raw=JSON.stringify([copy,memory.state,memory.map,memory.bonded],function(key,value){
+    // Use the original value to preserve the former ordered() treatment of Dates,
+    // Maps and other structured-clone values (rather than invoking their toJSON).
+    var original=this[key];
+    if(original&&typeof original==='object'&&!Array.isArray(original)){
+      var sorted={};Object.keys(original).sort().forEach(function(k){sorted[k]=original[k];});return sorted;
+    }
+    return original;
+  });
   var digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
   var result=Array.from(new Uint8Array(digest)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
   var epochAtStart=frReplayStampEpoch;
@@ -1456,7 +1474,8 @@ async function frReplayBefore(system,run,args){
     if(latest){
       context.logId=run.logId || latest.id;
       context.afterStamp=await frReplayStamp(archive,context.beforeMemory);
-      /* 不写库。等 frReplaySealPending 在回合收尾时一次性写入完整边界。 */
+      // 独立开跑检查点不冒充已封存边界；只供主动整轮补跑恢复。
+      await dbSet('FR_REPLAY_START_V1:'+key,context);
     }
   }catch(error){frCanonTraceEvent(run,'error','本轮局部重跑边界未记录',{reason:String(error.message||error)});}
 }
@@ -1472,7 +1491,9 @@ async function frReplaySealPending(onlySystem){
       var archive=await db.archives.get(name),floorId=run.logId||context.logId;
       var log=(archive?.data?.logs||[]).find(function(row){return row.type==='ai'&&!row.isGhost&&!row.isSnapshot&&!row.isDeepSummary&&String(row.id)===String(floorId);});
       if(!log||name!==currentArchiveName||frReplayPending[key]!==context)continue;
-      context.logId=log.id;context.afterMemory=frTakeCanonMemory();context.afterArchive=structuredClone(archive);context.afterStamp=await frReplayStamp(archive,context.afterMemory);
+      // archives.get already owns an isolated IndexedDB snapshot. Transfer it to the boundary;
+      // cloning the full history/images again doubles this snapshot at the sealing peak.
+      context.logId=log.id;context.afterMemory=frTakeCanonMemory();context.afterArchive=archive;context.afterStamp=await frReplayStamp(archive,context.afterMemory);
       context.sealedAt=Date.now();
       if(system==='ce'&&run.ceWriteJournal)context.ceWriteJournal=structuredClone(run.ceWriteJournal);
       var mergedRun=system==='ce'&&frCanonTraceHistory.find(function(r){return r.id===context.sourceRunId;});
@@ -1791,6 +1812,26 @@ function frReplayCeRestoreSnapshot(snapshot,archive,memory,logId){
     log.stateSnapshot=JSON.stringify(prior?.currentState?{...prior,currentState:snapshot.state,worldBookEntries:state.worldBookEntries}:snapshot.state);
   }
 }
+// Smart repair includes the connected component of actual transfers, never unrelated actors.
+// Manual selections still use the existing double-sided transfer guard.
+function frReplayExpandCeTransferSelection(selection,journal){
+  if(selection.system!=='ce'||selection.smart!==true)return selection;
+  const result={...selection,stages:[...(selection.stages||[])],scopes:[...(selection.scopes||[])]};
+  const pairs=(journal?.transfers||[]).filter(pair=>Array.isArray(pair)&&pair.length===2&&pair.every(id=>typeof id==='string'&&id));
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(const pair of pairs){
+      if(!pair.some(id=>frReplayCeSelectionContains({stage:'items',identities:[id]},result)))continue;
+      for(const id of pair){
+        if(frReplayCeSelectionContains({stage:'items',identities:[id]},result))continue;
+        result.scopes.push('items:'+id);changed=true;
+      }
+    }
+  }
+  return result;
+}
+
 function frReplayCeTransferSelected(pair,selection){
   const owners=pair.map(id=>frReplayCeSelectionContains({stage:'items',identities:[id]},selection));
   if(owners[0]!==owners[1])throw new Error('这笔物品转交涉及 '+pair.join(' 和 ')+'，请同时选中双方的物品更新；原结果已保留。');
@@ -2072,7 +2113,7 @@ async function frReplayExecute(context,selection,cache){
      * rewindStages 的判定包含 scope 的所属阶段；只用于回滚判断，
      * 不把人物选择升级成整阶段重算。 */
     if(prebuiltReplacement&&changed)throw new Error('本轮落地后的存档已变化，无法安全替换预制结果。');
-    var needsFullRewind = prebuiltReplacement || rewindStages.some(function (stage) { return FR_REPLAY_UPSTREAM_STAGES.indexOf(stage) >= 0; })
+    var needsFullRewind = (selection.fullTurn&&context.system==='canon') || prebuiltReplacement || rewindStages.some(function (stage) { return FR_REPLAY_UPSTREAM_STAGES.indexOf(stage) >= 0; })
       || replayStages.includes('落地依据提取')
       // 一个目标都没勾 = 整轮重跑，必须回滚到干净基线。
       || (!replayStages.length && !replayScopes.length);
@@ -2119,6 +2160,11 @@ async function frReplayExecute(context,selection,cache){
       if(String(frReplayLatestLog(archive)?.id)!==String(context.logId))throw new Error('变量演化重跑只能替换当前楼层的结果，原存档未改动。');
       const journal=oldCeJournal=context.ceWriteJournal||frReplayCeLegacyJournal(context);
       if(!journal||!Array.isArray(journal.changes))throw new Error('旧版没有记录本轮变量演化各阶段实际写入的内容，无法安全回退。请从本层之前的快照重新生成一次，原存档未改动。');
+      const expanded=frReplayExpandCeTransferSelection({...selection,system:context.system},journal);
+      if(expanded.scopes.length!==(selection.scopes||[]).length){
+        selection.scopes=expanded.scopes;self.selection=selection;
+        console.warn('[变量演化·智能重跑] 已自动补齐物品转交关联：'+selection.scopes.filter(scope=>scope.startsWith('items:')).join('、'));
+      }
       (journal.transfers||[]).forEach(pair=>frReplayCeTransferSelected(pair,selection));
       const selectedWrites=journal.changes.filter(change=>frReplayCeSelectionContains(change,selection));
       if(selectedWrites.length){
@@ -2150,6 +2196,7 @@ async function frReplayExecute(context,selection,cache){
       +' ｜seeds='+String(Object.keys((selection.replay&&selection.replay.seeds)||{}).length));}catch(_){}
     if(context.system==='ce'){
       result=await rerollConcurrentEvolution({_frSelective:true,signal:controller.signal});
+      if(selection.fullTurn&&result?.partial)throw new Error('整轮变量仍有失败阶段，本次已撤销并保留重跑前结果。');
       if(!result||result.ok!==true)throw new Error(result&&result.reason||'变量演化没有返回成功保存回执');
       if(!self.ceWriteJournal)throw new Error('变量演化重跑没有封存写入记录，原结果已保留。');
       const journal=oldCeJournal,replacement=self.ceWriteJournal;
@@ -2174,7 +2221,7 @@ async function frReplayExecute(context,selection,cache){
           .concat((replacement.transfers||[]).filter(pair=>pair.every(id=>completed({stage:'items',identities:[id]}))))
       };
     }else{
-      result=await frRunCanonAfterHostTurn({...context.args,signal:controller.signal,logId:context.logId,replay:selection.replay||null});
+      result=await frRunCanonAfterHostTurn({...context.args,signal:controller.signal,logId:context.logId,replay:selection.replay||null,fullTurn:selection.fullTurn===true});
       /* ★★★ 2026-11-03 排查：编排器返回了什么？
        * 用户日志只留 WARN 及以上，所以必须 warn。
        * 这一条能一次性回答「0 次调用」到底断在哪：
@@ -2267,7 +2314,8 @@ async function frReplayExecute(context,selection,cache){
     var updated=await db.archives.get(name);
     var nextMemory=frTakeCanonMemory();
     var keepBefore=context.system==='ce'||continuing||result?.actorProgressSaved===true||!!selection.replay?.actorReplacement;
-    var next={...context,beforeArchive:structuredClone(keepBefore?context.beforeArchive:restoredArchive),beforeMemory:structuredClone(keepBefore?context.beforeMemory:restoredMemory),afterArchive:structuredClone(updated),afterMemory:nextMemory,afterStamp:await frReplayStamp(updated,nextMemory),sealedAt:Date.now()};
+    // This independently read after-snapshot is never mutated below; keep before-side isolation.
+    var next={...context,beforeArchive:structuredClone(keepBefore?context.beforeArchive:restoredArchive),beforeMemory:structuredClone(keepBefore?context.beforeMemory:restoredMemory),afterArchive:updated,afterMemory:nextMemory,afterStamp:await frReplayStamp(updated,nextMemory),sealedAt:Date.now()};
     delete next.prebuiltRetry;
     if(selection.replay?.prebuiltRepair&&result?.prebuiltRepair?.failures?.length)next.prebuiltRetry=result.prebuiltRepair;
     if(self.ceReplacementJournal)next.ceWriteJournal=self.ceReplacementJournal;
@@ -2390,8 +2438,9 @@ async function frReplayExecute(context,selection,cache){
       if(self.pendingSaves)await Promise.allSettled(Array.from(self.pendingSaves));
       if(continuing){
         // 接续不是替换：其他人物刚刚成功提交的事务也要保留。
+        // Preserve the full independent readback without duplicating its history/images again.
         var partialArchive=await db.archives.get(name),partialMemory=frTakeCanonMemory();
-        await dbSet('FR_REPLAY_BASE_V1:'+name+':canon',{...context,afterArchive:structuredClone(partialArchive),afterMemory:partialMemory,afterStamp:await frReplayStamp(partialArchive,partialMemory),sealedAt:Date.now()});
+        await dbSet('FR_REPLAY_BASE_V1:'+name+':canon',{...context,afterArchive:partialArchive,afterMemory:partialMemory,afterStamp:await frReplayStamp(partialArchive,partialMemory),sealedAt:Date.now()});
       }else await frReplayRestoreBackup(backup);
       if(selection.replay?.prebuiltRepair&&result?.prebuiltRepair?.failures?.length){
         var prebuiltBase=await dbGet('FR_REPLAY_BASE_V1:'+name+':canon')||context;
@@ -2571,6 +2620,43 @@ async function frReplayReadContext(system,defaults){
   return {name:name,context:context,base:context,source:source,allRequests:allRequests,cache:cache,recovery:recovery,replayWarnings:replayWarnings,ledgerReplay};
 }
 // 展示页的定点操作直接执行；批量选择窗口只负责统一选取，不充当必经中转页。
+// 主动整轮入口：没有失败请求也能跑，但绝不把已有写入当成空白基线。
+async function frReplayRunWholeFloor(system,logId){
+  system=system==='ce'?'ce':'canon';
+  const name=currentArchiveName,blocked=frReplayRunBlock(system);
+  if(blocked)throw new Error(blocked);
+  if(!name)throw new Error('请先进入存档');
+  const archive=await db.archives.get(name),log=frReplayLatestLog(archive);
+  if(!log||String(log.id)!==String(logId))throw new Error('请先回退到该楼层，再重跑整轮；不会修改后续楼层的数据。');
+  const memory=frTakeCanonMemory(),key=name+':'+system;
+  let context=await dbGet('FR_REPLAY_BASE_V1:'+key);
+  if(String(context?.logId)!==String(logId))context=null;
+  const start=await dbGet('FR_REPLAY_START_V1:'+key);
+  // 崩溃在首次实际写入前：起始指纹一致，可以恢复完整启动材料。
+  if(!context&&String(start?.logId)===String(logId)){
+    if(await frReplayStamp(archive,memory)!==start.afterStamp)throw new Error('本层曾中断且已有写入，缺少完整撤回记录。为避免物品或数值重复叠加，请先回退本层之前的快照再重跑。');
+    context={...start,ceWriteJournal:{changes:[],transfers:[]}};
+  }
+  if(!context){
+    await frCanonTraceLoad();
+    const phase=system==='ce'?'变量演化':'正文后补演';
+    const prior=(frCanonTraceHistory||[]).some(run=>String(run.logId)===String(logId)&&run.phase===phase);
+    const artifact=typeof frCanonLoadTurnArtifacts==='function'?await frCanonLoadTurnArtifacts(name,logId,system):null;
+    const settlement=memory.ordinarySettlement;
+    if(prior||artifact?.executionResult||artifact?.requests?.length||(system==='ce'&&String(settlement?.logId)===String(logId)))throw new Error('本层已有执行痕迹但缺少可撤回基线，不能安全重复结算；请先回退本层之前的快照。');
+    const index=archive.data.logs.findIndex(row=>String(row.id)===String(logId));
+    const user=archive.data.logs.slice(0,index).reverse().find(row=>row.type==='user');
+    const story=String(log.content||'').replace(/<[^>]*>/g,'');
+    if(!story.trim())throw new Error('该楼层没有可用于重新演化的正文');
+    context={system,archiveName:name,logId:log.id,args:{storyText:story,userInput:String(user?.content||''),logId:log.id,force:true},beforeArchive:archive,beforeMemory:memory,ceWriteJournal:{changes:[],transfers:[]}};
+  }
+  context={...context,unsealed:false,afterArchive:context.afterArchive||archive,afterMemory:context.afterMemory||memory,sealedAt:context.sealedAt||Date.now()};
+  context.afterStamp=context.afterStamp||await frReplayStamp(archive,memory);
+  // 选全阶段仅用于写入归属；请求调度由 fullTurn 明确禁用缓存/失败筛选。
+  const stages=frReplayStagesFor(system).map(row=>row.key).filter(key=>key!=='补演账本');
+  return frReplayExecute(context,{system,stages,scopes:[],smart:false,fullTurn:true,mode:'replace',allowDependencies:true,replay:null},[]);
+}
+
 async function frReplayRunDirect(system,defaults){
   /* 直接重跑（智能重跑 / 定点重跑）的互斥锁也按系统分开。
    * 2026-11-02 玩家：「必须要彻底区分开来，这俩是完全不同的线路和独立系统。」
@@ -2646,7 +2732,7 @@ async function frReplayRunDirect(system,defaults){
   }
   if(defaults.mode==='continue'){var resumed=frReplayContinueSelection(data);stages=resumed.stages;scopes=resumed.scopes;}
   if(!stages.length&&!scopes.length)throw new Error('请选择需要主动重跑的人物或阶段。');
-  var selection={stages:stages,scopes:scopes,mode:defaults.mode||(defaults.smart&&frReplayPrebuiltFailures(data)?'continue':'rerun'),extra:String(defaults.extra||''),allowDependencies:defaults.allowDependencies===true,signal:task.controller.signal};
+  var selection={smart:defaults.smart===true,stages:stages,scopes:scopes,mode:defaults.mode||(defaults.smart&&frReplayPrebuiltFailures(data)?'continue':'rerun'),extra:String(defaults.extra||''),allowDependencies:defaults.allowDependencies===true,signal:task.controller.signal};
   /* ★ 2026-11-03：带上系统标识。
    * frReplayDependency 要按「原著补演 / 变量演化」各自的阶段 DAG 算下游闭包，
    * 两条线的阶段 key 有重名（tags/items/characters…）但依赖关系不同，
@@ -3877,7 +3963,7 @@ async function frReplayOpenPicker(system,defaults){
    *
    * 一个失败项都没有时不启动，直接告诉玩家本轮是干净的，
    * 避免点下去什么都不发生、让人以为按钮坏了。 */
-  var prebuiltSmartClick=false;
+  var prebuiltSmartClick=false,ceSmartClick=false;
   smart.addEventListener('click',function(){
     if(working)return;
     /* ★★★ 2026-11-02 玩家截图：面板上明明列出「需要重跑 3 项」，
@@ -3918,7 +4004,7 @@ async function frReplayOpenPicker(system,defaults){
     error.textContent='智能重跑：已自动选中 '+(autoStages.length+autoScopes.length)+' 个失败项目，即将开始。';
     error.style.color='';
     prebuiltSmartClick=!!frReplayPrebuiltFailures(data);
-    try{start.click();}finally{prebuiltSmartClick=false;}
+    ceSmartClick=true; try{start.click();}finally{prebuiltSmartClick=false;ceSmartClick=false;}
   });
   /* 从「子项勾选」反推「阶段勾选」。
    *
@@ -4122,7 +4208,7 @@ async function frReplayOpenPicker(system,defaults){
   });
 
   start.addEventListener('click',async function(){
-    var smartContinue=prebuiltSmartClick;
+    var smartContinue=prebuiltSmartClick,smartRepair=ceSmartClick;
     // 必须在这里建 controller：上面 stopOnly() 靠它中止本轮。
     // 之前重写这段时漏掉这一行，导致 workingController 恒为 null，
     // 「停止并恢复」点了什么也不做 —— 又是一种卡死。
@@ -4195,7 +4281,7 @@ async function frReplayOpenPicker(system,defaults){
       if(autoAdded.length){
         try{console.info('[局部重跑] 按关联自动带上 '+autoAdded.length+' 个阶段：'+autoAdded.join('、'));}catch(_){}
       }
-      var selected={system:ceMode?'ce':'canon',mode:smartContinue?'continue':'rerun',stages:finalStages,scopes:checks.filter(function(n){return n.checked&&n.dataset.scope;}).map(function(n){return n.dataset.scope;}).filter(Boolean),extra:extra.value.trim(),allowDependencies:dep.checked,signal:workingController.signal};
+      var selected={smart:smartRepair,system:ceMode?'ce':'canon',mode:smartContinue?'continue':'rerun',stages:finalStages,scopes:checks.filter(function(n){return n.checked&&n.dataset.scope;}).map(function(n){return n.dataset.scope;}).filter(Boolean),extra:extra.value.trim(),allowDependencies:dep.checked,signal:workingController.signal};
       selected.replay=frReplayProsePlan(data,selected);
       /* ★★★ 2026-11-03 玩家定：局部重跑不该从「补演边界判定」重跑整轮。
        *

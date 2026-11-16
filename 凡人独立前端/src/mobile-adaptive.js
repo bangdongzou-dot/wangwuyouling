@@ -532,6 +532,23 @@
     } catch (e) { return false; }
   }
 
+  // Temporary, bounded numeric-only attribution; never inspects/logs page contents.
+  var frAdaptTimingStart = performance.now(), frAdaptTimingCount = 0;
+  function frAdaptTimed(label, fn) {
+    return function() {
+      if (performance.now()-frAdaptTimingStart > 60000 || frAdaptTimingCount >= 36) return fn.apply(this,arguments);
+      var began = performance.now();
+      try { return fn.apply(this,arguments); }
+      finally {
+        var duration=performance.now()-began;
+        if (duration>=20 || frAdaptTimingCount<6) {
+          frAdaptTimingCount++;
+          console.log('[适配计时] '+JSON.stringify({stage:label,ms:Math.round(duration),sinceStartMs:Math.round(performance.now()-frAdaptTimingStart)}));
+        }
+      }
+    };
+  }
+
   /* 全量扫描一遍 */
   function pass() {
     var fixed = 0;
@@ -693,6 +710,9 @@
     } catch (e) {}
     return false;
   }
+
+  pass = frAdaptTimed('layout-pass', pass);
+  passTopmost = frAdaptTimed('layout-topmost', passTopmost);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', install, { once: true });

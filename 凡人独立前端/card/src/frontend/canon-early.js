@@ -722,6 +722,24 @@ async function frCanonBoundaryLoad(archiveName,logId,system){
     return row.boundary;
   }catch(_){return null;}
 }
+// Prefix queries must not materialize unrelated replay snapshots from settings.
+async function frCanonSettingsRowsByPrefix(prefix){
+  var table=db.settings;
+  if(typeof table.where==='function'){
+    var where=table.where('key');
+    if(where&&typeof where.startsWith==='function')return await where.startsWith(prefix).toArray();
+  }
+  // Older adapters: enumerate keys only, then fetch matching records. Never fall
+  // back to table.toArray(), which also clones multi-gigabyte replay baselines.
+  var collection=typeof table.toCollection==='function'?table.toCollection():null;
+  if(!collection||typeof collection.primaryKeys!=='function'||typeof table.get!=='function')return [];
+  var keys=await collection.primaryKeys(),rows=[];
+  for(var key of keys){
+    if(typeof key!=='string'||!key.startsWith(prefix))continue;
+    var row=await table.get(key);if(row)rows.push(row);
+  }
+  return rows;
+}
 async function frCanonBoundaryPrune(archiveName,currentLogId,system){
   try{
     if(typeof dbSet!=='function')return 0;
@@ -729,7 +747,7 @@ async function frCanonBoundaryPrune(archiveName,currentLogId,system){
     var name=archiveName||(typeof currentArchiveName==='string'?currentArchiveName:'');
     if(!name)return 0;
     var keep=String(currentLogId||''),prefix=FR_CANON_BOUNDARY_PREFIX+name+':',removed=0;
-    var rows=await db.settings.toArray();
+    var rows=await frCanonSettingsRowsByPrefix(prefix);
     for(var r of rows){
       var key=String(r&&r.key||'');
       if(key.indexOf(prefix)!==0)continue;
@@ -753,7 +771,7 @@ async function frCanonTurnArtifactsPrune(archiveName,currentLogId,system){
     if(!name)return 0;
     var keep=String(currentLogId||'');
     var prefix=FR_CANON_TURN_ARTIFACTS_PREFIX+name+':';
-    var rows=await db.settings.toArray(),removed=0;
+    var rows=await frCanonSettingsRowsByPrefix(prefix),removed=0;
     for(var r of rows){
       var key=String(r&&r.key||'');
       if(key.indexOf(prefix)!==0)continue;
@@ -784,7 +802,7 @@ async function ceCanonPruneOlderGuidance(archiveName,currentFloor){
     var cur=Number(currentFloor);
     if(!isFinite(cur)||cur<=1)return;        // 第 1 层没有更早的
     var prefix='FR_CANON_GUIDANCE_V1:'+name+':';
-    var rows=await db.settings.toArray();
+    var rows=await frCanonSettingsRowsByPrefix(prefix);
     for(var r of rows){
       var key=String(r&&r.key||'');
       if(key.indexOf(prefix)!==0)continue;

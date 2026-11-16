@@ -163,9 +163,10 @@ var FrEvolutionSettings = (function () {
     [['builtin', '内置预设'], ['custom', '自定义预设']].forEach(function (entry) { var node = button(entry[1], 'fr-evo-filter'); filterButtons[entry[0]] = node; filters.append(node); listen(node, 'click', function () { category = entry[0]; renderPresets(); }); });
     chooser.append(filters, presetCards, detail, status); if (presetSection) presetSection.prepend(chooser);
     function presets() { return presetSelect && Array.isArray(presetSelect._frPresets) ? presetSelect._frPresets : opts.presets || []; }
-    function current() { return presets().find(function (p) { return String(p.id) === presetSelect.value; }); }
+    var viewPresetId = '', viewRouteId = ''; 
+    function current() { return presets().find(function (p) { return String(p.id) === (viewPresetId || presetSelect.value); }); }
     function compatible(preset) { return typeof frEvolutionPresetSupportsMode!=='function'||frEvolutionPresetSupportsMode(preset,modeSelect?.value||'staged'); }
-    function choosePreset(preset) { if(!compatible(preset)){status.textContent='此预设不适用于当前演化方式，请先切换方式。';return;}presetSelect.value = String(preset.id); presetSelect.dispatchEvent(new Event('change', { bubbles: true })); }
+    function choosePreset(preset) { viewPresetId = ''; viewRouteId = ''; if(!compatible(preset)){status.textContent='此预设不适用于当前演化方式，请先切换方式。';return;}presetSelect.value = String(preset.id); presetSelect.dispatchEvent(new Event('change', { bubbles: true })); }
     async function action(node, fn) { node.disabled = true; try { await fn(); } catch (error) { await report(error); } finally { node.disabled = false; } }
     function renderPresets() {
       if (!presetSelect) return;
@@ -198,7 +199,7 @@ var FrEvolutionSettings = (function () {
         detail.append(el('p', '', isLight ? '轻量规则适合合并演化，将登场、物品、普通人物与杂项集中处理。重要人物仍可加入独立演化名单。' : '完整规则适合分阶段演化，分别处理登场、物品、人物与世界变化。可逐组查看规则，按需要复制为自定义。'));
       } else if (selected.description) detail.append(el('p', '', selected.description));
       var clone = button('复制为自定义', 'small-btn fr-evo-clone'); clone.disabled = typeof opts.onClonePreset !== 'function';
-      listen(clone, 'click', function () { action(clone, async function () { var result = await opts.onClonePreset(copy(selected)); if (result && result.id) { category = 'custom'; if (presets().some(function (p) { return p.id === result.id; })) choosePreset(result); } renderPresets(); status.textContent = '已复制为自定义预设'; }); }); detail.append(clone);
+      listen(clone, 'click', function () { action(clone, async function () { var originalSelection=presetSelect.value,routeId=viewRouteId; var result = await opts.onClonePreset(copy(selected)); if (result && result.id) { category = 'custom'; if(routeId){presetSelect.value=originalSelection;viewPresetId=result.id;viewRouteId=routeId;window.FREvolutionRoutePresets.set(routeId,result.id);window.__frRefreshApiEmbeds?.();}else if (presets().some(function (p) { return p.id === result.id; })) choosePreset(result); } renderPresets(); status.textContent = routeId?'已复制为自定义预设并绑定此接口':'已复制为自定义预设'; }); }); detail.append(clone);
       var chips = el('div', 'fr-evo-rule-chips'), compatibility = el('details', 'fr-evo-compatibility'), compatibilityChips = el('div', 'fr-evo-rule-chips');
       compatibility.append(el('summary', '', '保留的兼容规则'), el('p', 'hint', '这些规则当前仅供查阅，不会作为独立阶段运行。原著补演请在独立设置中管理。'), compatibilityChips);
       groups(selected).forEach(function (group) {
@@ -237,7 +238,7 @@ var FrEvolutionSettings = (function () {
       }
       rules.forEach(function (rule, index) { var row = button(rule.name || rule.id || '规则 ' + (index + 1), 'fr-evo-rule-row'); listen(row, 'click', function () { edit(index); }); list.append(row); }); edit(0);
       var footer = el('div', 'fr-evo-dialog-footer');
-      if (!locked) { var save = button('保存规则', 'primary-btn'); save.disabled = typeof opts.onSavePreset !== 'function'; listen(save, 'click', function () { action(save, async function () { await opts.onSavePreset(draft); dialog.close(); renderPresets(); status.textContent = '规则已保存'; }); }); footer.append(save); }
+      if (!locked) { var save = button('保存规则', 'primary-btn'); save.disabled = typeof opts.onSavePreset !== 'function'; listen(save, 'click', function () { action(save, async function () { var originalSelection=presetSelect.value; await opts.onSavePreset(draft); if(viewPresetId)presetSelect.value=originalSelection; dialog.close(); renderPresets(); status.textContent = '规则已保存'; }); }); footer.append(save); }
       dialog.append(footer); overlay.append(dialog);
       listen(close, 'click', function () { dialog.close(); });
       listen(dialog, 'close', function () { dialog.remove(); activeDialog = null; if (opener && opener.isConnected) opener.focus(); });
@@ -251,8 +252,9 @@ var FrEvolutionSettings = (function () {
       return { parent: entry.node, siblings: entry.children, moved: entry.children.filter(function (child) { return child.isConnected && child.parentNode !== entry.node; }) };
     }).filter(function (entry) { return entry.moved.length; });
     var instance = {
-      refresh: async function (next) { if (next) opts = Object.assign({}, opts, next); moveSections(); upgradeHierarchy(); upgradeMode(); syncMode(); if (next && next.config) { find('concurrent-evo-enable-entry-decision').checked = next.config.enableEntryDecision !== false; find('concurrent-evo-enable-misc-evolution').checked = next.config.enableMiscEvolution !== false; } renderPresets(); activate(selectedTab); },
+      refresh: async function (next) { if(next && next.config){viewPresetId='';viewRouteId='';} if (next) opts = Object.assign({}, opts, next); moveSections(); upgradeHierarchy(); upgradeMode(); syncMode(); if (next && next.config) { find('concurrent-evo-enable-entry-decision').checked = next.config.enableEntryDecision !== false; find('concurrent-evo-enable-misc-evolution').checked = next.config.enableMiscEvolution !== false; } renderPresets(); activate(selectedTab); },
       activate: activate,
+      openPreset: function(id,routeId) { viewRouteId=routeId||''; if (!presets().some(function(p){return p.id===id;})) throw new Error('绑定预设已不存在，请重新选择'); viewPresetId=id; category=readonly(current())?'builtin':'custom'; renderPresets(); activate('presets'); },
       destroy: function () {
         abort.abort(); if (activeDialog) { activeDialog.close(); activeDialog.remove(); activeDialog = null; }
         if (modeSelect) { var hidden = modeSelect.closest('.fr-evo-original-mode'); if (hidden) hidden.classList.remove('fr-evo-original-mode'); }
@@ -272,5 +274,17 @@ var FrEvolutionSettings = (function () {
     };
     instances.set(overlay, instance); renderPresets(); activate(selectedTab); return instance;
   }
-  return { mount: mount };
+  return { mount: mount, get: function(overlay){return instances.get(overlay);} };
+})();
+
+// Per-interface rules. Opening details only browses; it never changes the active preset.
+window.FREvolutionRoutePresets = (function(){
+  var key='FR_EVOLUTION_ROUTE_PRESETS_V1';
+  function bindings(){try{return JSON.parse(localStorage.getItem(key)||'{}')||{};}catch(_){return {};}}
+  return {
+    get:function(routeId){return bindings()[routeId]||'';},
+    set:function(routeId,id){var value=bindings();if(id)value[routeId]=id;else delete value[routeId];localStorage.setItem(key,JSON.stringify(value));},
+    options:async function(){var data=await loadConcurrentEvolutionPresets(),config=await loadConcurrentEvolutionConfig();return data.presets.map(function(p){return {id:p.id,name:p.name,disabled:typeof frEvolutionPresetSupportsMode==='function'&&!frEvolutionPresetSupportsMode(p,config.variableUpdateMode==='merged'?'merged':'staged')};});},
+    open:async function(routeId){var id=this.get(routeId);if(!id){var config=await loadConcurrentEvolutionConfig(),data=await loadConcurrentEvolutionPresets();id=config.activePresetId||data.activePresetId||data.presets[0]?.id;}await manageConcurrentEvolutionSettings();var overlay=document.getElementById('concurrent-evolution-settings-overlay');FrEvolutionSettings.get(overlay).openPreset(id,routeId);overlay.style.zIndex=String(Math.max(2000,...Array.from(document.querySelectorAll('.overlay.visible')).map(function(o){return parseInt(getComputedStyle(o).zIndex)||0;}))+1);}
+  };
 })();

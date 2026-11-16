@@ -15129,7 +15129,7 @@ async function dbRemove(key) {
         const summaryEditorOverlay = document.getElementById('summary-editor-overlay');
         const manualSegmentedMemoryOverlay = document.getElementById('manual-segmented-memory-overlay');
         const chatBackgroundSettingsOverlay = document.getElementById('chat-background-settings-overlay');
-        const backgroundUploadInput = document.getElementById('background-upload-input');        const dinoGameOverlay = document.getElementById('dino-game-overlay');
+        const backgroundUploadInput = document.getElementById('background-upload-input');        const dinoGameOverlay = document.getElementById('dino-game-overlay');
         const characterCreatorOverlay = document.getElementById('character-creator-overlay');
         const peekBackgroundBtn = document.getElementById('peek-background-btn');
         const branchToggleBtn = document.getElementById('branch-toggle-btn');
@@ -16566,24 +16566,24 @@ const textToSearch = storyText + (userInput || '');
           return sanitized;
         }
 
-        async function frAttachDialogueAvatars(element) {
-          const quotes = [...element.querySelectorAll('.fr-story-quote > .fr-story-speaker')];
-          const archiveName = currentArchiveName;
-          if (!archiveName || !quotes.length) return;
-          const archive = await db.archives.get(archiveName);
-          if (!archive || currentArchiveName !== archiveName) return;
-          const logId = element.closest('[data-log-id]')?.dataset.logId;
-          const logs = archive.data?.logs || [];
-          const logIndex = logId ? logs.findIndex(log => String(log.id) === logId) : -1;
-          const layer = logIndex < 0 ? logs.length - 1 : logIndex;
-          const chars = new Map(Object.entries(characterDatabase || {}).map(([id, char]) =>
-            [id, { ...char, id }]));
-          for (const [id, row] of Object.entries(currentState?.['0'] || {})) {
+        // Only concurrent loads are shared; no full archive is retained in a global cache.
+        const frDialogueAvatarLoads = new Map();
+        const frDialogueAvatarRevisions = new WeakMap();
+        function frCreateDialogueAvatarContext(archive, archiveName) {
+          const sourceState = archive?.data?.state || {};
+          const state = {};
+          for (const key of ['npcAvatars', 'npcSceneAvatars', 'npcAvatarTimeline', 'npcSceneAvatarTimeline']) state[key] = sourceState[key];
+          const isLive = archiveName === currentArchiveName;
+          const logs = (archive?.data?.logs || []).map(log => ({ id: log.id }));
+          const logIndices = new Map();
+          logs.forEach((log, index) => { if (!logIndices.has(String(log.id))) logIndices.set(String(log.id), index); });
+          const chars = new Map(Object.entries(isLive ? (characterDatabase || {}) : (sourceState.characterDatabase || {})).map(([id, char]) =>
+            [id, { id, name: char.name, visualData: char.visualData }]));
+          for (const [id, row] of Object.entries((isLive ? currentState : sourceState.currentState)?.['0'] || {})) {
             const char = chars.get(id) || { id };
             const name = String(row?.['1'] || '').split(/[|｜]/)[0].trim();
             chars.set(id, { ...char, name: name || char.name });
           }
-          const state = archive.data?.state || {};
           for (const key of Object.keys({ ...state.npcAvatars, ...state.npcSceneAvatars,
             ...state.npcAvatarTimeline, ...state.npcSceneAvatarTimeline })) {
             const { charId, charName } = _portraitSplitUniqueKey(key);
@@ -16594,10 +16594,55 @@ const textToSearch = storyText + (userInput || '');
             if (!char.name) continue;
             names.set(char.name, names.has(char.name) ? null : char);
           }
+          return { archiveName, state, logs, logIndices, chars, names, playerName: isLive ? currentPlayerData?.name : chars.get('B1')?.name };
+        }
+        function frLoadDialogueAvatarContext(archiveName) {
+          if (!frDialogueAvatarLoads.has(archiveName)) {
+            const load = Promise.resolve().then(() => db.archives.get(archiveName))
+              .then(archive => archive ? frCreateDialogueAvatarContext(archive, archiveName) : null);
+            frDialogueAvatarLoads.set(archiveName, load);
+            const release = () => { if (frDialogueAvatarLoads.get(archiveName) === load) frDialogueAvatarLoads.delete(archiveName); };
+            load.then(release, release);
+          }
+          return frDialogueAvatarLoads.get(archiveName);
+        }
+        function frInitializeLazyHistory(container, contentDiv, logs, avatarOptions) {
+          // Keep display fields only: hidden history must not retain turn snapshots/prompts.
+          let pending = logs.filter(log => !log.isGhost).map(log => ({ id: log.id, type: log.type,
+            content: log.content, detailedEvolutionHtml: log.detailedEvolutionHtml }));
+          const populate = () => {
+            if (!container.open || !pending) return;
+            const rows = pending; pending = null;
+            container.removeEventListener('toggle', populate);
+            const fragment = document.createDocumentFragment();
+            for (const log of rows) {
+              const type = log.type || (String(log.content || '').startsWith('>') ? 'user' : 'ai');
+              fragment.appendChild(createLogEntryElement(log, type, avatarOptions));
+            }
+            contentDiv.appendChild(fragment);
+          };
+          container.addEventListener('toggle', populate);
+        }
+
+        async function frAttachDialogueAvatars(element, options = {}) {
+          const revision = (frDialogueAvatarRevisions.get(element) || 0) + 1;
+          frDialogueAvatarRevisions.set(element, revision);
+          const quotes = [...element.querySelectorAll('.fr-story-quote > .fr-story-speaker')];
+          const archiveName = options.context?.archiveName || currentArchiveName;
+          const isCurrent = () => frDialogueAvatarRevisions.get(element) === revision
+            && element.isConnected !== false
+            && (options.isCurrent ? options.isCurrent() : currentArchiveName === archiveName);
+          if (!archiveName || !quotes.length) return;
+          const context = await (options.context || frLoadDialogueAvatarContext(archiveName));
+          if (!context || !isCurrent()) return;
+          const { state, logs, chars, names } = context;
+          const logId = options.logId ?? element.closest('[data-log-id]')?.dataset.logId;
+          const logIndex = logId != null ? (context.logIndices.get(String(logId)) ?? -1) : -1;
+          const layer = logIndex < 0 ? logs.length - 1 : logIndex;
           const sources = new Map();
           for (const speaker of quotes) {
             const name = speaker.textContent.trim();
-            const char = /^(?:我|你|玩家|B1)$/u.test(name) ? { id: 'B1', name: currentPlayerData?.name || name }
+            const char = /^(?:我|你|玩家|B1)$/u.test(name) ? { id: 'B1', name: context.playerName || name }
               : chars.get(name) || names.get(name);
             if (!char) continue;
             if (!sources.has(char.id)) {
@@ -16614,7 +16659,7 @@ const textToSearch = storyText + (userInput || '');
               sources.set(char.id, src);
             }
             const src = sources.get(char.id);
-            if (currentArchiveName !== archiveName || !element.contains(speaker)
+            if (!isCurrent() || !element.contains(speaker)
                 || !/^data:image\/(?:png|jpe?g|webp|gif);base64,|^(?:https?:|blob:)/i.test(String(src || ''))) continue;
             const card = speaker.parentElement;
             const image = document.createElement('img');
@@ -16656,7 +16701,7 @@ const textToSearch = storyText + (userInput || '');
           return text.slice(0,match.index) + block + text.slice(after);
         }
 
-        function frRenderStoryHtml(element, html) {
+        function frRenderStoryHtml(element, html, avatarOptions = {}) {
           const normalized = frNormalizeProseEnvelope(html);
           const withStatus = normalized.replace(/<ui_sys>([\s\S]*?)<\/ui_sys>/gi, (_, source) => {
             const fields = { ti:'time', li:'place', sect_stat:'mood', ei:'mood', env:'env', warn:'note' };
@@ -16713,7 +16758,7 @@ const textToSearch = storyText + (userInput || '');
             card.append(line);
             if (speaker?.textContent.trim()) card.append(speaker);
           }
-          void frAttachDialogueAvatars(element).catch(error => console.warn('[对白头像]', error?.message));
+          void frAttachDialogueAvatars(element, avatarOptions).catch(error => console.warn('[对白头像]', error?.message));
           const opening = [...body.childNodes].find(node =>
             (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR')
             || (node.nodeType === Node.TEXT_NODE && node.data.trim()));
@@ -16942,7 +16987,7 @@ return processedText;
           imgElement.replaceWith(errorContainer);
         }
 
-        function createLogEntryElement(logData, type) {
+        function createLogEntryElement(logData, type, avatarOptions) {
           const isSummary =
             typeof logData !== 'string' &&
             (logData.content.startsWith('[天道总结:') || logData.content.includes('<h4>天道初启</h4>'));
@@ -16969,7 +17014,7 @@ return processedText;
             }
           }
 
-          if (type === 'ai') frRenderStoryHtml(logEntry, finalContent);
+          if (type === 'ai') frRenderStoryHtml(logEntry, finalContent, avatarOptions);
           else logEntry.innerHTML = sanitizeHTML(finalContent);
 
           logEntry.querySelectorAll('div[data-library-image-placeholder]').forEach(placeholder => {
@@ -28122,6 +28167,29 @@ async function ceIndependentStoryImageCandidates(archive, config) {
   return candidates;
 }
 
+// Release decoded grid pixels before waiting for turn writes; generated PNGs remain intact.
+async function ceSliceStoryImageGrid(imageUrl, ordered, columns) {
+  const image = new Image();
+  let canvas;
+  try {
+    image.src = imageUrl;
+    await image.decode();
+    canvas = document.createElement('canvas');
+    const cellWidth = Math.floor(image.naturalWidth / columns), cellHeight = Math.floor(image.naturalHeight / columns);
+    canvas.width = cellWidth; canvas.height = cellHeight;
+    const painter = canvas.getContext('2d');
+    return ordered.map((item,index)=>{
+      painter.clearRect(0,0,cellWidth,cellHeight);
+      painter.drawImage(image,(index % columns) * cellWidth,Math.floor(index / columns) * cellHeight,
+        cellWidth,cellHeight,0,0,cellWidth,cellHeight);
+      return {...item,imageUrl:canvas.toDataURL('image/png')};
+    });
+  } finally {
+    if (canvas) { canvas.width = 0; canvas.height = 0; }
+    image.removeAttribute('src');
+  }
+}
+
 async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveName, archive, floor, signal, context = {}) {
   const plain = document.createElement('div');
   plain.innerHTML = ceStripImagePromptBlocksFromHtml(ceStripGeneratedImageBlocksFromHtml(String(floor.content || '')));
@@ -28206,17 +28274,7 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
     const gridPrompt = `生成一张 ${columns}×${columns} 的分镜网格。从左到右、从上到下，每格尺寸一致，无边框、留白和文字。各格内容独立，不得跨格。用独立的背景填充未指定的格子。\n`
       + panels.map((item,index)=>`第 ${index + 1} 格\n${item.prompt}`).join('\n\n');
     const imageUrl = await generate(gridPrompt,panels.flatMap(item=>item.references));
-    const image = new Image(); image.src = imageUrl; await image.decode();
-    const canvas = document.createElement('canvas');
-    const cellWidth = Math.floor(image.naturalWidth / columns), cellHeight = Math.floor(image.naturalHeight / columns);
-    canvas.width = cellWidth; canvas.height = cellHeight;
-    const painter = canvas.getContext('2d');
-    ordered.forEach((item,index)=>{
-      painter.clearRect(0,0,cellWidth,cellHeight);
-      painter.drawImage(image,(index % columns) * cellWidth,Math.floor(index / columns) * cellHeight,
-        cellWidth,cellHeight,0,0,cellWidth,cellHeight);
-      results.push({...item,imageUrl:canvas.toDataURL('image/png')});
-    });
+    results.push(...await ceSliceStoryImageGrid(imageUrl, ordered, columns));
   } else if (config.imageStoryMode === 'sequential') {
     for (const item of planned) results.push(await draw(item,results.findLast(result=>result.imageUrl)));
   } else results.push(...await Promise.all(planned.map(item => draw(item))));
@@ -31690,7 +31748,32 @@ async function showConcurrentEvolutionPresetOverwriteConfirm(presetName, existin
   });
 }
 
-async function getActiveConcurrentEvolutionPreset() {
+// Resolve per API-card rules without changing the globally selected preset.
+const ceEvolutionRoutePresetFallbacks = new WeakMap();
+async function ceResolveEvolutionRoutePreset(route, fallbackPreset, config) {
+  // Dedicated canon conversion carries extra immutable scope rules.
+  if (fallbackPreset?._frCanonConversionPreset === true) return fallbackPreset;
+  const id = String(route && route.id || '');
+  let boundId = '';
+  try {
+    const map = JSON.parse(localStorage.getItem('FR_EVOLUTION_ROUTE_PRESETS_V1') || '{}');
+    boundId = id && typeof map[id] === 'string' ? map[id] : '';
+  } catch (_) {}
+  const base = fallbackPreset && ceEvolutionRoutePresetFallbacks.get(fallbackPreset) || fallbackPreset;
+  if (!boundId) return base;
+  const data = await loadConcurrentEvolutionPresets();
+  const selected = (data?.presets || []).find(row => row.id === boundId);
+  if (!selected) throw new Error('接口绑定的变量预设不存在，请重新选择：' + boundId);
+  const mode = config?.variableUpdateMode === 'merged' ? 'merged' : 'staged';
+  if (typeof frEvolutionPresetSupportsMode === 'function' && !frEvolutionPresetSupportsMode(selected, mode)) {
+    throw new Error('接口绑定的变量预设与当前演化方式不兼容，请选择匹配预设');
+  }
+  const resolved = {...selected};
+  if (base && typeof base === 'object') ceEvolutionRoutePresetFallbacks.set(resolved, base);
+  return resolved;
+}
+
+async function getActiveConcurrentEvolutionPreset(options = {}) {
   const presetsData = await loadConcurrentEvolutionPresets();
   const config = await loadConcurrentEvolutionConfig();
   const presets = Array.isArray(presetsData?.presets) ? presetsData.presets : [];
@@ -31712,7 +31795,7 @@ async function getActiveConcurrentEvolutionPreset() {
     await saveConcurrentEvolutionConfig(config);
   }
   ensurePromptConfig(preset, 'original_timeline_evolution');
-  return preset;
+  return options.resolveRoute === false ? preset : ceResolveEvolutionRoutePreset(getApiConfigsToTry(config)[0], preset, config);
 }
 
 // ===== 检查函数 =====
@@ -39618,7 +39701,7 @@ async function ceRunCanonTurnAfterStory(ctx) {
    *   注意：这里只放宽「幂等短路」这一道，**不**放宽任何安全约束
    *   （备份、回滚、落地校验、账本提交都照旧执行）。
    *   非局部重跑（正常整轮、重启续跑、网络重试）行为完全不变。 */
-  const isSelectiveReplay = !!(options.replay && typeof options.replay === 'object');
+  const isSelectiveReplay = options.fullTurn===true || !!(options.replay && typeof options.replay === 'object');
   if (!isSelectiveReplay &&
       boundary.receipt && boundary.receipt.worldTime === targetTime && boundary.receipt.stateText === boundary.stateText) {
     try{console.warn('[原著补演] 幂等短路：本轮已按当前状态提交过，跳过重复执行');}catch(_){}
@@ -40547,6 +40630,7 @@ async function executeConcurrentRequests({
   onResult
 }) {
   if(sharedContext && sharedContext.canonProseOnly && !sharedContext.precomputedCharacterResponses && typeof frExecuteCanonCharacterBatch==='function')return frExecuteCanonCharacterBatch({targets,preset,config,sharedContext,signal});
+  const fallbackPreset = preset;
   const results = [];
   const queue = [...targets];
   const inProgress = new Map();
@@ -40766,6 +40850,7 @@ async function executeConcurrentRequests({
     const _eoApiModel = (apiOverride && apiOverride.apiModel) ? apiOverride.apiModel : config.apiModel;
 
     try {
+      const preset = await ceResolveEvolutionRoutePreset(apiOverride, fallbackPreset, config);
       const prompt = await buildCharacterEvolutionPrompt(target, preset, effectiveContext);
       if (!prompt) {
         return { target, success: false, error: 'Prompt构建失败或该类型未启用', skipped: true };
@@ -45772,6 +45857,7 @@ function patchConcurrentEvolutionArchiveLogViewerFilter(retries = 40) {
         return;
       }
 
+      const avatarContext = frCreateDialogueAvatarContext(archive, archiveName);
       const rawLogs = Array.isArray(archive?.data?.logs) ? archive.data.logs : [];
       const hiddenLogs = rawLogs.filter(function(log) {
         return ceShouldHideArchiveLogViewerEntry(log);
@@ -45814,7 +45900,7 @@ function patchConcurrentEvolutionArchiveLogViewerFilter(retries = 40) {
             timestamp.textContent = new Date(log.timestamp).toLocaleString();
             const content = document.createElement('div');
             content.className = 'log-content';
-            if (log.type === 'ai') frRenderStoryHtml(content, log.content);
+            if (log.type === 'ai') frRenderStoryHtml(content, log.content, { context: avatarContext, logId: log.id, isCurrent: () => currentViewingArchive === archiveName });
             else content.innerHTML = sanitizeHTML(log.content);
             item.appendChild(timestamp);
             item.appendChild(content);
@@ -53805,7 +53891,7 @@ async function buildEntryDecisionPrompt(context) {
   });
   const beastsSummary = buildPlayerBeastsSummary();
 
-  const preset = await getActiveConcurrentEvolutionPreset();
+  const preset = context.preset || await getActiveConcurrentEvolutionPreset();
   // [简化] mode 已硬编码为 all_focus
   const entryKey = 'entry_all_focus';
   const promptConfig = preset && preset.prompts && preset.prompts[entryKey];
@@ -55045,7 +55131,7 @@ async function requestEntryDecision(options = {}) {
     }
 
     // 3. 构建提示词
-    const prompt = await buildEntryDecisionPrompt({
+    const entryPromptContext = {
       storyText: storyText || '',
       userInput,
       currentTime,
@@ -55056,7 +55142,9 @@ async function requestEntryDecision(options = {}) {
       // [简化] mode 已硬编码为 all_focus
       timeLocationRow,
       battleEntryContext
-    });
+    };
+    const entryFallbackPreset = await getActiveConcurrentEvolutionPreset();
+    const prompt = await buildEntryDecisionPrompt({...entryPromptContext, preset:entryFallbackPreset});
 
     if (!prompt || !prompt.trim()) {
       console.warn('[登场判断] entry预设缺失或为空，跳过');
@@ -55098,6 +55186,9 @@ async function requestEntryDecision(options = {}) {
     for (let _eci = 0; _eci < _entryApiConfigs.length; _eci++) {
       const _eCurCfg = _entryApiConfigs[_eci];
       const hasNextRoute=_eci<_entryApiConfigs.length-1;
+      const routePreset = await ceResolveEvolutionRoutePreset(_eCurCfg, entryFallbackPreset, config);
+      const routePrompt = routePreset === entryFallbackPreset ? prompt : await buildEntryDecisionPrompt({...entryPromptContext,preset:routePreset});
+      const messages = [{role:'user',content:routePrompt},{role:'assistant',content:entryPrefill}];
       responseText = null;
       lastError = null;
       parseResult = null;
@@ -59848,7 +59939,7 @@ async function requestMiscEvolutionPhase(options = {}) {
     }
   }
 
-  let prompt = await buildMiscEvolutionPrompt({
+  const buildRoutePrompt = preset => buildMiscEvolutionPrompt({
     preset,
     storyText: (sharedContext && sharedContext.storyText) || storyText,
     userInput: (sharedContext && sharedContext.userInput) || userInput,
@@ -59861,6 +59952,8 @@ async function requestMiscEvolutionPhase(options = {}) {
     canonProseOnly: sharedContext && sharedContext.canonProseOnly,
     allCharactersInventory: (sharedContext && sharedContext.allCharactersInventory) || ''
   });
+  const fallbackPreset = preset;
+  let prompt = await buildRoutePrompt(preset);
   if (!prompt) {
     return { skipped: true, reason: 'prompt_failed' };
   }
@@ -59888,6 +59981,12 @@ async function requestMiscEvolutionPhase(options = {}) {
       const _mCurCfg = _miscApiConfigs[_miscApiIdx];
       const hasNextRoute=_miscApiIdx<_miscApiConfigs.length-1;
       try {
+        const preset = await ceResolveEvolutionRoutePreset(_mCurCfg, fallbackPreset, resolvedConfig);
+        let prompt = await buildRoutePrompt(preset);
+        if (!prompt) throw new Error('接口绑定预设未提供世界演化规则');
+        if(sharedContext?.canonTurnPlan&&typeof frCanonOwnershipInstruction==='function')prompt+=frCanonOwnershipInstruction(sharedContext.canonTurnPlan);
+        const dsWire = typeof frUsesDeepSeekEvolutionWire === 'function' && frUsesDeepSeekEvolutionWire(preset);
+        if(dsWire) prompt=frEvolutionWirePrompt(prompt,preset);
         const shouldUseThinkingPrefill = !dsWire && !!(
           sharedContext
           && sharedContext.canonProseOnly !== true
@@ -64823,6 +64922,39 @@ function executeRefreshItemData(op) {
  * @param {Array} operations
  * @returns {Array}
  */
+/** Resolve only IDs produced by successful transfers within this execution batch. */
+function ceCreateItemTransferAliases() {
+  const routes = new Map();
+  const key = (owner, id) => JSON.stringify([owner, id]);
+  return {
+    record(result) {
+      if (!result?.success || !result.to || !result.oldId || !result.newId) return;
+      const k = key(result.to, result.oldId);
+      if (!routes.has(k)) routes.set(k, result.newId);
+      else if (routes.get(k) !== result.newId) routes.set(k, null);
+    },
+    resolve(op, hasItem) {
+      if (!op?.itemId || op.type === 'createItem') return op;
+      const owner = op.from || op.owner;
+      if (!owner) return op;
+      const resolved = routes.get(key(owner, op.itemId));
+      if (!resolved || resolved === op.itemId || hasItem(owner, op.itemId)) return op;
+      return { ...op, itemId: resolved };
+    },
+  };
+}
+function ceItemOwnerHasManagedId(owner, id) {
+  try {
+    const state = ceBuildManagedCharacterItemState(owner);
+    if (!state) return true; // Unknown state must not trigger a guess.
+    const items = [...(state.inventory || []), ...Object.values(state.equipment || {}).flat()];
+    return items.some(item => getManagedItemId(item) === id ||
+      (item?.stockMembers || []).some(member => getManagedItemId(member) === id));
+  } catch (error) {
+    console.warn('[物品管理] 无法核对转交前编号，保留原编号:', owner, id, error);
+    return true;
+  }
+}
 function reorderItemOperations(operations) {
   const priority = {
     createItem: 10,
@@ -64858,6 +64990,7 @@ async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStor
   if (frStrict) frAssertCanonCommit();
   const results = [];
   const sortedOperations = reorderItemOperations(operations);
+  const transferAliases = ceCreateItemTransferAliases();
   const scopedNpcIds=npcLoadoutIds.filter(id=>/^C\d+$/u.test(id));
   const normalizeTouchedContainers = (opLike) => {
     const touchedIds = [opLike?.from, opLike?.to, opLike?.owner]
@@ -64888,7 +65021,8 @@ async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStor
   for (const rawOp of sortedOperations) {
     if (frStrict) frAssertCanonCommit();
     const presentation = typeof frVariablePresentation === 'function' && frVariablePresentation();
-    const op = presentation ? presentation.cleanVariableItemManagement(rawOp) : rawOp;
+    const cleanedOp = presentation ? presentation.cleanVariableItemManagement(rawOp) : rawOp;
+    const op = transferAliases.resolve(cleanedOp, ceItemOwnerHasManagedId);
     let packedBefore;
     try {
       if(stock&&op.itemId){
@@ -64942,6 +65076,7 @@ async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStor
         default:
           result = { success: false, error: '未知操作类型: ' + op.type };
       }
+      if (op.type === 'transferItem') transferAliases.record(result);
       if(packedBefore&&result?.success!==true)packedBefore.row['9']=packedBefore.remarks;
       if (frStrict && (!result || result.success !== true)) throw new Error(result && result.error || ('补演提交：物品操作失败：' + op.type));
       results.push({ ...result, type: op.type, operation:structuredClone(op), reason: result.reason || op.reason || '' });
@@ -65209,7 +65344,7 @@ async function requestItemManagementPhase(options = {}) {
 
   try {
     // 构建 Prompt
-    const prompt = await buildItemManagementPrompt({
+    const buildRoutePrompt = preset => buildItemManagementPrompt({
       storyText,
       userInput,
       currentTime,
@@ -65222,6 +65357,8 @@ async function requestItemManagementPhase(options = {}) {
       canonItemRepair: options.canonItemRepair,
       canonTurnPlan:options.canonTurnPlan
     });
+    const fallbackPreset = preset;
+    const prompt = await buildRoutePrompt(preset);
 
     if (!prompt) {
       console.warn('[物品管理] Prompt 构建失败，跳过');
@@ -65251,6 +65388,12 @@ async function requestItemManagementPhase(options = {}) {
     for (let _ici = 0; !hasPrecomputedResponse && _ici < _itemApiConfigs.length; _ici++) {
       const _iCurCfg = _itemApiConfigs[_ici];
       const hasNextRoute=_ici<_itemApiConfigs.length-1;
+      const preset = await ceResolveEvolutionRoutePreset(_iCurCfg, fallbackPreset, config);
+      const routePrompt = await buildRoutePrompt(preset);
+      if (!routePrompt) throw new Error('接口绑定预设未提供物品演化规则');
+      const dsWire = typeof frUsesDeepSeekEvolutionWire === 'function' && frUsesDeepSeekEvolutionWire(preset);
+      const withCompletion = dsWire && routePrompt.includes('<canon_completion>');
+      const messages = [{role:'user',content:dsWire?frEvolutionWirePrompt(routePrompt,preset,withCompletion):routePrompt}];
       let _apiRetryCount = 0;
       let _parseRetryCount = 0;
 
@@ -65488,7 +65631,7 @@ async function requestMergedEvolutionPhase(options = {}) {
   const allowedIds = new Set(targets.map(target => target.id));
   const requiredDeedsTargets = !options.canonVariables && options.enabledPhases?.entry !== false && typeof ceResolveRequiredEntryDeedsTargets === 'function'
     ? (await ceResolveRequiredEntryDeedsTargets({ config, storyText: sharedContext.storyText || '', userInput: sharedContext.userInput || '', skipModelCalibration: true })).filter(target => allowedIds.has(target.id)) : [];
-  const prompt = await buildMergedEvolutionPrompt({ ...options, requiredDeedsTargets });
+  const fallbackPreset = preset;
   ceThrowIfConcurrentEvolutionAborted(signal);
   const apiConfigs = getApiConfigsToTry(config);
   if (!apiConfigs.length) throw new Error('合并演化接口未配置');
@@ -65524,6 +65667,8 @@ async function requestMergedEvolutionPhase(options = {}) {
   let commandRepair = null;
   for (const [routeIndex,api] of apiConfigs.entries()) {
     const hasNextRoute=routeIndex<apiConfigs.length-1;
+    const preset = options.canonVariables ? fallbackPreset : await ceResolveEvolutionRoutePreset(api, fallbackPreset, config);
+    const prompt = await buildMergedEvolutionPrompt({...options,preset,requiredDeedsTargets});
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       ceThrowIfConcurrentEvolutionAborted(signal);
       const bridge = ceCreateRequestAbortBridge(Math.max(45000, Number(config.requestTimeout) || 120000), signal || null);
@@ -66407,7 +66552,7 @@ async function runConcurrentEvolution(options = {}) {
 
     throwIfAborted();
 
-    // 5.5 杂项与生图阶段改为在角色演化后顺序执行
+    // 5.5 杂项阶段在角色演化后顺序执行
     /* 这里只打印「后续会不会跑」的预告日志，不是执行点。
      * 加上选择判断，免得日志说「将在角色演化后执行」而实际被跳过、
      * 事后查日志时被自己的预告误导。 */
@@ -66418,11 +66563,7 @@ async function runConcurrentEvolution(options = {}) {
     } else {
       console.log('[并发演化] 杂项演化未配置或已禁用，跳过');
     }
-    if (shouldRunImageEvolution && !ceReplaySession) {
-      console.log('[并发演化] 生图演化将在杂项演化后顺序执行');
-    } else {
-      console.log('[并发演化] 生图演化未启用或未配置，跳过');
-    }
+    // 正文插图已由正文保存后的独立任务处理，变量重跑不触发生图。
 
     // 6. 进度UI已禁用
     const progressUI = null;
@@ -96664,7 +96805,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
 
           let archives = [];
           try {
-            archives = await db.archives.orderBy('name').toArray();
+            archives = (await db.archives.orderBy('name').primaryKeys()).map(name => ({ name }));
           } catch (error) {
             listEl.innerHTML = `<p style="text-align:center; color:#e57373;">加载本地存档列表失败: ${error.message}</p>`;
             return;
@@ -96798,6 +96939,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             const archive = await db.archives.get(archiveName);
             if (!archive) return;
 
+            const avatarContext = frCreateDialogueAvatarContext(archive, archiveName);
             const logs = archive.data.logs || [];
             logList.innerHTML = '';
             if (logs.length === 0) {
@@ -96814,7 +96956,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
                   timestamp.textContent = new Date(log.timestamp).toLocaleString();
                   const content = document.createElement('div');
                   content.className = 'log-content';
-                  if (log.type === 'ai') frRenderStoryHtml(content, log.content);
+                  if (log.type === 'ai') frRenderStoryHtml(content, log.content, { context: avatarContext, logId: log.id, isCurrent: () => currentViewingArchive === archiveName });
                   else content.innerHTML = sanitizeHTML(log.content);
                   item.appendChild(timestamp);
                   item.appendChild(content);
@@ -96935,7 +97077,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
         async function renderArchiveList() {
           const archiveList = document.getElementById('archive-list');
           archiveList.innerHTML = '';
-          const archives = await db.archives.orderBy('name').toArray();
+          const archives = (await db.archives.orderBy('name').primaryKeys()).map(name => ({ name }));
 
           if (archives.length === 0) {
             archiveList.innerHTML = '<li>无本地存档</li>';
@@ -96981,7 +97123,49 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
           });
         }
 
+        let frLoadLifeClickInProgress = false;
+        async function frHandleLoadLifeClick() {
+          if (frLoadLifeClickInProgress) return;
+          frLoadLifeClickInProgress = true;
+          const button = document.getElementById('load-life-btn');
+          const label = button.textContent;
+          button.disabled = true;
+          button.textContent = '正在读取…';
+          try {
+            // 保留首页动画，先绘制按钮反馈，再查询轻量索引。
+            await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+            const activeArchive = await dbGet(ACTIVE_ARCHIVE_KEY);
+            if (activeArchive) {
+              await selectAndLoadArchive(activeArchive);
+            } else if (await db.archives.count()) {
+              await renderArchiveSelectionView();
+              toggleCenterView('archive-selection-view');
+              cultivationPanel.classList.remove('hidden');
+              splashScreen.classList.add('hidden');
+            }
+          } catch (error) {
+            await showCustomAlert('读取人生失败：' + (error.message || error));
+          } finally {
+            button.textContent = label;
+            button.disabled = false;
+            frLoadLifeClickInProgress = false;
+          }
+        }
+
+        let frArchiveLoadInProgress = false;
         async function selectAndLoadArchive(archiveName) {
+          if (frArchiveLoadInProgress) return;
+          frArchiveLoadInProgress = true;
+          const startedOnSplash = !splashScreen.classList.contains('hidden');
+          let completed = false;
+          const loading = document.createElement('div');
+          loading.id = 'fr-archive-loading';
+          loading.setAttribute('role', 'status');
+          loading.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(12,15,22,.88);display:flex;align-items:center;justify-content:center;color:#f3dda8;font-size:18px;';
+          loading.textContent = '正在读取人生，请稍候…';
+          document.body.appendChild(loading);
+          try {
+          await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
           let archiveData;
           let loadedFromCloud = false;
           let finalArchiveName = archiveName;
@@ -97008,8 +97192,9 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
           }
 
           if (!archiveData) {
-            const localArchive = await db.archives.get(archiveName);
+            const localArchive = await frLoadTiming.measure('archive-read', () => db.archives.get(archiveName));
             if (!localArchive || !localArchive.data) {
+              loading.style.display = 'none';
               await showCustomAlert(`加载存档 "${archiveName}" 失败: 在云端和本地均未找到该存档。`);
               return;
             }
@@ -97018,9 +97203,13 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             loadedFromCloud = false;
           }
 
+          const needsArchiveId = !archiveData.archiveId;
+          if (needsArchiveId) archiveData.archiveId = crypto.randomUUID();
           try {
-            await db.archives.put({ name: finalArchiveName, data: archiveData });
+            // 本地读档不重写整份存档；仅云端下载或旧档 ID 迁移需要持久化。
+            if (loadedFromCloud || needsArchiveId) await db.archives.put({ name: finalArchiveName, data: archiveData });
           } catch (error) {
+            loading.style.display = 'none';
             await showCustomAlert(`将存档数据写入本地时失败: ${error.message}`);
             return;
           }
@@ -97038,15 +97227,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
           await dbSet(ACTIVE_ARCHIVE_KEY, currentArchiveName);
 
           // 【修复】加载或迁移 archiveId，解决向量数据归属为"未知存档"的问题
-          if (archiveData.archiveId) {
-            currentArchiveId = archiveData.archiveId;
-          } else {
-            // 旧存档迁移：生成新的 archiveId 并保存
-            currentArchiveId = crypto.randomUUID();
-            archiveData.archiveId = currentArchiveId;
-            await db.archives.put({ name: finalArchiveName, data: archiveData });
-            console.log(`[存档迁移] 为旧存档 "${finalArchiveName}" 生成了 archiveId: ${currentArchiveId}`);
-          }
+          currentArchiveId = archiveData.archiveId;
 
           const state = archiveData.state || {};
           activeTheaterHTML = state.activeTheaterHTML || null;
@@ -97060,11 +97241,25 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             loadedFromCloud ? '<i class="fas fa-cloud" title="云存档"></i>' : ''
           }`;
 
-          await loadState(state, archiveData);
-          loadChatHistory(archiveData.logs, { data: archiveData });
+          await frLoadTiming.measure('archive-restore-state', () => loadState(state, archiveData));
+          await frLoadTiming.measure('archive-history-first-frame', () => loadChatHistory(archiveData.logs, { data: archiveData }, { autoScroll: true, awaitRender: true }));
 
           toggleCenterView('chat-view');
           toggleExtremeModeUI(currentPlayerData.isExtreme);
+          // History schedules its DOM work in rAF; keep feedback until that frame has painted.
+          await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+          completed = true;
+          } catch (error) {
+            loading.style.display = 'none';
+            await showCustomAlert('读取存档失败：' + (error.message || error));
+          } finally {
+            if (!completed && startedOnSplash) {
+              splashScreen.classList.remove('hidden');
+              cultivationPanel.classList.add('hidden');
+            }
+            loading.remove();
+            frArchiveLoadInProgress = false;
+          }
         }
 
         
@@ -97072,12 +97267,15 @@ function loadChatHistory(logs, archive, options = { autoScroll: true }) {
 const mainContentArea = document.getElementById('main-content-area');
 const renderArchiveName=currentArchiveName;
 const renderRevision=frInvalidateChatHistoryRender();
+const avatarOptions = { context: frCreateDialogueAvatarContext(archive, renderArchiveName),
+  isCurrent: () => currentArchiveName === renderArchiveName && Number(mainContentArea.dataset.historyRenderRevision) === renderRevision };
 // 直接用已加载日志过滤撤销记录，不等待记录写队列或重复读取整份存档。
 if(typeof frCanonTraceLoad==='function')frCanonTraceLoad(logs).then(frCanonTraceRenderSoon).catch(function(error){console.warn('[原著补演] 回合记录载入失败:',error);});
 
 // 【性能优化】使用 requestAnimationFrame 避免阻塞
-requestAnimationFrame(() => {
-if(currentArchiveName!==renderArchiveName||Number(mainContentArea.dataset.historyRenderRevision)!==renderRevision)return;
+const rendered = new Promise((resolve, reject) => requestAnimationFrame(() => {
+try {
+if(currentArchiveName!==renderArchiveName||Number(mainContentArea.dataset.historyRenderRevision)!==renderRevision){resolve();return;}
 // 清空现有内容
 mainContentArea.innerHTML = '';
 mainContentArea.dataset.historyArchiveName=String(renderArchiveName||'');
@@ -97086,10 +97284,21 @@ if (!logs || logs.length === 0) {
 updateBranchingOptions([]);
 dailyPaperContextForNextMessage = '';
 lastDailyPaperContent = '';
-return;
+resolve();return;
 }
 
-const { openingLog, summaryLogs, hiddenChatLogs, visibleChatLogs } = getLogsForContext(logs, archive);
+// Display-only selection: do not build AI prompt text or render then discard all history.
+// Arrays below contain references only; lazy history projects display fields, never snapshots.
+const openingLog = logs.find(log => String(log.content || '').includes('<h4>天道初启</h4>'));
+const displayLogs = logs.filter(log => !log.isGhost && !log.isSnapshot && !log.isUndoSnapshot
+  && !log.isDeepSummary && (!openingLog || log.id !== openingLog.id))
+  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+const summaryLogs = [];
+const configuredLimit = Number(regexConfig.renderLimit);
+const displayLimit = Number.isFinite(configuredLimit) && configuredLimit > 0 ? Math.floor(configuredLimit) : 100;
+const splitAt = Math.max(0, displayLogs.length - displayLimit);
+const hiddenChatLogs = displayLogs.slice(0, splitAt);
+const visibleChatLogs = displayLogs.slice(splitAt);
 
 // 【性能优化】使用 DocumentFragment 批量插入
 const fragment = document.createDocumentFragment();
@@ -97106,20 +97315,14 @@ const contentDiv = document.createElement('div');
 contentDiv.className = 'collapsible-content';
 
 // 内部也使用 fragment
-const innerFragment = document.createDocumentFragment();
-logArray.forEach(log => {
-if (log.isGhost) return;
-const type = log.type || (log.content.startsWith('>') ? 'user' : 'ai');
-innerFragment.appendChild(createLogEntryElement(log, type));
-});
-contentDiv.appendChild(innerFragment);
+frInitializeLazyHistory(container, contentDiv, logArray, avatarOptions);
 
 container.appendChild(contentDiv);
 return container;
 };
 
 if (openingLog && !openingLog.isGhost) {
-fragment.appendChild(createLogEntryElement(openingLog, 'ai'));
+fragment.appendChild(createLogEntryElement(openingLog, 'ai', avatarOptions));
 }
 
 const allSummaries = [...summaryLogs];
@@ -97140,7 +97343,7 @@ if (hiddenContainer) fragment.appendChild(hiddenContainer);
 visibleChatLogs.forEach(log => {
 if (log.isGhost) return;
 const type = log.type || (log.content.startsWith('>') ? 'user' : 'ai');
-fragment.appendChild(createLogEntryElement(log, type));
+fragment.appendChild(createLogEntryElement(log, type, avatarOptions));
 });
 
 // 一次性插入所有节点
@@ -97150,7 +97353,7 @@ mainContentArea.appendChild(fragment);
 const branchLogId=frCurrentBranchLogId();
 const branchLog=logs.find(log=>log.id===branchLogId&&!log.isGhost);
 updateBranchingOptions(frParseBranchOptions(branchLog?.branchContent),{archiveName:renderArchiveName,logId:branchLogId});
-enforceRenderLimit();
+// Initial visible rows were capped before rendering; keep the expandable history entry.
 
 let latestDailyPaper = null;
 for (let i = logs.length - 1; i >= 0; i--) {
@@ -97173,7 +97376,11 @@ setTimeout(() => {
 mainContentArea.scrollTop = mainContentArea.scrollHeight;
 }, 50);
 }
-});
+resolve();
+} catch (error) { reject(error); }
+}));
+if (options.awaitRender) return rendered;
+return rendered.catch(error => console.error("[History render]", error));
 }
 
  async function exportGlobalSettings() {
@@ -98311,32 +98518,75 @@ console.log('【调试】renderInventory 被调用');
         }
             
 
+        // Bounded startup/load diagnostics: numeric timing and static labels only; no save contents.
+        const frLoadTiming = (() => {
+          let remaining = 96;
+          const now = () => performance.now();
+          const start = now();
+          const report = (stage, ms, extra = {}) => {
+            if (remaining-- <= 0) return;
+            console.log('[加载计时] ' + JSON.stringify({ stage, ms: Math.round(ms), sinceStartMs: Math.round(now()-start), ...extra }));
+          };
+          const measure = async (stage, work) => {
+            const began = now();
+            let ok = false;
+            try { const value = await work(); ok = true; return value; }
+            finally { report(stage, now()-began, {ok}); }
+          };
+          let observer;
+          try {
+            let count = 0;
+            observer = new PerformanceObserver(list => {
+              for (const entry of list.getEntries()) {
+                if (count++ < 32) report('main-thread-longtask', entry.duration);
+              }
+              if (count >= 32) observer.disconnect();
+            });
+            observer.observe({type:'longtask', buffered:false});
+            setTimeout(() => observer.disconnect(), 60000);
+          } catch (_) {}
+          const video = element => {
+            if (!element || element.dataset.frLoadTiming) return;
+            element.dataset.frLoadTiming = '1';
+            const began = now();
+            const events = ['loadeddata','playing','waiting','stalled','error'];
+            let count = 0;
+            const listener = event => {
+              if (count++ < 12) report('splash-video-'+event.type, now()-began,
+                {readyState:element.readyState, networkState:element.networkState});
+            };
+            events.forEach(type => element.addEventListener(type,listener));
+            setTimeout(() => events.forEach(type => element.removeEventListener(type,listener)),60000);
+          };
+          return {measure, video};
+        })();
+
         async function initPanel() {
           // 初始化 AI 剧场功能（需要在 db 初始化之后调用）
 
-            await initConcurrentEvolution();
+            await frLoadTiming.measure('startup-initConcurrentEvolution', () => initConcurrentEvolution());
           initAITheaterFeature();
           
-          await loadNpcDisplaySettings();
-          await loadPlayerDisplaySettings();
+          await frLoadTiming.measure('startup-loadNpcDisplaySettings', () => loadNpcDisplaySettings());
+          await frLoadTiming.measure('startup-loadPlayerDisplaySettings', () => loadPlayerDisplaySettings());
           setRandomSplashVideo();
           useTavernStorage = false;
           console.log('存档模式已固定为浏览器本地数据库（IndexedDB）。');
-          await requestPersistentStorage();
-          await loadRegexConfig();
-          await loadSummaryConfig();
-          await manageKnowledgeSearchApiSettings();
-          await loadFunSettings();
-          await loadChatBackgroundSettings();
-          await loadWorldEvolutionSettings();
-          await loadFabShortcutConfig();
-          await loadSeenFeatures();
-          await manageImageTaggingApiSettings();
-          await loadTextImageJsonFiles();
-          await manageCloudStorageSettings();
+          await frLoadTiming.measure('startup-requestPersistentStorage', () => requestPersistentStorage());
+          await frLoadTiming.measure('startup-loadRegexConfig', () => loadRegexConfig());
+          await frLoadTiming.measure('startup-loadSummaryConfig', () => loadSummaryConfig());
+          await frLoadTiming.measure('startup-manageKnowledgeSearchApiSettings', () => manageKnowledgeSearchApiSettings());
+          await frLoadTiming.measure('startup-loadFunSettings', () => loadFunSettings());
+          await frLoadTiming.measure('startup-loadChatBackgroundSettings', () => loadChatBackgroundSettings());
+          await frLoadTiming.measure('startup-loadWorldEvolutionSettings', () => loadWorldEvolutionSettings());
+          await frLoadTiming.measure('startup-loadFabShortcutConfig', () => loadFabShortcutConfig());
+          await frLoadTiming.measure('startup-loadSeenFeatures', () => loadSeenFeatures());
+          await frLoadTiming.measure('startup-manageImageTaggingApiSettings', () => manageImageTaggingApiSettings());
+          await frLoadTiming.measure('startup-loadTextImageJsonFiles', () => loadTextImageJsonFiles());
+          await frLoadTiming.measure('startup-manageCloudStorageSettings', () => manageCloudStorageSettings());
           updateRedDots();
 
-          await loadDefaultMapSetting();
+          await frLoadTiming.measure('startup-loadDefaultMapSetting', () => loadDefaultMapSetting());
 
           const startBtn = document.getElementById('start-new-life-btn');
           const loadBtn = document.getElementById('load-life-btn');
@@ -98359,18 +98609,7 @@ console.log('【调试】renderInventory 被调用');
             loadBtn.disabled = true;
             loadBtn.textContent = '读取人生 (无)';
           }
-          loadBtn.onclick = async () => {
-            if (activeArchive) {
-              splashScreen.classList.add('hidden');
-              cultivationPanel.classList.remove('hidden');
-              await selectAndLoadArchive(activeArchive);
-            } else if (archivesCount > 0) {
-              splashScreen.classList.add('hidden');
-              cultivationPanel.classList.remove('hidden');
-              toggleCenterView('archive-selection-view');
-              await renderArchiveSelectionView();
-            }
-          };
+          loadBtn.onclick = frHandleLoadLifeClick;
 
           splashScreen.classList.remove('hidden');
           cultivationPanel.classList.add('hidden');
@@ -98660,6 +98899,7 @@ console.log('【调试】renderInventory 被调用');
           document.getElementById('ctx-edit-btn').disabled = !isUserOrAi || notEditable;
           document.getElementById('ctx-delete-btn').disabled = !isUserOrAi || notEditable;
           document.getElementById('ctx-image-btn').hidden = !activeLogEntry.classList.contains('ai') || !activeLogEntry.dataset.logId;
+  ['ce','canon'].forEach(system=>{const button=document.getElementById('ctx-rerun-whole-'+system);if(button)button.hidden=!activeLogEntry.classList.contains('ai')||!activeLogEntry.dataset.logId;});
 
           messageContextMenu.classList.remove('hidden');
           positionMenu(messageContextMenu, e);
@@ -99249,6 +99489,7 @@ console.log('【调试】renderInventory 被调用');
         function setRandomSplashVideo() {
           const videoBg = document.getElementById('splash-video-bg');
           if (!videoBg) return;
+          frLoadTiming.video(videoBg);
 
           // 从视频列表中随机选择一个
           const randomIndex = Math.floor(Math.random() * SPLASH_VIDEOS.length);
@@ -102019,21 +102260,7 @@ characterDetailView.classList.remove('hidden');
             fetchAndRenderWorkshopPresets(true);
           });
 
-          document.getElementById('load-life-btn').addEventListener('click', async () => {
-            const activeArchive = await dbGet(ACTIVE_ARCHIVE_KEY);
-            const archivesCount = await db.archives.count();
-
-            if (activeArchive) {
-              splashScreen.classList.add('hidden');
-              cultivationPanel.classList.remove('hidden');
-              await selectAndLoadArchive(activeArchive);
-            } else if (archivesCount > 0) {
-              splashScreen.classList.add('hidden');
-              cultivationPanel.classList.remove('hidden');
-              toggleCenterView('archive-selection-view');
-              await renderArchiveSelectionView();
-            }
-          });
+          document.getElementById('load-life-btn').onclick = frHandleLoadLifeClick;
 
           splashImportBtn.addEventListener('click', () => {
             splashIoMenuOverlay.classList.add('visible');
@@ -102431,7 +102658,8 @@ characterDetailView.classList.remove('hidden');
           });
           characterDisplay.addEventListener('click', openCharacterDetail);
           document.getElementById('change-avatar-btn').addEventListener('click', handleChangeAvatar);
-          for (const id of ['cultivation-avatar','custom-avatar-img','modal-avatar-img','modal-custom-avatar-img']) {
+          // 肖像绘卷仅从装备信息弹窗的头像进入；侧栏个人信息头像保留打开装备信息的冒泡行为。
+          for (const id of ['modal-avatar-img','modal-custom-avatar-img']) {
             const avatar = document.getElementById(id);
             avatar.setAttribute('role','button');
             avatar.setAttribute('aria-label','打开我的肖像绘卷');
@@ -102525,7 +102753,18 @@ characterDetailView.classList.remove('hidden');
               });
             hideContextMenu();
           });
-          document.getElementById('ctx-image-btn').addEventListener('click', async () => {
+          ['ce','canon'].forEach(system => {
+  const button=document.getElementById('ctx-rerun-whole-'+system);
+  if(!button)return;
+  button.addEventListener('click',async()=>{
+    const id=activeLogEntry?.dataset.logId;
+    hideContextMenu();
+    if(!id)return;
+    try{const result=await frReplayRunWholeFloor(system,id);await showCustomAlert(result?.noRealCall?(result.noRealCallMessage||'本轮没有实际重算，原结果已保留。'):(system==='ce'?'整轮变量已重新结算。':'整轮原著补演已重新处理。'));}
+    catch(error){await showCustomAlert('本次未替换结果：'+String(error.message||error));}
+  });
+});
+document.getElementById('ctx-image-btn').addEventListener('click', async () => {
             const id = activeLogEntry?.dataset.logId;
             const archiveName = currentArchiveName;
             hideContextMenu();

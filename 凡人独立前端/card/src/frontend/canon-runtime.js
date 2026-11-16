@@ -401,7 +401,7 @@ async function frRunCanonAfterHostTurn(options) {
   }
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide',abortOnPageHide,{once:true});
     var serviceConfig = {...await loadConcurrentEvolutionConfig(),maxConcurrency:ownConfig.maxConcurrency || 5,requestTimeout:ownConfig.requestTimeoutMs || 120000,retryCount:ownConfig.retry?.maxRetries ?? 2,parseRetryCount:ownConfig.retry?.maxRetries ?? 2,batchLimits:ownConfig.batchLimits,canonCompletionEnabled:true,completionRepairCount:ownConfig.completionRepairCount??1,readyBatchWaitMs:ownConfig.readyBatchWaitMs??100};
-    var preset = await getActiveConcurrentEvolutionPreset();
+    var preset = await getActiveConcurrentEvolutionPreset({resolveRoute:false});
     var shared = buildSharedEvolutionContext(input.storyText || '', input.userInput || '');
     if (lifecycle.signal.aborted) {if(traceRun)await frCanonTraceFinish(traceRun,'cancelled',{status:'aborted',landed:false});return {status:'aborted',landed:false,landedReason:'本轮补演已被中止（signal aborted）'};}
     var result=await ceRunCanonTurnAfterStory({...input,signal:lifecycle.signal,sharedContext:shared,config:serviceConfig,preset:preset,traceRun:traceRun});
@@ -744,6 +744,7 @@ function frCanonCompletionTools() {
 
 function frCloneCanonPreset(preset) {
   var copy = frAdaptProseExecutionPreset(preset || {});
+  copy._frCanonConversionPreset = true;
   copy.prompts = copy.prompts || {};
   var constraint = '【本次调用只转换已成立的补演散文】\n'
     + '两层依据：第一层完整落实已确认散文中的最终事实（包括已持有的物品、修习技能与境界进度，不限新获得）；第二层按原变量演化规则合理补全基础配置与残缺列。'
@@ -2832,7 +2833,7 @@ async function frCommitCanonProposal(input, proposal) {
   var appliedItems = [], ordinaryEventSources = {};
   var savedActors=actorOnly?{}:proposal.prebuiltSavedActors||src.preparedCharacters?.saved||{};
   var savedBiography=Object.fromEntries(Object.entries(structuredClone(src.biography || {})).filter(function(entry){return !savedActors[entry[0]];}));
-  var committedArchiveText='',committedStateText='',persistedActorReceipts={};
+  var committedArchiveText='',committedStateText='',committedArchiveForTrace=null,persistedActorReceipts={};
   var miscReceipt = {requestedDelta:[],noOperations:true,stateChanged:false};
   var traceRun=src.signal&& typeof frCanonTraceSignals!=='undefined'?frCanonTraceSignals.get(src.signal):null;
   if(traceRun)frCanonTraceEvent(traceRun,'stage','应用变量与原子保存',{characterCommands:(proposal.characterDelta||[]).length,itemCommands:(proposal.itemOperations||[]).length,worldCommands:(proposal.miscDelta||[]).length});
@@ -2950,14 +2951,19 @@ async function frCommitCanonProposal(input, proposal) {
       if (proposal.prebuiltReadback && (proposal.itemOperations || []).length) {
         if (items.length !== proposal.itemOperations.length) throw new Error('预制物品落地回执不完整');
         var itemArchive = await db.archives.get(boundary.archiveName);
+        // 同一冻结回读快照内复用解析结果；不跨事务、轮次或写入缓存。
+        var readInventoryCache = new Map();
         var readInventory = function(owner) {
+          if (readInventoryCache.has(owner)) return readInventoryCache.get(owner);
           var ownerEntry = (itemArchive.data.state.worldBookEntries || []).find(row => row.key === owner || row.id === owner);
           var ownerRow = typeof ownerEntry?.content === 'string' ? JSON.parse(ownerEntry.content) : ownerEntry?.content;
           var ownerRemarks = parseRemarksString(ownerRow?.['9'] || '');
           var ownerItems = parseNestedJsonString(ownerRemarks.inventory, []);
           if (!ownerRow || !Array.isArray(ownerItems)) throw new Error('预制物品所属角色背包无法回读：' + owner);
           var equipment = parseNestedJsonString(ownerRemarks.equipment, {});
-          return ownerItems.concat(Object.values(equipment).flatMap(slots=>Array.isArray(slots)?slots.filter(Boolean):[]));
+          var combined = ownerItems.concat(Object.values(equipment).flatMap(slots=>Array.isArray(slots)?slots.filter(Boolean):[]));
+          readInventoryCache.set(owner, combined);
+          return combined;
         };
         for (var expectedItem of proposal.itemOperations.filter(op => op.type === 'createItem')) {
           // 原生执行器会重排物品命令，按操作和归属配对回执。
@@ -3143,7 +3149,10 @@ async function frCommitCanonProposal(input, proposal) {
         const landedActors=Object.entries(persistedActorReceipts).every(([id,receipt])=>JSON.stringify(confirmedLog?.canonActorCommits?.[id])===JSON.stringify(receipt));
         if(!landedLedger||!landedTurn||!landedActors)throw new Error('补演保存回读不一致，拒绝确认完成');
       }
-      committedArchiveText=JSON.stringify(verifiedArchive);committedStateText=JSON.stringify(currentState);
+      // Only actor-by-actor continuation needs a new serialized boundary. Full-turn
+      // tracing can use the already read-back archive instead of stringify + parse.
+      if(actorOnly){committedArchiveText=JSON.stringify(verifiedArchive);committedStateText=JSON.stringify(currentState);}
+      else if(traceRun)committedArchiveForTrace=verifiedArchive;
     });
   } catch (error) {
     // IndexedDB 自动回滚库内操作；只恢复本次内存，不另写旧整档覆盖其他任务。
@@ -3159,7 +3168,7 @@ async function frCommitCanonProposal(input, proposal) {
   if(traceRun){
     try{
       if(!actorOnly&&typeof frCanonSavedEventVariables==='function'){
-        const rows=frCanonSavedEventVariables(JSON.parse(committedArchiveText),boundary.logId);
+        const rows=frCanonSavedEventVariables(committedArchiveForTrace,boundary.logId);
         frCanonTracePublish(traceRun,'事件变量保存明细',{kind:'savedEventVariables',rows});
       }
       if(proposal.prebuiltReadback){
