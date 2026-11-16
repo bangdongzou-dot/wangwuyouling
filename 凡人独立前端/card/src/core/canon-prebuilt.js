@@ -48,7 +48,7 @@ const isPrebuiltDeltaOperation = op => !isRetiredCharacterOperation(op) && !isPr
 
 const prebuiltVariableReply = INVENTORY_STOCK_RULE+'\nvariables 和 ordinaryDelta 都是数组，不是按列号索引的对象。每笔包含 kind、action、column、subject、value、previousValue、terminalValue、evidence。' +
   '\n'+CHARACTER_STATUS_RULE+'\n动作、穿着、实际地点、身段和样貌直接填写第16列终态，不进入 variables 或 ordinaryDelta。' +
-  '灵石余额只写第26列，不写入第9列 inventory，不创建灵石物品。灵石收支用 kind=currency、column="26"、subject="灵石"。从 previousColumns["26"] 读取当前余额填 previousValue，按本节点收支计算 terminalValue，并把同一余额写入 columns["26"]。' +
+  '灵石余额中，下品只写第26列，不写入第9列 inventory，不创建灵石物品。其他品级写第9列备注 spiritStoneGrades 的中品、上品、极品数字余额。收支用 kind=currency，下品写 column="26"、subject="灵石"，从 previousColumns["26"] 读取 previousValue，再计算 terminalValue 写入 columns["26"]；其余写 column="9"、subject="spiritStoneGrades.中品" 或对应品级，同样依据该品级前态计算对应终态。' +
   '百艺实际变化用 attribute/9/set，subject 为 cultivationArts.<项目>，value 和 terminalValue 为同一个完整档位项 {tier,progress,basis}，previousValue 为完整前项或首次确认时的 null。没有实际变化时保留原百艺。' +
   'kind 取 '+[...categories].filter(kind=>kind!=='location').join('、')+'；action 取 '+[...actions].join('、')+'。没有对应变化用 []，ordinaryDelta 无对应变化可省略。' +
   'columns 才按列号索引，沿用 previousColumns 未变化的列。新人物第1列为「姓名|性别」，第2列为「境界|身份」，第16列为「动作|穿着|地点|身段|样貌」。' +
@@ -499,6 +499,8 @@ export function mergeLegacyPrebuiltActorStep(current, {productBefore,productAfte
     const column=String(op.column??'');
     let path;
     if(op.kind==='currency'&&column==='26')path=['26'];
+    const grade=prebuiltSpiritGrade(op);
+    if(grade)path=['9','spiritStoneGrades',grade];
     if(op.kind==='attribute'&&column==='11'&&whiteAttributes.has(op.subject))path=['11',op.subject,'current'];
     if(op.kind==='relationship'&&column==='13')path=['13',op.subject];
     if(op.kind==='goal'&&['27','28','29'].includes(column))path=[column];
@@ -532,7 +534,7 @@ export function mergeLegacyPrebuiltActorStep(current, {productBefore,productAfte
       if(!Number.isSafeInteger(delta)||!delta)continue;
       blocked.add(key);
       explicit.push({path,itemDelta:delta,item:op.item?.columns||productAfter?.['9']?.inventory?.find(item=>item['1']===op.subject&&'@'+JSON.stringify([item['1'],item['2']])===path[2])});
-    }else if(delta!==null&&['26','11'].includes(column)){
+    }else if(delta!==null&&(['26','11'].includes(column)||grade)){
       if(before!=null&&after!=null&&Number(after)-Number(before)!==delta)continue;
       blocked.add(key);
       explicit.push({path,delta});
@@ -546,7 +548,7 @@ export function mergeLegacyPrebuiltActorStep(current, {productBefore,productAfte
     const [column,key,part]=field.path;
     if(!supported(field)||['4','16'].includes(column)&&!field.before||
       !Object.hasOwn(productBefore||{},column)||!Object.hasOwn(productAfter||{},column))return false;
-    if(column==='9'&&(!Object.hasOwn(productBefore['9']||{},key)||!Object.hasOwn(productAfter['9']||{},key)))return false;
+    if(column==='9'&&key!=='spiritStoneGrades'&&(!Object.hasOwn(productBefore['9']||{},key)||!Object.hasOwn(productAfter['9']||{},key)))return false;
     if(column==='11'&&(!part||!Object.hasOwn(productBefore['11']?.[key]||{},part)||
       !Object.hasOwn(productAfter['11']?.[key]||{},part)))return false;
     return !audited.some(row=>JSON.stringify(row.path)===JSON.stringify(field.path));
@@ -2223,6 +2225,11 @@ export function compilePrebuiltNewActor(id, actor, reportIssue = () => {}) {
     }
   }
   const remarks = { isBonded: false, inventory, equipment };
+  if (notes.spiritStoneGrades!==undefined) {
+    if (!isRecord(notes.spiritStoneGrades) || Object.entries(notes.spiritStoneGrades).some(([grade,amount])=>
+      !['中品','上品','极品'].includes(grade)||stoneBalance(amount)===null)) return invalid('第 9 列 spiritStoneGrades 须按品级写非负整数余额');
+    remarks.spiritStoneGrades=Object.fromEntries(Object.entries(notes.spiritStoneGrades).map(([grade,amount])=>[grade,Number(amount)]));
+  }
   if (notes.cultivationArts !== undefined) {
     if (validateCultivationArts(notes.cultivationArts, {requireBasis:false}).length)
       return invalid('第 9 列 cultivationArts 格式不符，请核对百艺档位和进度');
@@ -2265,7 +2272,8 @@ export function compilePrebuiltNewActor(id, actor, reportIssue = () => {}) {
       status: ['31',row['31']],
       goal:[({'当前动机':'27','短期目标':'28','长期目标':'29'})[op.subject],row[op.column]],
       relationship:['13',relationEntries(row['13'])?.find(([name])=>name===op.subject)?.[1]??null],
-      attribute: String(op.column)==='9' && String(op.subject||'').startsWith('cultivationArts.') ? ['9',remarks.cultivationArts?.[op.subject.slice(16)]??null] : ['11', white[op.subject]?.current], currency:['26',stoneBalance(row['26'])],
+      attribute: String(op.column)==='9' && String(op.subject||'').startsWith('cultivationArts.') ? ['9',remarks.cultivationArts?.[op.subject.slice(16)]??null] : ['11', white[op.subject]?.current],
+      currency:prebuiltSpiritGrade(op) ? ['9',stoneBalance(remarks.spiritStoneGrades?.[prebuiltSpiritGrade(op)]??0)] : ['26',stoneBalance(row['26'])],
       skill: ['9', remarks.skills.find(skill => skill['1'] === op.subject)?.['7'] ?? null],
       item: ['9', items.filter(item => item['1'] === op.subject).reduce((n, item) => n + Number(item['5']), 0)] })[op.kind];
     if (op.kind === 'location' && text(op.terminalValue) && !coordinateSuffix.test(op.terminalValue) &&
@@ -2282,7 +2290,7 @@ function prebuiltItemIdentity(row){
   if(isTreasureSet(row))parts.push('treasureSet',row.treasureSetId||'');
   return JSON.stringify(parts);
 }
-function mergeOrdinaryPrebuiltRemarks(next,after,before,state,allowedItems=new Set(),strict=false,allowedArts=new Set()) {
+function mergeOrdinaryPrebuiltRemarks(next,after,before,state,allowedItems=new Set(),strict=false,allowedArts=new Set(),allowedGrades=new Set()) {
   const merged=structuredClone(next);
   // A receipt protects changed entities, not an entire inventory or skill collection.
   const key=prebuiltItemIdentity;
@@ -2342,18 +2350,33 @@ function mergeOrdinaryPrebuiltRemarks(next,after,before,state,allowedItems=new S
     }
     merged.cultivationArts=proposed;
   }
-  for(const name of Object.keys(after))if(!['inventory','equipment','skills','traits','gongfa','cultivationArts'].includes(name) &&
+  if (after.spiritStoneGrades!==undefined || before?.spiritStoneGrades!==undefined || merged.spiritStoneGrades!==undefined) {
+    const actual=prebuiltObject(after.spiritStoneGrades)||{}, prior=prebuiltObject(before?.spiritStoneGrades)||{};
+    const proposed={...(prebuiltObject(merged.spiritStoneGrades)||{})};
+    for(const grade of ['中品','上品','极品']) {
+      if(allowedGrades.has(grade)||before&&Number(prior[grade]??0)===Number(actual[grade]??0))continue;
+      if(strict&&Number(proposed[grade]??0)!==Number(actual[grade]??0))return null;
+      if(Object.hasOwn(actual,grade))proposed[grade]=actual[grade];else delete proposed[grade];
+    }
+    merged.spiritStoneGrades=proposed;
+  }
+  for(const name of Object.keys(after))if(!['inventory','equipment','skills','traits','gongfa','cultivationArts','spiritStoneGrades'].includes(name) &&
       (!before||JSON.stringify(before[name])!==JSON.stringify(after[name])))merged[name]=structuredClone(after[name]);
-  for(const name of Object.keys(before||{}))if(!Object.hasOwn(after,name)&&!['inventory','equipment','skills','traits','gongfa','cultivationArts'].includes(name))delete merged[name];
+  for(const name of Object.keys(before||{}))if(!Object.hasOwn(after,name)&&!['inventory','equipment','skills','traits','gongfa','cultivationArts','spiritStoneGrades'].includes(name))delete merged[name];
   return merged;
 }
 function validatePrebuiltOrdinaryDelta(target,actor,fields,remarks,oldRemarks) {
-  const allowed={columns:new Set(),attributes:new Set(),items:new Set(),arts:new Set()};
+  const allowed={columns:new Set(),attributes:new Set(),items:new Set(),arts:new Set(),grades:new Set()};
   if(actor.status!=='变异'||!Array.isArray(actor.ordinaryDelta))return allowed;
   const itemDelta=actor.ordinaryDelta.filter(op=>op.kind==='item');
   const other=actor.ordinaryDelta.filter(op=>op.kind!=='item');
   const changes=compilePrebuiltActorDelta(target,other,{requireBaseline:true});
   if(!changes)return null;
+  const gradeTerminals=new Map(other.filter(prebuiltSpiritGrade).map(op=>[prebuiltSpiritGrade(op),op.terminalValue]));
+  for (const [grade,amount] of gradeTerminals) {
+    if (stoneBalance(remarks.spiritStoneGrades?.[grade]??0)!==Number(amount)) return null;
+    allowed.grades.add(grade);
+  }
   const nextAttributes=JSON.parse(fields['11']);
   for(const operation of changes) {
     if(operation.command==='updateAttribute'){
@@ -2367,6 +2390,7 @@ function validatePrebuiltOrdinaryDelta(target,actor,fields,remarks,oldRemarks) {
         }
         continue;
       }
+      if(key==='9'&&isRecord(value?.spiritStoneGrades))continue;
       if(fields[key]!==value)return null;
       allowed.columns.add(key);
     }
@@ -2433,6 +2457,9 @@ export function compilePrebuiltTerminalActor(target, actor, oldRemarks, options=
     prebuiltItemIdentity, 'I_'+target.id+'_') ||
     !reconcile(skills,nextRemarks.skills,row=>row?.['1'],'S_'+target.id+'_')) return null;
   const remarks={...oldRemarks,...nextRemarks,isBonded:oldRemarks.isBonded??false};
+  if (oldRemarks.spiritStoneGrades!==undefined || nextRemarks.spiritStoneGrades!==undefined) {
+    remarks.spiritStoneGrades={...(prebuiltObject(oldRemarks.spiritStoneGrades)||{}),...(nextRemarks.spiritStoneGrades||{})};
+  }
   // Old products missing arts cannot erase later learning. Merge changed arts independently.
   if (oldRemarks.cultivationArts !== undefined || nextRemarks.cultivationArts !== undefined) {
     try { remarks.cultivationArts=mergeCultivationArts(oldRemarks.cultivationArts,nextRemarks.cultivationArts||{}); } catch { return null; }
@@ -2448,7 +2475,7 @@ export function compilePrebuiltTerminalActor(target, actor, oldRemarks, options=
   let finalRemarks=remarks;
   if(protectedColumns.has('9')) {
     const before=options.beforeRemarks || prebuiltObject(state?.beforeRow?.['9']);
-    finalRemarks=mergeOrdinaryPrebuiltRemarks(remarks,oldRemarks,before,state||{},allowed.items,actor.status==='变异',allowed.arts);
+    finalRemarks=mergeOrdinaryPrebuiltRemarks(remarks,oldRemarks,before,state||{},allowed.items,actor.status==='变异',allowed.arts,allowed.grades);
     if(!finalRemarks)return null;
   }
   if(protectedColumns.has('11')) {
@@ -2485,6 +2512,10 @@ function prebuiltFieldEqual(column,left,right) {
 
 function stoneBalance(value) {
   return /^\d+$/u.test(String(value??''))&&Number.isSafeInteger(Number(value))?Number(value):null;
+}
+
+function prebuiltSpiritGrade(op) {
+  return op?.kind==='currency'&&String(op.column)==='9' ? /^spiritStoneGrades\.(中品|上品|极品)$/u.exec(op.subject||'')?.[1] : undefined;
 }
 
 function matchesPrebuiltBaseline(op, column, before, after, requireBaseline) {
@@ -2526,6 +2557,17 @@ export function compilePrebuiltActorDelta(target, variables, { requireBaseline =
       attribute.current = current;
       delta.push({ command: 'updateAttribute', id: target.id, attribute: op.subject, value: { current } });
     } else if(op.kind==='currency'&&op.action==='add'&&Number.isSafeInteger(op.value)&&op.value!==0) {
+      const grade=prebuiltSpiritGrade(op);
+      if(grade){
+        const notes=prebuiltObject(working['9'])||{};
+        const balances={...(prebuiltObject(notes.spiritStoneGrades)||{})};
+        const before=stoneBalance(balances[grade]??0),after=before===null?null:stoneBalance(before+op.value);
+        if(before===null||after===null||!matchesPrebuiltBaseline(op,'9',before,after,true))return null;
+        balances[grade]=after;
+        working['9']={...notes,spiritStoneGrades:balances};
+        delta.push({command:'add',id:target.id,data:{0:target.id,9:{spiritStoneGrades:balances}}});
+        continue;
+      }
       const before=stoneBalance(working['26']), after=before===null?null:stoneBalance(before+op.value);
       if(before===null||after===null||!matchesPrebuiltBaseline(op,'26',before,after,true)) return null;
       working['26']=String(after);

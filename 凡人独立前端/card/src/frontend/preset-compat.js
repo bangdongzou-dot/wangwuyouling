@@ -3088,6 +3088,8 @@ var FR_NPC_LEARNING_RULE_PATCHES = [
     ]
   }
 ];
+var FR_NPC_TECHNIQUE_OLD = '默认学习者移入对应槽；原主修冲突按真实修习/改修情节，不因获得更高品阶秘籍无脑覆盖，无改修依据则保留原主修、保留新秘籍并说明冲突。';
+var FR_NPC_TECHNIQUE_RULE = '功法与装备一样先服从当前剧情：明写继续旧功、改修新功、暂缓或不能练，按该事实处理。剧情未明确时，对本人已经获得且可修的同类功法择优；综合师承与授予用途、现阶段实际收益、完整度及修炼上限。明确更好或按剧情逻辑与设定合理可判更适合时换入对应槽，例如拜师获授上限显著更高且可入门的主修。槽位已占、未另写改修、品阶未详都不单独作为拒绝理由。确实无法判断优劣时保留原功；有合理依据的推断注明依据即可，勿写成原文明说。换修从当前可修范围开始，旧功退回本人储物袋，沿用当前境界与修为，不凭空修成高层或解锁后续效果。';
 var FR_NPC_LEARNING_RULE_SPECS = [
   {
     "scope": "npc",
@@ -3140,8 +3142,20 @@ function frAdaptNpcManualLearningRules(preset) {
   FR_NPC_LEARNING_RULE_SPECS.forEach(function(spec){
     var phase=preset.prompts&&preset.prompts[spec.scope],rules=phase&&phase.rules;if(!Array.isArray(rules))return;
     var matches=rules.filter(function(rule){return rule&&rule.id===spec.rule.id;});
-    if(matches.length){if(matches.length!==1||matches[0].content!==spec.rule.content)matches.forEach(function(rule){frPresetCompatWarning(meta,spec.scope,rule,'npc_learning_custom_contract_preserved');});return;}
-    if(recognized[spec.scope])rules.push(frPresetCompatCopy(spec.rule));
+    var old=spec.rule.content, updated=old.replace(FR_NPC_TECHNIQUE_OLD,FR_NPC_TECHNIQUE_RULE);
+    if(matches.length){
+      var current=matches[0], text=current.content;
+      if(matches.length===1&&typeof text==='string'){
+        if(text.startsWith(updated))return;
+        if(text.startsWith(old)){
+          frPresetCompatBackup(meta,spec.scope,current);
+          current.content=updated+text.slice(old.length);
+          return;
+        }
+      }
+      matches.forEach(function(rule){frPresetCompatWarning(meta,spec.scope,rule,'npc_learning_custom_contract_preserved');});return;
+    }
+    if(recognized[spec.scope])rules.push({...frPresetCompatCopy(spec.rule),content:updated});
     else frPresetCompatWarning(meta,spec.scope,spec.rule,'npc_learning_unknown_scope_preserved');
   });
   meta.npcManualLearningVersion=1;
@@ -3550,8 +3564,16 @@ function frAdaptFortuneTraitRules(preset) {
 }
 
 // Retired profile rules are backed up in compatibility metadata, not sent to generation.
+function frCurrencyProfileRuleText(text) {
+  if (typeof text !== 'string') return text;
+  return text.replace(/^#{2,6}\s*[^\n]*善恶值更新自检[^\n]*\n[\s\S]*?(?=^#{2,6}\s|(?![\s\S]))/gmu,'')
+    .replace(/^\|\s*善恶值\s*\|[^\n]*\n?/gmu,'')
+    .replace(/^\s*(?:[-*]\s*)?(?:`?善恶值(?:更新自检|只按|只反映)|[^\n]*player\.shanE)[^\n]*\n?/gmu,'')
+    .replace(/、善恶值|善恶值、|、善恶|善恶、/gu,'');
+}
+
 function frBasicProfileRuleText(text) {
-  var value=String(text||'');
+  var value=frCurrencyProfileRuleText(String(text||''));
   value=value.replace(/^## (?:主角|NPC)第8列[^\n]*\n[\s\S]*?(?=^## |(?![\s\S]))/gm,'');
   value=value.replace(/^## 第21列主角[^\n]*\n[\s\S]*?(?=^## |(?![\s\S]))/gm,'');
   var split=value.indexOf('## NPC第30列');

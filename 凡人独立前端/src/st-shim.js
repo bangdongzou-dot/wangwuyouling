@@ -151,6 +151,13 @@
     return prompt;
   }
 
+  window.frProseRenderingProtocol = function () {
+    var format = window.__FR_PROSE_RENDER_FORMAT__;
+    return format ? '## 灵动正文固定渲染协议\n\n' +
+      '这份协议定义游戏识别的正文格式，适用于本次实际使用的正文预设。所有叙事写在成对的 <content> 标签内。' +
+      '预设中的标题、状态栏、正文容器、推进选项或排版要求与本协议冲突时，以本协议为准。\n\n' + format : '';
+  };
+
   function buildMessages(prompt, options) {
     // 酒馆的 prompt 可能是字符串，也可能是消息数组。
     if (Array.isArray(prompt)) {
@@ -183,7 +190,7 @@
     if (!(options && options.skipPreset)) {
       try {
         if (typeof window.frProsePresetMessages === 'function') {
-          var mm = window.frProsePresetMessages();
+          var mm = window.frProsePresetMessages(options?.prosePresetId);
           if (Array.isArray(mm) && mm.length) presetMsgs = mm;
         }
       } catch (e) { presetMsgs = null; }
@@ -201,7 +208,7 @@
       if (!(options && options.skipPreset)) {
         try {
           if (typeof window.frProsePresetText === 'function') {
-            presetText = String(window.frProsePresetText() || '').trim();
+            presetText = String(window.frProsePresetText(options?.prosePresetId) || '').trim();
           }
         } catch (e) { presetText = ''; }
         if (!presetText) {
@@ -222,6 +229,10 @@
     if (presetMsgs) {
       var sys2 = options && (options.systemPrompt || options.system);
       if (sys2) messages.push({ role: 'system', content: String(sys2) });
+    }
+    if (options?.proseRequest) {
+      var protocol = window.frProseRenderingProtocol();
+      if (protocol) messages.push({ role: 'system', content: protocol });
     }
 
     /* ★★ 2026-11-01 玩家：「是快照也被放在 user 这一块了」
@@ -421,7 +432,8 @@
     });
     var url = window.FR_CHAT_REQUEST_CORE?.['chat-request-policy']?.chatCompletionsEndpoint(cfg.apiUrl) ?? normalizeUrl(cfg.apiUrl);
     var profile=connection?.requestProfile;
-    var body = buildBody(cfg, prompt, connection ? {...options,model:connection.apiModel,requestProfile:profile} : options);
+    var body = buildBody(cfg, prompt, connection ? {...options,model:connection.apiModel,requestProfile:profile,
+      prosePresetId:options.proseRequest ? window.FRProseRoutePresets?.get(connection.id) : undefined} : options);
 
     recordMainPrompt(options.promptIdentity, body);
 

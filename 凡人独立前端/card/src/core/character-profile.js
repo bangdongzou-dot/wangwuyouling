@@ -116,7 +116,11 @@ const cleanVariableEquipment = value=>mapVariableCollection(value,slots=>
   mapVariableFields(slots,Object.fromEntries(Object.keys(slots||{}).map(key=>[key,rows=>cleanVariableList(rows,cleanVariableItem)]))));
 
 export function cleanVariableRemarks(value) {
-  return mapVariableCollection(value,row=>mapVariableFields(row,{
+  if (typeof value==='string'&&!/^\s*\{/u.test(value)) {
+    value=value.split('|').filter(part=>!/^\s*(?:善恶值|shanE)\s*[:：]/u.test(part)).join('|');
+  }
+  return mapVariableCollection(value,row=>mapVariableFields(characterRecord(row) && (Object.hasOwn(row,'善恶值') || Object.hasOwn(row,'shanE'))
+    ? Object.fromEntries(Object.entries(row).filter(([key])=>key!=='善恶值' && key!=='shanE')) : row,{
     inventory:value=>cleanVariableList(value,cleanVariableItem),
     gongfa:value=>cleanVariableList(value,cleanVariableItem),
     equipment:cleanVariableEquipment,

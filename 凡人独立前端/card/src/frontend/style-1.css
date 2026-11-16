@@ -1564,6 +1564,33 @@
         line-height: 1.75;
         white-space: normal;
       }
+      .fr-story-quote.fr-story-quote-with-avatar {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+        column-gap: .75em;
+      }
+      .fr-story-quote-with-avatar > :is(.fr-story-quote-text, .fr-story-speaker) { grid-column: 2; }
+      .fr-story-quote-avatar {
+        grid-row: 1 / span 2;
+        inline-size: clamp(32px, 6vw, 46px);
+        block-size: clamp(32px, 6vw, 46px);
+        border: 1px solid var(--fr-story-dialogue-edge);
+        border-radius: 50%;
+        object-fit: cover;
+      }
+      .fr-image-examples {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+        gap: 12px;
+      }
+      .fr-image-examples figure { margin: 10px 0; }
+      .fr-image-examples img {
+        display: block;
+        width: 100%;
+        max-height: 320px;
+        object-fit: contain;
+      }
       .fr-story-turn {
         display: block;
         width: fit-content;
@@ -2555,9 +2582,7 @@
       #deeds-timeline-overlay,
       #custom-trait-editor-overlay,
       #summary-viewer-overlay,
-      #summary-editor-overlay,
-      #ai-image-gen-overlay,
-      #dino-game-overlay,
+      #summary-editor-overlay,      #dino-game-overlay,
       #spirit-beast-detail-overlay {
         z-index: 1800;
       }

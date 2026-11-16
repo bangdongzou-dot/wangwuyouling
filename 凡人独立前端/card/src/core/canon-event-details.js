@@ -129,6 +129,10 @@ export function eventFieldChanges(before, after) {
   const changes=[];
   const walk=(left,right,path)=>{
     if(same(left,right))return;
+    if(path.length===2&&path[0]==='9'&&path[1]==='spiritStoneGrades') {
+      for (const grade of ['中品','上品','极品']) walk(left?.[grade]??0,right?.[grade]??0,[...path,grade]);
+      return;
+    }
     if(path.length===2&&path[0]==='9'&&collectionKeys.has(path[1])){
       const a=listMap(left),b=listMap(right);
       if(a&&b){
@@ -150,7 +154,7 @@ export function eventFieldChanges(before, after) {
       }
       return;
     }
-    const arithmetic=(path.length===1&&path[0]==='26')||
+    const arithmetic=(path.length===1&&path[0]==='26')||(path.length===3&&path[0]==='9'&&path[1]==='spiritStoneGrades')||
       (path.length===3&&path[0]==='11'&&path[2]==='current')||
       (path.length===4&&path[0]==='9'&&path[1]==='inventory'&&path[2].startsWith('@')&&path[3]==='5');
     const a=typeof left==='number'||typeof left==='string'&&/^\d+$/.test(left)?Number(left):NaN;
@@ -164,7 +168,7 @@ export function eventFieldChanges(before, after) {
 
 const prebuiltSnapshotColumns = new Set(['3','4','10','12','16','19','27','28','29','31','34']);
 const prebuiltSourceColumns = new Set(['2','5','6','11','13','26','30']);
-const prebuiltSourceNotes = new Set(['寿元','inventory','equipment','skills','traits','gongfa','cultivationArts']);
+const prebuiltSourceNotes = new Set(['寿元','inventory','equipment','skills','traits','gongfa','cultivationArts','spiritStoneGrades']);
 export function isPrebuiltSnapshotColumn(column) {
   return prebuiltSnapshotColumns.has(String(column));
 }
@@ -198,6 +202,7 @@ export function isPrebuiltEventField(field) {
     !(Number.isFinite(before) && typeof after === 'string' && String(before) === after.trim() ||
       Number.isFinite(after) && typeof before === 'string' && String(after) === before.trim());
   if (!prebuiltSourceNotes.has(key)) return false;
+  if (key==='spiritStoneGrades') return path.length===3&&['中品','上品','极品'].includes(part)&&Number.isFinite(field.delta);
   if (key === '寿元' && after == null) return false;
   if (key === 'equipment') {
     if (part) return prebuiltEquipmentSlotChanges(before,after).length > 0;
@@ -281,8 +286,9 @@ export function applyEventFieldChanges(row, changes, {reverse=false,requireMatch
       continue;
     }
     if(Number.isFinite(change.delta)){
-      if(typeof current!=='number'&&!(typeof current==='string'&&/^\d+$/.test(current)))return null;
-      const number=Number(current)+(reverse?-change.delta:change.delta);
+      const balance=current??(path[0]==='9'&&path[1]==='spiritStoneGrades'?0:undefined);
+      if(typeof balance!=='number'&&!(typeof balance==='string'&&/^\d+$/.test(balance)))return null;
+      const number=Number(balance)+(reverse?-change.delta:change.delta);
       if(!Number.isFinite(number)||number<0)return null;
       value=typeof current==='string'?String(number):number;
     }else if(requireMatch&&!same(list?itemFields(current):current,list?itemFields(expected):expected)){

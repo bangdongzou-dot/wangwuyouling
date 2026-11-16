@@ -967,7 +967,6 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 |---|---|---|
 | 年龄  | 整数。 | {"年龄": 21} |
 | 寿元  | 整数。 | {"寿元": 149} |
-| 善恶值  | 整数。表示玩家的善良/邪恶值，做邪恶的事情减少，做善良的事情增加 | {"善恶值": 1050} |
 | 修为进度  | 整数，0-100，不带百分号。 | {"修为进度": 75} |
 | 灵根 | 完整的灵根描述字符串。 | {"灵根": "天灵根 火"} |
 | traits | 为词条对象数组，其中rarity为词条的稀有度，必须是 平庸, 普通, 稀有, 史诗, 传说, 神迹, 负面状态 之一。 | {"traits": [{"name":"新特性","desc":"描述","rarity":"稀有"}]} |
@@ -2062,7 +2061,6 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 | 变量名 (键名) | 格式/说明 | 示例 |
 | 年龄  | 整数。 | {"年龄": 21} | 更新玩家年龄：add("B1", {"9": {"年龄": "21"}})
 | 寿元  | 整数。 | {"寿元": 149} | 更新玩家寿元：add("B1", {"9": {"寿元": "149"}})
-| 善恶值  | 整数。表示玩家的善良/邪恶值，做邪恶的事情减少，做善良的事情增加 | {"善恶值": 1050} | 更新玩家善恶值：add("B1", {"9": {"善恶值": "1050"}})
 | 修为进度  | 整数，0-100，不带百分号。 | {"修为进度": 75} | 更新玩家修为进度：add("B1", {"9": {"修为进度": "95"}})
 | 灵根 | 完整的灵根描述字符串。 | {"灵根": "天灵根 火"} |
 
@@ -5856,7 +5854,6 @@ console.warn('[日报API] 尝试恢复剧情上下文失败:', e);
 
         const CUSTOM_MAP_COLORS_KEY = 'CULTIVATION_CUSTOM_MAP_COLORS_V1';
         const REGEX_PRESETS_KEY = 'CULTIVATION_REGEX_PRESETS_V1';
-        const npcImageGenOverlay = document.getElementById('npc-image-gen-overlay');
         const API_BASE_URL = 'https://my-workshop-api-omega.vercel.app';
 
         const PLACEMENT_MAP = {
@@ -10751,10 +10748,12 @@ function frApiRoutes(key, slot) {
   return CE_CORE?.['api-library']?.consumerApiChain(key, slot);
 }
 
-async function frRunApiRoutes(key, slot, fallback, attempt, signal, canRetry) {
+async function frRunApiRoutes(key, slot, fallback, attempt, signal, canRetry, preferredRouteId) {
   let routes=frApiRoutes(key,slot);
   if(routes===null||routes===undefined)return attempt(fallback);
   if(typeof frAiPrioritizeRoutes==='function')routes=frAiPrioritizeRoutes(routes);
+  const preferred = preferredRouteId && routes.find(route=>route.id === preferredRouteId);
+  if (preferred) routes = [preferred, ...routes.filter(route=>route !== preferred)];
   let switchStatus,switchStatusTimer;
   return CE_CORE['api-library'].runApiChain(routes,(route,index)=>attempt(route,index,index<routes.length-1),signal,route=>{
     clearTimeout(switchStatusTimer);
@@ -11193,6 +11192,7 @@ async function _portraitGetPlaceholderValues(charRow, options) {
     storyText = await _portraitResolveStoryText();
   }
   return {
+    char_name: _portraitNormalizePromptField(charRow && String(charRow['1'] || '').split('|')[0], charInfo?.name || ''),
     identity_info: _portraitBuildIdentityInfo(charRow, charInfo),
     subject_type: _portraitBuildSubjectTypeHint(charRow),
     realm_info: _portraitNormalizePromptField(charRow && charRow['2']),
@@ -11612,14 +11612,16 @@ async function _portraitExtractApiError(response) {
   return errDetail || errText || '未知错误';
 }
 
-async function _portraitExtractOpenAiStyleImageData(data, preferredResponseFormat, signal) {
+async function _portraitExtractOpenAiStyleImageData(data, preferredResponseFormat, signal, outputFormat) {
   if (!data || !Array.isArray(data.data) || !data.data[0]) {
     throw new Error('图片生成 API 返回数据格式异常');
   }
   var item = data.data[0];
   var responseFormat = String(preferredResponseFormat || '').trim().toLowerCase();
   if (item.b64_json) {
-    return 'data:image/png;base64,' + item.b64_json;
+    var mime = {png:'image/png',jpeg:'image/jpeg',webp:'image/webp'};
+    return _portraitBuildDataUrlFromBase64(item.b64_json,
+      mime[item.output_format] || mime[data.output_format] || mime[outputFormat] || mime.png);
   }
   if (responseFormat === 'b64_json' && item.url) {
     return await _portraitFetchImageAsDataUrl(item.url, signal);
@@ -11889,33 +11891,44 @@ async function _portraitCallDoubaoImageGen(providerConfig, prompt, signal) {
   return await _portraitExtractOpenAiStyleImageData(data, providerConfig.responseFormat || 'b64_json', signal);
 }
 
-async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal) {
+async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal, references = []) {
   if (!providerConfig.apiUrl || !providerConfig.apiKey || !providerConfig.apiModel) {
     throw new Error('请先配置 OpenAI 文生图 API（URL、Key、模型）');
   }
-  var body = {
-    model: providerConfig.apiModel,
-    prompt: prompt.trim(),
-    size: providerConfig.size || '1024x1024',
-    quality: providerConfig.quality || 'high',
-    background: providerConfig.background || 'auto',
-    output_format: providerConfig.outputFormat || 'png'
-  };
-  var response = await fetch(CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, 'images/generations'), {
+  const library = CE_CORE['api-library'];
+  signal = library.imageRequestSignal(providerConfig,signal);
+  const body = library.gptImageRequestBody(providerConfig,prompt);
+  const headers = { Authorization: 'Bearer ' + providerConfig.apiKey };
+  let operation = 'images/generations';
+  let requestBody = JSON.stringify(body);
+  if (references.length) {
+    operation = 'images/edits';
+    const form = new FormData();
+    for (const [key, value] of Object.entries(body)) form.set(key, value);
+    for (const [index, reference] of references.entries()) {
+      const blob = await (await fetch(reference.src, { signal })).blob();
+      const extension = blob.type === 'image/jpeg' ? 'jpeg' : blob.type.split('/')[1];
+      form.append('image[]', blob, 'reference-' + (index + 1) + '.' + extension);
+    }
+    requestBody = form;
+  } else {
+    headers['Content-Type'] = 'application/json';
+  }
+  signal?.throwIfAborted();
+  library.takeImageRouteSlot(providerConfig);
+  var response = await fetch(CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, operation), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + providerConfig.apiKey
-    },
-    body: JSON.stringify(body),
+    headers,
+    body: requestBody,
     signal: signal || null
   });
   if (!response.ok) {
     var openaiErr = await _portraitExtractApiError(response);
-    throw new Error('OpenAI 图片生成失败 (' + response.status + '): ' + openaiErr);
+    throw new Error((references.length ? 'GPT Image 参考图请求失败' : 'OpenAI 图片生成失败') +
+      ' (' + response.status + '): ' + openaiErr);
   }
   var data = await response.json();
-  return await _portraitExtractOpenAiStyleImageData(data, '', signal);
+  return await _portraitExtractOpenAiStyleImageData(data, '', signal, body.output_format);
 }
 
 async function _portraitCallCustomOpenAiImageGen(providerConfig, prompt, signal) {
@@ -12086,15 +12099,19 @@ async function _portraitCallGeminiImageGen(providerConfig, prompt, signal) {
   throw new Error('Gemini 返回中未找到图片数据');
 }
 
-async function callCommercialImageGen(config, prompt, signal) {
+async function callCommercialImageGen(config, prompt, signal, references = [], onSuccess, preferredRouteId) {
   const provider=_portraitNormalizeProvider(config.provider);
   _portraitEnsureProviderConfigs(config);
   const fallback=_portraitGetProviderConfig(config,provider);
   return frRunApiRoutes(PORTRAIT_GEN_CONFIG_KEY,'providers.'+provider,fallback,
-    route=>callCommercialImageGenOnce(config,prompt,signal,{...fallback,apiUrl:route.apiUrl,apiKey:route.apiKey,apiModel:route.apiModel}),signal);
+    async route=>{
+      const image = await callCommercialImageGenOnce(config,prompt,signal,CE_CORE['api-library'].imageRouteConfig(fallback,route),references);
+      onSuccess?.(route);
+      return image;
+    },signal,undefined,preferredRouteId);
 }
 
-async function callCommercialImageGenOnce(config, prompt, signal, providerConfig) {
+async function callCommercialImageGenOnce(config, prompt, signal, providerConfig, references = []) {
   if (!prompt || !prompt.trim()) {
     throw new Error('文生图提示词不能为空');
   }
@@ -12109,7 +12126,7 @@ async function callCommercialImageGenOnce(config, prompt, signal, providerConfig
     return await _portraitCallDoubaoImageGen(providerConfig, prompt, signal);
   }
   if (provider === 'openai') {
-    return await _portraitCallOpenAiImageGen(providerConfig, prompt, signal);
+    return await _portraitCallOpenAiImageGen(providerConfig, prompt, signal, references);
   }
   if (provider === 'custom_openai') {
     return await _portraitCallCustomOpenAiImageGen(providerConfig, prompt, signal);
@@ -12188,7 +12205,7 @@ function _portraitGetBestTimelineAvatarFromTimelines(timelineMap, keys, layer, o
     if (!Array.isArray(timeline) || timeline.length === 0) continue;
     for (var j = timeline.length - 1; j >= 0; j--) {
       var entry = timeline[j];
-      if (!entry || typeof entry.layer !== 'number' || !entry.imageData) continue;
+      if (!entry || typeof entry.layer !== 'number' || (!entry.imageData && entry.imageData !== '')) continue;
       if (entry.layer > layer) continue;
       // 同一层仅允许使用当前名字的精确 key，避免回溯重发后新角色复用旧分支头像
       if (entry.layer === layer && exactKey && key !== exactKey) continue;
@@ -12328,7 +12345,7 @@ async function applyGeneratedPortrait(charId, charName, imageDataUrl) {
 
   // 刷新显示
   await updateNpcAvatarDisplay(charId);
-  showDanmaku('肖像已应用', 'success');
+  showDanmaku(imageDataUrl ? '肖像已应用' : '已解除主肖像绑定', 'success');
   if (typeof refreshSceneAvatarStrip === 'function') {
     refreshSceneAvatarStrip();
   }
@@ -12482,11 +12499,197 @@ async function _portraitEnsureImageDataUrl(src, options) {
   if (!imageSrc) return '';
   if (imageSrc.indexOf('data:') === 0) return imageSrc;
   try {
-    return await _portraitFetchImageAsDataUrl(imageSrc);
+    return await _portraitFetchImageAsDataUrl(imageSrc, opts.signal);
   } catch (e) {
     if (opts.requireDataUrl) return '';
     return imageSrc;
   }
+}
+
+const CHARACTER_DESIGN_COMPOSITION = '绘制同一角色的人物设定图，展示全身正面、背面以及服饰和装备的关键细节。';
+const CHARACTER_REFERENCE_GUIDE = '参考图用于保持对应角色的五官、发型、身形和主要服饰特征。构图、动作、表情与环境以本次要求为准。';
+
+function frImageMaterials() {
+  return window.__FR_IMAGE_MATERIALS__ || {};
+}
+
+function frShowImageExamples(host, labels) {
+  if (!host || host.childElementCount) return;
+  for (const [key, label] of Object.entries(labels)) {
+    const src = frImageMaterials().examples?.[key];
+    if (!src) continue;
+    const figure = document.createElement('figure');
+    const image = document.createElement('img');
+    image.src = src;
+    image.alt = label;
+    image.loading = 'lazy';
+    const caption = document.createElement('figcaption');
+    caption.textContent = label;
+    figure.append(image, caption);
+    host.append(figure);
+  }
+}
+
+function frFillBuiltinPortraitPrompt(kind, row, values, config = {}) {
+  const template = config.portraitImageTemplate || frImageMaterials().portrait;
+  if (!template) return '';
+  const [, attire, location, figure, appearance] = String(row?.['16'] || '').split(/[|｜]/);
+  const [, gender] = String(row?.['1'] || '').split(/[|｜]/);
+  const subjectType = /妖兽|灵兽/u.test(String(row?.['2'] || ''))
+    ? '非人类灵兽，保留现有形态' : '按角色资料呈现的人物';
+  const prompt = kind === 'portrait' ? template : template.replace(/【构图】[\s\S]*?(?=【光影】)/u, '');
+  const composition = kind === 'design' ? (config.designTemplate || frImageMaterials().design || CHARACTER_DESIGN_COMPOSITION)
+    : kind === 'photo' ? (config.photoTemplate || frImageMaterials().photo || '') : '';
+  return _portraitFillTemplate([prompt, composition].filter(Boolean).join('\n'), {
+    ...values,
+    subject_type: subjectType,
+    gender: gender || '按角色资料',
+    appearance: appearance || '角色已知的外貌',
+    appearance_details: '现有角色资料及其参考图',
+    attire: attire || '角色现有服饰',
+    figure: figure || '角色已知的身形',
+    location: location || '角色所在场景'
+  }).replace(/世界观单人全身角色肖像/u, '世界观单人角色图');
+}
+
+function _portraitIsReferenceData(src) {
+  return /^data:image\/(?:png|jpeg|webp);base64,/i.test(src || '');
+}
+
+function frImageReferencesWithExample(kind, references, limit = Infinity) {
+  const src = frImageMaterials().examples?.[kind];
+  if (!_portraitIsReferenceData(src)) throw new Error('缺少本次生图使用的内置示例图，请重新构建游戏。');
+  const label = {story:'正文插图',portrait:'普通肖像',photo:'证件照',design:'人物设定图'}[kind];
+  const example = {src,name:label,type:'内置画风示例',
+    guide:'只参考画风、材质、光影质感与该类图的构图规律。人物身份、长相和服饰以本次角色资料及其专属参考图为准，场景以本次画面内容为准。'};
+  const required = [...new Map(references.filter(ref=>ref.required).map(ref=>[ref.name+'\n'+ref.src,ref])).values()];
+  const optional = [...new Map(references.filter(ref=>!ref.required && ref.src!==src && !required.some(sheet=>sheet.src===ref.src))
+    .map(ref=>[ref.src,ref])).values()];
+  return [example,...required,...optional.slice(0,Math.max(0,limit-1-required.length))];
+}
+
+function _portraitGetCharacterAssets(archive, char) {
+  const key = _portraitBuildStableUniqueKey(char.id);
+  return archive?.data?.state?.characterImageAssets?.[key] || {};
+}
+
+async function _portraitUpdateCharacterAssets(archiveName, char, update) {
+  if (!archiveName) throw new Error('请先进入存档');
+  const key = _portraitBuildStableUniqueKey(char.id);
+  if (!key) throw new Error('角色标识无效');
+  const changed = await db.archives.where('name').equals(archiveName).modify(archive => {
+    const state = archive.data.state ??= {};
+    const allAssets = state.characterImageAssets ??= {};
+    const assets = allAssets[key] ??= {};
+    update(assets);
+    if (!Object.keys(assets).length) delete allAssets[key];
+  });
+  if (!changed) throw new Error('无法读取原存档');
+}
+
+async function _portraitWriteCharacterAsset(archiveName, char, kind, src) {
+  if (src && !_portraitIsReferenceData(src)) throw new Error('请选择 PNG、JPEG 或 WebP 图片');
+  return _portraitUpdateCharacterAssets(archiveName, char, assets => {
+    if (src) assets[kind] = src;
+    else delete assets[kind];
+  });
+}
+
+function frPortraitAppearanceText(value) {
+  return typeof value === 'string' && !/<img\b|^\s*(?:暂无|未知|未详|无)\s*$/iu.test(value) ? value.trim() : '';
+}
+
+function frPortraitVisualFacts(row) {
+  const [,attire,,figure,appearance] = String(row?.['16'] || '').split(/[|｜]/).map(value=>value.trim());
+  const [,gender] = String(row?.['1'] || '').split(/[|｜]/);
+  const age = String(parseRemarksString(row?.['9'] || '')?.['年龄'] ?? '').trim();
+  const details = [figure,appearance,attire].map(frPortraitAppearanceText).filter(Boolean);
+  return details.length ? [gender?.trim(),frPortraitAppearanceText(age) && '当前年龄 '+age,...details].filter(Boolean).join('，') : '';
+}
+
+function frPortraitAppearanceFromRow(row, legacyPrompt) {
+  return frPortraitAppearanceText(row?.['19']) || frPortraitAppearanceText(legacyPrompt) || frPortraitVisualFacts(row);
+}
+
+function frUpdatePortraitAppearance(row, previous) {
+  if (!row) return false;
+  const current = frPortraitAppearanceText(row['19']);
+  const before = frPortraitAppearanceText(previous?.['19']);
+  if (current && current !== before) return false;
+  const facts = frPortraitVisualFacts(row);
+  if (!facts || (current && facts === frPortraitVisualFacts(previous))) return false;
+  if (row['19'] === facts) return false;
+  row['19'] = facts;
+  return true;
+}
+
+function frResolvePortraitAppearance(row, assets, legacyPrompt) {
+  const generated = frPortraitAppearanceFromRow(row,legacyPrompt);
+  const edited = frPortraitAppearanceText(assets?.appearance);
+  return edited && (assets.appearanceLocked || !generated || assets.appearanceAtEdit === generated ||
+    assets.appearanceAtEdit === undefined && !frPortraitAppearanceText(row?.['19'])) ? edited : generated;
+}
+
+function frPortraitAppearanceSupplement(assets, appearance) {
+  const legacy = assets?.appearanceAtEdit === undefined && !assets?.appearanceLocked
+    ? frPortraitAppearanceText(assets?.appearance) : '';
+  return frPortraitAppearanceText(assets?.appearanceSupplement ?? (legacy !== appearance ? legacy : ''));
+}
+
+const frPortraitVariableRule = '【持续维护角色画像】每轮核对本次负责的玩家和NPC第19列。为空时依据当前资料补全；年龄感、身形、发型、样貌或常驻造型变化时，与第16列及当前年龄同步更新第19列，移除已过时的外观。其余细节沿用，动作、位置、临时情绪和光影不写进画像。只维护允许演化的角色，不提交生图指令。';
+
+async function frRequestPortraitAppearance(row, name) {
+  if (!row) throw new Error('当前角色没有可用的变量资料');
+  const config = await loadConcurrentEvolutionConfig();
+  const primary = getApiConfigsToTry(config)[0];
+  const key = primary ? CONCURRENT_EVOLUTION_CONFIG_KEY : 'FR_STORY_IMAGE_PLANNER_V1';
+  if (!primary && !frApiRoutes(key)?.length) throw new Error('请先配置变量演化或分镜规划的文本接口');
+  const facts = frPortraitVisualFacts(row);
+  if (!facts) throw new Error('角色变量中还没有可用的外貌、体型或服饰资料');
+  const content = '根据当前变量更新角色画像提示词。保持已知身份特征，以当前年龄、身形、五官、发型及常驻服饰为准。旧画像只供补齐仍然适用的细节，移除冲突内容。只返回一段可直接用于生图的画像文字，不输出标题、解释、动作、场景或其他角色。'
+    + '\n角色：' + name + '\n当前外观：' + facts + '\n旧画像：' + (frPortraitAppearanceText(row['19']) || '无');
+  const response = await frFeatureChat(key,undefined,primary?.apiUrl,primary?.apiKey,primary?.apiModel,[{role:'user',content}]);
+  ceThrowIfApiFailureText(response,'更新角色画像');
+  const result = frPortraitAppearanceText(String(response || '').replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi,'').trim()
+    .replace(/^\x60{3}(?:\w+)?\s*|\s*\x60{3}$/g,''));
+  if (!result) throw new Error('文本模型没有返回可用的画像提示词');
+  return result;
+}
+
+function _portraitWithAppearance(prompt, assets, row) {
+  const appearance = frResolvePortraitAppearance(row,assets);
+  const supplement = frPortraitAppearanceSupplement(assets,appearance);
+  return [prompt, appearance && (assets?.appearanceLocked ? '【锁定的角色外观】\n' : '【角色当前画像】\n') + appearance,
+    supplement && '【玩家自定义补充】只采用与上方当前画像相容的细节。\n' + supplement].filter(Boolean).join('\n');
+}
+
+function frCharacterDesignReference(archive,char) {
+  const src = _portraitGetCharacterAssets(archive,char).design;
+  if (!_portraitIsReferenceData(src)) return null;
+  return {src,name:char.name || char.id,type:'设定图',required:true,
+    guide:'保持该角色自身的脸型、五官、发型、身形与稳定造型。本次动作、表情、视角和背景服从本次画面。'};
+}
+
+async function _portraitCollectCharacterReferences(archive, char, signal, includePortrait = false) {
+  if (!char || !archive) return [];
+  const assets = _portraitGetCharacterAssets(archive, char);
+  const references = [];
+  const design = frCharacterDesignReference(archive,char);
+  if (design) references.push(design);
+  if (_portraitIsReferenceData(assets.reference)) references.push({ src: assets.reference, type: '上传参考图' });
+  if (includePortrait || !references.length) {
+    const avatar = await _portraitResolveExistingAvatar(char, archive);
+    const src = await _portraitEnsureImageDataUrl(avatar.src, { requireDataUrl: true, signal });
+    if (_portraitIsReferenceData(src) && !references.some(reference=>reference.src === src)) references.push({ src, type: '肖像' });
+  }
+  return references.map(reference => ({ ...reference, name: char.name || char.id }));
+}
+
+function _portraitAppendReferenceGuide(prompt, references, guide) {
+  if (!references.length) return prompt;
+  const labels = references.map((reference, index) =>
+    `参考图 ${index + 1} · ${reference.name} · ${reference.type}` + (reference.guide ? ' · ' + reference.guide : ''));
+  return [prompt, ...labels, String(guide || '').trim() || CHARACTER_REFERENCE_GUIDE].join('\n');
 }
 
 async function _portraitResolveExistingAvatar(char, archive, currentLayer) {
@@ -12517,6 +12720,10 @@ async function _portraitResolveExistingAvatar(char, archive, currentLayer) {
     );
   }
   if (localAvatar) return { src: localAvatar, source: 'npcAvatars' };
+  if (char.id === 'B1' && localArchive?.name) {
+    const custom = await dbGet(CUSTOM_AVATAR_KEY + '_' + localArchive.name);
+    if (custom) return { src: custom, source: 'player-avatar' };
+  }
 
   var visualAvatar = _portraitResolveVisualAvatar(char);
   if (visualAvatar) return { src: visualAvatar, source: 'visualData' };
@@ -12623,7 +12830,7 @@ async function loadCommercialAutoPortraitConfig() {
     raw = await dbGet(COMMERCIAL_AUTO_PORTRAIT_CONFIG_KEY);
   } catch (e) {}
   if (!raw || typeof raw !== 'object') {
-    return { enabled: !!COMMERCIAL_AUTO_PORTRAIT_DEFAULT_CONFIG.enabled };
+    return { enabled: !!(typeof funSettings !== 'undefined' && funSettings?.autoGenNpcImage) || !!COMMERCIAL_AUTO_PORTRAIT_DEFAULT_CONFIG.enabled };
   }
   return {
     enabled: !!raw.enabled
@@ -12682,176 +12889,15 @@ function _commercialAutoPortraitCloseStatus(task) {
   } catch (e) {}
 }
 
-function _commercialAutoPortraitGetPromptTemplateText(config) {
-  var template = String((config && config.promptTemplate) || PORTRAIT_GEN_DEFAULT_PROMPT_TEMPLATE);
-  return template.replace(/\\n/g, '\n');
-}
 
-function _commercialAutoPortraitIsSexualSafetyViolationError(err) {
-  if (!err) return false;
-  var msg = String((err && err.message) || err || '');
-  var lower = msg.toLowerCase();
-  if (!lower) return false;
-  if (lower.indexOf('safety_violations=[sexual]') !== -1) return true;
-  if (lower.indexOf('safety system') !== -1 && lower.indexOf('sexual') !== -1) return true;
-  if (lower.indexOf('safety_violation') !== -1 && lower.indexOf('sexual') !== -1) return true;
-  if (lower.indexOf('sexually_explicit') !== -1 && lower.indexOf('blocked') !== -1) return true;
-  return false;
-}
 
-function _commercialAutoPortraitBuildLlmPromptBundle(config, placeholderValues) {
-  var enforceAdultPrompt = _portraitShouldEnforceAdultPrompt(config);
-  var template = String(config && config.promptTemplate ? config.promptTemplate : PORTRAIT_GEN_DEFAULT_PROMPT_TEMPLATE);
-  template = template.replace(/\\n/g, '\n');
-  template = _portraitEnsureTemplateMandatoryRules(template, { enforceAdultPrompt: enforceAdultPrompt });
-  template = _portraitFilterTemplateByAdultRule(template, enforceAdultPrompt);
-  var filledTemplate = _portraitFillTemplate(template, placeholderValues);
-  var identityContext = _portraitBuildSystemIdentityContext(placeholderValues);
-  if (identityContext) {
-    filledTemplate = identityContext + '\n\n' + filledTemplate;
-  }
-  return {
-    llmPrompt: _portraitBuildPromptGenCotRequest(filledTemplate, enforceAdultPrompt),
-    filledTemplate: filledTemplate
-  };
-}
 
-async function _commercialAutoPortraitBuildFinalPrompt(runtimeConfig, placeholderValues, signal) {
-  var llmBundle = _commercialAutoPortraitBuildLlmPromptBundle(runtimeConfig, placeholderValues);
-  var promptRaw = await generateImagePrompt(runtimeConfig, placeholderValues, signal);
-  _commercialAutoPortraitThrowIfAborted(signal);
-  var promptResult = _portraitParseGeneratedPromptResult(promptRaw);
-  var finalPrompt = _portraitSanitizeGeneratedPromptText(promptResult.prompt || '', placeholderValues).trim();
-  if (!finalPrompt) {
-    finalPrompt = _portraitSanitizeGeneratedPromptText(promptRaw || '', placeholderValues);
-  }
-  if (!finalPrompt) {
-    throw new Error('提示词为空，已跳过');
-  }
-  return {
-    promptRaw: promptRaw,
-    finalPrompt: finalPrompt,
-    llmPrompt: llmBundle ? llmBundle.llmPrompt : ''
-  };
-}
 
-async function _commercialAutoPortraitGenerateImageWithSafetyRetry(task, config, charName, initialPrompt, runtimeConfig, placeholderValues, signal) {
-  var safeName = String(charName || task && task.charName || '未知角色');
-  var firstPrompt = String(initialPrompt || '').trim();
-  if (!firstPrompt) throw new Error('提示词为空，无法生图');
 
-  var samePromptMaxAttempts = 3; // 初次 + 立即重试2次
-  var regeneratedPromptMaxAttempts = 3; // 重新生成提示词后再试3次
-  var lastSafetyError = null;
 
-  for (var attempt = 1; attempt <= samePromptMaxAttempts; attempt++) {
-    _commercialAutoPortraitThrowIfAborted(signal);
-    var stageText = '商用自动生图 [' + safeName + '] 头像图生成中...';
-    if (attempt > 1) {
-      stageText = '商用自动生图 [' + safeName + '] 头像图生成中（安全重试 ' + attempt + '/' + samePromptMaxAttempts + '）...';
-    }
-    _commercialAutoPortraitSetStatusStage(task, stageText);
-    _commercialAutoPortraitDebugLog('task:image_attempt', {
-      charId: task && task.charId ? task.charId : '',
-      phase: 'same_prompt',
-      attempt: attempt,
-      maxAttempts: samePromptMaxAttempts,
-      promptLen: firstPrompt.length
-    });
-    try {
-      var imageSamePrompt = await callCommercialImageGen(config, firstPrompt, signal);
-      return {
-        imageDataUrl: imageSamePrompt,
-        phase: 'same_prompt',
-        attempt: attempt,
-        promptRegenerated: false
-      };
-    } catch (e) {
-      if (_commercialAutoPortraitIsAbortError(e, signal)) throw e;
-      var sexualSafety = _commercialAutoPortraitIsSexualSafetyViolationError(e);
-      _commercialAutoPortraitDebugLog('task:image_attempt_failed', {
-        charId: task && task.charId ? task.charId : '',
-        phase: 'same_prompt',
-        attempt: attempt,
-        maxAttempts: samePromptMaxAttempts,
-        isSexualSafety: sexualSafety,
-        message: e && e.message ? e.message : String(e || '')
-      });
-      if (!sexualSafety) throw e;
-      lastSafetyError = e;
-      if (attempt < samePromptMaxAttempts) {
-        showDanmaku('商用自动生图触发安全拦截，立即重试：' + safeName + '（' + attempt + '/' + samePromptMaxAttempts + '）', 'info');
-      }
-    }
-  }
 
-  _commercialAutoPortraitSetStatusStage(task, '商用自动生图 [' + safeName + '] 触发安全拦截，正在重生成提示词...');
-  _commercialAutoPortraitDebugLog('task:safety_retry_regenerate_prompt', {
-    charId: task && task.charId ? task.charId : '',
-    reason: lastSafetyError && lastSafetyError.message ? lastSafetyError.message : 'sexual safety rejection'
-  });
-  showDanmaku('商用自动生图触发安全拦截，重生成提示词：' + safeName, 'info');
 
-  var regeneratedPromptBundle = await _commercialAutoPortraitBuildFinalPrompt(runtimeConfig, placeholderValues, signal);
-  var regeneratedPrompt = String(regeneratedPromptBundle && regeneratedPromptBundle.finalPrompt || '').trim();
-  if (!regeneratedPrompt) throw new Error('重生成提示词为空，已跳过');
-  _commercialAutoPortraitRecordPrompt({
-    charId: task && task.charId ? task.charId : '',
-    charName: safeName,
-    llmPrompt: regeneratedPromptBundle && regeneratedPromptBundle.llmPrompt ? regeneratedPromptBundle.llmPrompt : '',
-    finalPrompt: regeneratedPrompt
-  });
-  if (regeneratedPromptBundle && regeneratedPromptBundle.llmPrompt) {
-    _portraitConsoleLogFull('auto-portrait:llm-request char=' + safeName + ' (regenerated)', regeneratedPromptBundle.llmPrompt);
-  }
-  if (regeneratedPrompt) {
-    _portraitConsoleLogFull('auto-portrait:final-prompt char=' + safeName + ' (regenerated)', regeneratedPrompt);
-  }
-  _commercialAutoPortraitDebugLog('task:prompt_regenerated', {
-    charId: task && task.charId ? task.charId : '',
-    promptLen: regeneratedPrompt.length,
-    promptPreview: regeneratedPrompt.slice(0, 80)
-  });
 
-  for (var retry = 1; retry <= regeneratedPromptMaxAttempts; retry++) {
-    _commercialAutoPortraitThrowIfAborted(signal);
-    _commercialAutoPortraitSetStatusStage(task, '商用自动生图 [' + safeName + '] 头像图生成中（重生提示词 ' + retry + '/' + regeneratedPromptMaxAttempts + '）...');
-    _commercialAutoPortraitDebugLog('task:image_attempt', {
-      charId: task && task.charId ? task.charId : '',
-      phase: 'regenerated_prompt',
-      attempt: retry,
-      maxAttempts: regeneratedPromptMaxAttempts,
-      promptLen: regeneratedPrompt.length
-    });
-    try {
-      var imageRegeneratedPrompt = await callCommercialImageGen(config, regeneratedPrompt, signal);
-      return {
-        imageDataUrl: imageRegeneratedPrompt,
-        phase: 'regenerated_prompt',
-        attempt: retry,
-        promptRegenerated: true
-      };
-    } catch (e2) {
-      if (_commercialAutoPortraitIsAbortError(e2, signal)) throw e2;
-      var sexualSafety2 = _commercialAutoPortraitIsSexualSafetyViolationError(e2);
-      _commercialAutoPortraitDebugLog('task:image_attempt_failed', {
-        charId: task && task.charId ? task.charId : '',
-        phase: 'regenerated_prompt',
-        attempt: retry,
-        maxAttempts: regeneratedPromptMaxAttempts,
-        isSexualSafety: sexualSafety2,
-        message: e2 && e2.message ? e2.message : String(e2 || '')
-      });
-      if (!sexualSafety2) throw e2;
-      lastSafetyError = e2;
-      if (retry < regeneratedPromptMaxAttempts) {
-        showDanmaku('商用自动生图安全拦截，重生提示词继续重试：' + safeName + '（' + retry + '/' + regeneratedPromptMaxAttempts + '）', 'info');
-      }
-    }
-  }
-
-  throw lastSafetyError || new Error('商用自动生图失败（安全拦截）');
-}
 
 function _commercialAutoPortraitSchedulePersistenceCheck(charId, fallbackName) {
   var targetId = String(charId || '').trim();
@@ -12997,13 +13043,10 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
   try {
     var config = await loadPortraitGenConfig();
     _portraitEnsureProviderConfigs(config);
-    var provider = _portraitNormalizeProvider(config.provider);
+    var provider = 'openai';
     var providerConfig = _portraitGetProviderConfig(config, provider);
-    if (!config.llmApiUrl || !config.llmApiModel) {
-      throw new Error('未配置提示词生成 LLM（URL/模型）');
-    }
-    if (!providerConfig.apiUrl || !providerConfig.apiKey || !providerConfig.apiModel) {
-      throw new Error('未配置商用生图 API（URL/Key/模型）');
+    if (!frApiRoutes(PORTRAIT_GEN_CONFIG_KEY,'providers.openai')?.length && (!providerConfig.apiUrl || !providerConfig.apiKey || !providerConfig.apiModel)) {
+      throw new Error('请配置肖像 GPT Image 接口');
     }
     _commercialAutoPortraitDebugLog('task:config_ready', {
       charId: task.charId,
@@ -13038,60 +13081,23 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
     if (currentState && currentState['0'] && task.charId) {
       charRow = currentState['0'][task.charId] || null;
     }
-    var includeStoryText = !!charRow;
-    var placeholderValues = await _portraitGetPlaceholderValues(charRow, {
-      includeStoryText: includeStoryText,
-      char: liveChar || char
-    });
-    _commercialAutoPortraitDebugLog('task:placeholder_context', {
-      charId: task.charId,
-      inScene: includeStoryText,
-      storyInjected: includeStoryText
-    });
-    placeholderValues.style = PORTRAIT_STYLE_MAP[config.style] || PORTRAIT_STYLE_MAP['anime'];
-    var runtimeConfig = Object.assign({}, config, {
-      promptTemplate: _commercialAutoPortraitGetPromptTemplateText(config)
-    });
-
-    var promptBundle = await _commercialAutoPortraitBuildFinalPrompt(runtimeConfig, placeholderValues, controller.signal);
-    var finalPrompt = promptBundle.finalPrompt;
-    _commercialAutoPortraitRecordPrompt({
-      charId: task.charId,
-      charName: charName,
-      llmPrompt: promptBundle.llmPrompt || '',
-      finalPrompt: finalPrompt
-    });
-    if (promptBundle && promptBundle.llmPrompt) {
-      _portraitConsoleLogFull('auto-portrait:llm-request char=' + charName, promptBundle.llmPrompt);
-    }
-    if (finalPrompt) {
-      _portraitConsoleLogFull('auto-portrait:final-prompt char=' + charName, finalPrompt);
-    }
-    _commercialAutoPortraitDebugLog('task:prompt_ready', {
-      charId: task.charId,
-      promptLen: finalPrompt.length,
-      promptPreview: finalPrompt.slice(0, 80)
-    });
-
-    var imageResult = await _commercialAutoPortraitGenerateImageWithSafetyRetry(
-      task,
-      config,
-      charName,
-      finalPrompt,
-      runtimeConfig,
-      placeholderValues,
-      controller.signal
-    );
-    var imageDataUrl = imageResult && imageResult.imageDataUrl ? imageResult.imageDataUrl : '';
+    const values = await _portraitGetPlaceholderValues(charRow,{ char:liveChar || char,includeStoryText:false });
+    const subject = liveChar || char;
+    const design = frCharacterDesignReference(currentArchive,subject);
+    const references = frImageReferencesWithExample('portrait',config.autoCharacterReferences === true
+      ? await _portraitCollectCharacterReferences(currentArchive,subject,controller.signal) : [design].filter(Boolean));
+    const finalPrompt = _portraitAppendReferenceGuide(_portraitWithAppearance(frFillBuiltinPortraitPrompt('portrait',charRow,values,config),
+      _portraitGetCharacterAssets(currentArchive,subject),charRow),
+      references,config.characterReferenceGuide);
+    _commercialAutoPortraitRecordPrompt({charId:task.charId,charName,finalPrompt});
+    _commercialAutoPortraitSetStatusStage(task,'肖像生成中…');
+    const imageDataUrl = await callCommercialImageGen({...config,provider:'openai'},finalPrompt,controller.signal,references);
     _commercialAutoPortraitThrowIfAborted(controller.signal);
     if (!imageDataUrl) throw new Error('生图结果为空');
     _commercialAutoPortraitDebugLog('task:image_ready', {
       charId: task.charId,
       imageType: String(imageDataUrl || '').indexOf('data:') === 0 ? 'data-url' : 'url',
-      imageLen: String(imageDataUrl || '').length,
-      phase: imageResult && imageResult.phase ? imageResult.phase : 'unknown',
-      attempt: imageResult && typeof imageResult.attempt === 'number' ? imageResult.attempt : null,
-      promptRegenerated: !!(imageResult && imageResult.promptRegenerated)
+      imageLen: String(imageDataUrl || '').length
     });
 
     var latestArchive = null;
@@ -13422,83 +13428,11 @@ function _sceneAvatarEnsureToggleUi() {
   return toggle;
 }
 
-function _commercialAutoPortraitEnsureToggleUi() {
-  var header = document.querySelector('#surrounding-characters-overlay .characters-modal-header');
-  if (!header) return null;
 
-  var toggle = document.getElementById('commercial-auto-gen-toggle');
-  if (!toggle) {
-    var wrapper = document.createElement('div');
-    wrapper.className = 'auto-gen-toggle-container commercial-auto-gen-toggle-container';
-    wrapper.innerHTML =
-      '<label class="switch-label" for="commercial-auto-gen-toggle">商用自动生图</label>' +
-      '<label class="switch">' +
-      '<input id="commercial-auto-gen-toggle" type="checkbox" />' +
-      '<span class="slider round"></span>' +
-      '</label>' +
-      '<button type="button" id="commercial-auto-gen-prompt-btn" class="auto-gen-prompt-btn">' +
-      '<i class="fas fa-scroll"></i> 提示词' +
-      '</button>';
-    var titleEl = header.querySelector('h4');
-    if (titleEl) {
-      header.insertBefore(wrapper, titleEl);
-    } else {
-      header.appendChild(wrapper);
-    }
-    toggle = wrapper.querySelector('#commercial-auto-gen-toggle');
-  }
-
-  if (!toggle._commercialAutoPortraitBound) {
-    toggle._commercialAutoPortraitBound = true;
-    toggle.addEventListener('change', async function() {
-      var enabled = !!toggle.checked;
-      _commercialAutoPortraitConfigCache = { enabled: enabled };
-      if (!enabled) {
-        abortAllCommercialAutoPortraitTasks('自动生图开关关闭');
-      }
-      try {
-        await saveCommercialAutoPortraitConfig(_commercialAutoPortraitConfigCache);
-      } catch (e) {}
-      if (enabled) {
-        triggerCommercialAutoPortraitForSurroundingCharacters();
-      }
-      showDanmaku(enabled ? '商用自动生图已开启' : '商用自动生图已关闭', enabled ? 'success' : 'info');
-    });
-  }
-
-  var promptBtn = document.getElementById('commercial-auto-gen-prompt-btn');
-  if (!promptBtn && toggle) {
-    var wrapperEl = null;
-    if (typeof toggle.closest === 'function') {
-      wrapperEl = toggle.closest('.commercial-auto-gen-toggle-container');
-    }
-    if (!wrapperEl) wrapperEl = toggle.parentNode;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'commercial-auto-gen-prompt-btn';
-    btn.className = 'auto-gen-prompt-btn';
-    btn.innerHTML = '<i class="fas fa-scroll"></i> 提示词';
-    if (wrapperEl && wrapperEl.appendChild) wrapperEl.appendChild(btn);
-    promptBtn = btn;
-  }
-  if (promptBtn && !promptBtn._commercialPromptBound) {
-    promptBtn._commercialPromptBound = true;
-    promptBtn.addEventListener('click', function() {
-      _commercialAutoPortraitOpenPromptOverlay();
-    });
-  }
-
-  return toggle;
-}
 
 async function initCommercialAutoPortraitFeature() {
   if (!_commercialAutoPortraitConfigCache) {
     _commercialAutoPortraitConfigCache = await loadCommercialAutoPortraitConfig();
-  }
-  var toggle = _commercialAutoPortraitEnsureToggleUi();
-  if (toggle) {
-    toggle.checked = !!_commercialAutoPortraitConfigCache.enabled;
-    toggle.title = '人物演化完成后，若无头像则自动生成并保存';
   }
   _commercialAutoPortraitBindPromptOverlay();
   if (_commercialAutoPortraitConfigCache.enabled) {
@@ -13801,6 +13735,7 @@ function _portraitCropBindEvents() {
         var dataUrl = _portraitCropExportDataUrl(512, els);
         await applySceneStripAvatar(_portraitCropRuntime.char.id, _portraitCropRuntime.char.name, dataUrl);
         _portraitCropClose();
+        await _portraitCropRuntime.onApply?.();
       } catch (e) {
         await _portraitNotify('头像裁剪失败: ' + e.message, 'error', els.overlay);
       } finally {
@@ -13899,7 +13834,7 @@ async function _portraitPrepareCropButton(buttonEl, char) {
   }
 }
 
-async function openPortraitCropModal(char) {
+async function openPortraitCropModal(char, onApply) {
   if (!char || !char.id) return;
   var els = _portraitCropGetEls();
   if (!els.overlay || !els.image || !els.stage) return;
@@ -13922,10 +13857,13 @@ async function openPortraitCropModal(char) {
 
   _portraitCropRuntime.char = char;
   _portraitCropRuntime.imageDataUrl = imageDataUrl;
+  _portraitCropRuntime.onApply = onApply;
   if (els.charName) {
     els.charName.textContent = char.name || char.id;
   }
 
+  els.overlay.style.zIndex = String(Math.max(2000,...[...document.querySelectorAll('.overlay.visible')]
+    .map(panel=>parseInt(getComputedStyle(panel).zIndex,10)||0))+1);
   els.overlay.classList.add('visible');
   await new Promise(function(resolve) { requestAnimationFrame(resolve); });
 
@@ -14114,427 +14052,343 @@ function _portraitReadProviderConfigFromForm(overlay, config, provider) {
   _portraitSyncLegacyConfigFields(config);
 }
 
-async function openPortraitGenModal(char) {
-  var config = await loadPortraitGenConfig();
-  _portraitEnsureProviderConfigs(config);
-
-  function resolveCurrentSceneCharRow() {
-    if (currentState && currentState['0'] && char && char.id) {
-      return currentState['0'][char.id] || null;
-    }
-    return null;
+async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'portrait' } = {}) {
+  const archiveName = currentArchiveName;
+  const config = await loadPortraitGenConfig();
+  const overlay = document.getElementById('portrait-gen-overlay');
+  const field = id => overlay.querySelector('#' + id);
+  const provider = _portraitGetProviderConfig(config, 'openai');
+  const routes = CE_CORE['api-library'];
+  const archiveAtOpen = char && archiveName ? await db.archives.get(archiveName) : null;
+  const stored = archiveAtOpen?.data?.state?.worldBookEntries?.find(entry=>entry.key===char?.id || entry.id===char?.id);
+  let archiveRow;
+  try { archiveRow = typeof stored?.content==='string' ? JSON.parse(stored.content) : stored?.content; } catch (_) {}
+  const row = char && (currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || archiveRow);
+  const values = await _portraitGetPlaceholderValues(row, { char, includeStoryText: false });
+  const session = Symbol();
+  overlay._portraitImageSession = session;
+  const selector = field('pg-image-kind'), prompt = field('pg-final-prompt'), preview = field('pg-preview-img');
+  const referenceList = field('pg-request-references'), upload = field('pg-reference-upload');
+  const status = field('pg-generation-status'), assetStatus = field('pg-character-image-status');
+  const gen = field('pg-gen-image-btn'), apply = field('pg-apply-btn');
+  const defaults = frImageMaterials();
+  const templates = [
+    ['pg-portrait-template', 'portraitImageTemplate', defaults.portrait],
+    ['pg-photo-template', 'photoTemplate', defaults.photo],
+    ['pg-design-template', 'designTemplate', defaults.design],
+    ['pg-reference-guide', 'characterReferenceGuide', CHARACTER_REFERENCE_GUIDE]
+  ];
+  const title = overlay.querySelector('.portrait-gen-char-name');
+  const workspace = field('pg-character-workspace'), editor = field('pg-character-editor');
+  const displayName = char?.name || char?.id;
+  const appearance = field('pg-character-appearance'), appearanceLock = field('pg-character-appearance-lock');
+  const workspaceStatus = field('pg-workspace-status');
+  const historyLabels = {portrait:'主肖像',photo:'证件照',design:'人物设定图'};
+  const currentArchive = () => char && archiveName ? db.archives.get(archiveName) : null;
+  const active = () => overlay._portraitImageSession === session && currentArchiveName === archiveName;
+  let references = [], manualReferences = [], generated, assets = {}, pickType = '';
+  workspace.hidden = !char;
+  editor.hidden = true;
+  title.textContent = char ? displayName + ' · 肖像绘卷' : '人物肖像设置';
+  workspaceStatus.textContent = '';
+  field('pg-api-config-section').open = !char;
+  field('pg-template-settings').open = !char;
+  const routeChoice = field('pg-route-choice');
+  function renderRouteChoices() {
+    const chain = frApiRoutes(PORTRAIT_GEN_CONFIG_KEY,'providers.openai') || [];
+    const model = chain[0];
+    routeChoice.replaceChildren(new Option('按肖像接口顺序',''), ...chain.map(route=>new Option(
+      [route.name,route.apiModel].filter(Boolean).join(' · '),route.id)));
+    field('pg-active-route').textContent = model ? '主线路 · ' + (model.name || model.apiModel)
+      : (provider.apiKey ? provider.apiModel : 'GPT Image · 待配置');
   }
-
-  // 获取角色行数据
-  var charRow = resolveCurrentSceneCharRow();
-  var includeStoryText = !!charRow;
-  var placeholderValues = await _portraitGetPlaceholderValues(charRow, {
-    includeStoryText: includeStoryText,
-    char: char
-  });
-
-  var overlay = document.getElementById('portrait-gen-overlay');
-  if (!overlay) return;
-
-  // 填充角色名
-  var titleEl = overlay.querySelector('.portrait-gen-char-name');
-  if (titleEl) titleEl.textContent = char.name || char.id;
-
-  // 填充配置表单
-  var elProvider = overlay.querySelector('#pg-provider');
-  var elApiUrl = overlay.querySelector('#pg-api-url');
-  var elApiModel = overlay.querySelector('#pg-api-model');
-  var elApiKey = overlay.querySelector('#pg-api-key');
-  var elLlmUrl = overlay.querySelector('#pg-llm-url');
-  var elLlmKey = overlay.querySelector('#pg-llm-key');
-  var elLlmModel = overlay.querySelector('#pg-llm-model');
-  var elEnforceAdultPrompt = overlay.querySelector('#pg-llm-enforce-adult-prompt');
-  var elFetchLlmModelsBtn = overlay.querySelector('#pg-fetch-llm-models-btn');
-  var elTemplate = overlay.querySelector('#pg-prompt-template');
-  var elFinalPrompt = overlay.querySelector('#pg-final-prompt');
-  var elNegativePrompt = overlay.querySelector('#pg-negative-prompt');
-  var elPreview = overlay.querySelector('#pg-preview-img');
-  var elPreviewSection = overlay.querySelector('#pg-preview-section');
-  var elStyleAnime = overlay.querySelector('#pg-style-anime');
-  var elStyleRealistic = overlay.querySelector('#pg-style-realistic');
-  var genImgBtn = overlay.querySelector('#pg-gen-image-btn');
-
-  function syncGenImageButtonState() {
-    if (!genImgBtn) return;
-    var hasPrompt = !!(elFinalPrompt && elFinalPrompt.value && elFinalPrompt.value.trim());
-    genImgBtn.disabled = !hasPrompt;
-    genImgBtn.title = hasPrompt ? '' : '请先填写正向提示词';
-  }
-
-  overlay._activePortraitProvider = _portraitNormalizeProvider(config.provider);
-  _portraitFillProviderConfigForm(overlay, config, overlay._activePortraitProvider);
-  if (elLlmUrl) elLlmUrl.value = config.llmApiUrl || '';
-  if (elLlmKey) elLlmKey.value = config.llmApiKey || '';
-  if (elLlmModel) _portraitRenderLlmModelOptions(elLlmModel, config.llmApiModels, config.llmApiModel);
-  frHydrateLibraryConfig(PORTRAIT_GEN_CONFIG_KEY, config);
-  if (elEnforceAdultPrompt) elEnforceAdultPrompt.checked = _portraitShouldEnforceAdultPrompt(config);
-  if (elTemplate) {
-    elTemplate.value = (config.promptTemplate || PORTRAIT_GEN_DEFAULT_PROMPT_TEMPLATE).replace(/\\n/g, '\n');
-    elTemplate._originalTemplate = null;
-  }
-  if (elFinalPrompt) elFinalPrompt.value = '';
-  if (elFinalPrompt) {
-    elFinalPrompt.oninput = syncGenImageButtonState;
-    elFinalPrompt.onchange = syncGenImageButtonState;
-  }
-  if (elNegativePrompt) elNegativePrompt.value = '';
-  if (elPreview) elPreview.src = '';
-  if (elPreviewSection) elPreviewSection.style.display = 'none';
-  if (elStyleAnime) elStyleAnime.checked = (config.style === 'anime');
-  if (elStyleRealistic) elStyleRealistic.checked = (config.style === 'realistic');
-  syncGenImageButtonState();
-
-  // 渲染占位符标签
-  _portraitRenderPlaceholderTags(overlay, placeholderValues);
-
-  // 占位符预览复选框
-  var previewCheckbox = overlay.querySelector('#pg-show-placeholder-preview');
-  if (previewCheckbox) {
-    previewCheckbox.checked = false;
-    previewCheckbox.onchange = function() {
-      _portraitUpdateTemplatePreview(overlay, placeholderValues);
-    };
-  }
-
-  // 保存文生图配置
-  var saveCfgBtn = overlay.querySelector('#pg-save-config-btn');
-  if (saveCfgBtn) {
-    saveCfgBtn.onclick = async function() {
-      var originalText = saveCfgBtn.textContent;
-      saveCfgBtn.disabled = true;
-      saveCfgBtn.textContent = '保存中...';
-      try {
-        _portraitReadProviderConfigFromForm(overlay, config, overlay._activePortraitProvider || config.provider);
-        config.style = (elStyleRealistic && elStyleRealistic.checked) ? 'realistic' : 'anime';
-        config.enforceAdultPrompt = elEnforceAdultPrompt ? !!elEnforceAdultPrompt.checked : _portraitShouldEnforceAdultPrompt(config);
-        await savePortraitGenConfig(config);
-        await _portraitNotifyModal('商用模型配置已保存', overlay, 'AI肖像');
-      } catch (e) {
-        console.error('[肖像生成] 保存文生图配置失败:', e);
-        await _portraitNotify('保存文生图配置失败: ' + e.message, 'error', overlay);
-      } finally {
-        saveCfgBtn.disabled = false;
-        saveCfgBtn.textContent = originalText;
-      }
-    };
-  }
-
-  if (elProvider) {
-    elProvider.onchange = function() {
-      var oldProvider = overlay._activePortraitProvider || _portraitNormalizeProvider(config.provider);
-      _portraitReadProviderConfigFromForm(overlay, config, oldProvider);
-      var newProvider = _portraitNormalizeProvider(elProvider.value);
-      overlay._activePortraitProvider = newProvider;
-      config.provider = newProvider;
-      _portraitFillProviderConfigForm(overlay, config, newProvider);
-    };
-  }
-
-  if (elApiModel) {
-    var syncDoubaoSizeByModel = function() {
-      var activeProvider = overlay._activePortraitProvider || _portraitNormalizeProvider(config.provider);
-      if (activeProvider !== 'doubao') return;
-      var doubaoCfg = _portraitGetProviderConfig(config, 'doubao');
-      doubaoCfg.apiModel = (elApiModel.value || '').trim() || doubaoCfg.apiModel;
-      _portraitSyncResolutionAndAspectByModel(
-        doubaoCfg,
-        doubaoCfg.apiModel,
-        overlay.querySelector('#pg-resolution'),
-        overlay.querySelector('#pg-aspect-ratio')
-      );
-    };
-    elApiModel.onchange = syncDoubaoSizeByModel;
-    elApiModel.onblur = syncDoubaoSizeByModel;
-  }
-
-  var elResolution = overlay.querySelector('#pg-resolution');
-  if (elResolution) {
-    elResolution.onchange = function() {
-      if ((overlay._activePortraitProvider || config.provider) !== 'doubao') return;
-      var doubaoCfg = _portraitGetProviderConfig(config, 'doubao');
-      _portraitSyncResolutionAndAspectByModel(doubaoCfg, doubaoCfg.apiModel, elResolution, overlay.querySelector('#pg-aspect-ratio'));
-    };
-  }
-  var elAspectRatio = overlay.querySelector('#pg-aspect-ratio');
-  if (elAspectRatio) {
-    elAspectRatio.onchange = function() {
-      if ((overlay._activePortraitProvider || config.provider) !== 'doubao') return;
-      var doubaoCfg = _portraitGetProviderConfig(config, 'doubao');
-      _portraitSyncResolutionAndAspectByModel(doubaoCfg, doubaoCfg.apiModel, overlay.querySelector('#pg-resolution'), elAspectRatio);
-    };
-  }
-
-  // 获取 LLM 模型列表
-  if (elFetchLlmModelsBtn) {
-    elFetchLlmModelsBtn.onclick = async function() {
-      await _portraitFetchLlmModels(config, overlay, elFetchLlmModelsBtn, elLlmUrl, elLlmKey, elLlmModel);
-    };
-  }
-
-  // 获取 custom_openai 生图模型列表
-  var elFetchCustomModelsBtn = overlay.querySelector('#pg-custom-openai-fetch-models-btn');
-  if (elFetchCustomModelsBtn) {
-    elFetchCustomModelsBtn.onclick = async function() {
-      var pgApiUrl = overlay.querySelector('#pg-api-url');
-      var pgApiKey = overlay.querySelector('#pg-api-key');
-      var elCustomSelect = overlay.querySelector('#pg-custom-openai-model-select');
-      await _portraitFetchCustomOpenAiImageModels(config, overlay, pgApiUrl, pgApiKey, elCustomSelect);
-    };
-  }
-
-  // 保存 LLM 配置
-  var saveLlmBtn = overlay.querySelector('#pg-save-llm-btn');
-  if (saveLlmBtn) {
-    saveLlmBtn.onclick = async function() {
-      var originalText = saveLlmBtn.textContent;
-      saveLlmBtn.disabled = true;
-      saveLlmBtn.textContent = '保存中...';
-      try {
-        config.llmApiUrl = elLlmUrl ? elLlmUrl.value.trim() : config.llmApiUrl;
-        config.llmApiKey = elLlmKey ? elLlmKey.value.trim() : config.llmApiKey;
-        config.enforceAdultPrompt = elEnforceAdultPrompt ? !!elEnforceAdultPrompt.checked : _portraitShouldEnforceAdultPrompt(config);
-        _portraitSyncLlmModelConfigFromSelect(config, elLlmModel);
-        await savePortraitGenConfig(config);
-        await _portraitNotifyModal('LLM 配置已保存', overlay, 'AI肖像');
-      } catch (e) {
-        console.error('[肖像生成] 保存 LLM 配置失败:', e);
-        await _portraitNotify('保存 LLM 配置失败: ' + e.message, 'error', overlay);
-      } finally {
-        saveLlmBtn.disabled = false;
-        saveLlmBtn.textContent = originalText;
-      }
-    };
-  }
-
-  // 保存模板
-  var saveTplBtn = overlay.querySelector('#pg-save-template-btn');
-  if (saveTplBtn) {
-    saveTplBtn.onclick = async function() {
-      try {
-        config.promptTemplate = elTemplate ? elTemplate.value.replace(/\n/g, '\\n') : config.promptTemplate;
-        await savePortraitGenConfig(config);
-        await _portraitNotifyModal('模板已保存', overlay, 'AI肖像');
-      } catch (e) {
-        console.error('[肖像生成] 保存模板失败:', e);
-        await _portraitNotify('保存模板失败: ' + e.message, 'error', overlay);
-      }
-    };
-  }
-
-  // 恢复默认模板
-  var resetTplBtn = overlay.querySelector('#pg-reset-template-btn');
-  if (resetTplBtn) {
-    resetTplBtn.onclick = function() {
-      if (elTemplate) elTemplate.value = PORTRAIT_GEN_DEFAULT_PROMPT_TEMPLATE.replace(/\\n/g, '\n');
-      showDanmaku('已恢复默认模板（请手动保存）', 'info');
-    };
-  }
-
-  // 风格切换更新占位符
-  if (elStyleAnime) {
-    elStyleAnime.onchange = function() {
-      if (this.checked) {
-        config.style = 'anime';
-        placeholderValues.style = PORTRAIT_STYLE_MAP['anime'];
-        _portraitRenderPlaceholderTags(overlay, placeholderValues);
-        _portraitUpdateTemplatePreview(overlay, placeholderValues);
-      }
-    };
-  }
-  if (elStyleRealistic) {
-    elStyleRealistic.onchange = function() {
-      if (this.checked) {
-        config.style = 'realistic';
-        placeholderValues.style = PORTRAIT_STYLE_MAP['realistic'];
-        _portraitRenderPlaceholderTags(overlay, placeholderValues);
-        _portraitUpdateTemplatePreview(overlay, placeholderValues);
-      }
-    };
-  }
-
-  // 生成提示词按钮
-  var genPromptBtn = overlay.querySelector('#pg-gen-prompt-btn');
-  if (genPromptBtn) {
-    genPromptBtn.onclick = async function() {
-      genPromptBtn.disabled = true;
-      genPromptBtn.textContent = '生成中...';
-      try {
-        var latestCharRow = resolveCurrentSceneCharRow();
-        var latestIncludeStoryText = !!latestCharRow;
-        var latestValues = await _portraitGetPlaceholderValues(latestCharRow, {
-          includeStoryText: latestIncludeStoryText,
-          char: char
-        });
-        latestValues.style = (elStyleRealistic && elStyleRealistic.checked)
-          ? PORTRAIT_STYLE_MAP['realistic']
-          : PORTRAIT_STYLE_MAP['anime'];
-
-        var runtimeTemplate = '';
-        if (elTemplate) {
-          var previewCheckboxForGen = overlay.querySelector('#pg-show-placeholder-preview');
-          var sourceTemplate = (
-            previewCheckboxForGen &&
-            previewCheckboxForGen.checked &&
-            elTemplate._originalTemplate
-          ) ? elTemplate._originalTemplate : elTemplate.value;
-          runtimeTemplate = sourceTemplate || '';
-        } else {
-          runtimeTemplate = String(config.promptTemplate || PORTRAIT_GEN_DEFAULT_PROMPT_TEMPLATE).replace(/\\n/g, '\n');
-        }
-
-        var runtimeConfig = Object.assign({}, config, {
-          promptTemplate: runtimeTemplate,
-          enforceAdultPrompt: elEnforceAdultPrompt ? !!elEnforceAdultPrompt.checked : _portraitShouldEnforceAdultPrompt(config)
-        });
-        var result = await generateImagePrompt(runtimeConfig, latestValues);
-        var parsedResult = _portraitParseGeneratedPromptResult(result);
-        var safePositivePrompt = _portraitSanitizeGeneratedPromptText(parsedResult.prompt || result, latestValues);
-        var safeNegativePrompt = _portraitSanitizeGeneratedPromptText(parsedResult.negativePrompt || '', latestValues);
-        if (elFinalPrompt) {
-          elFinalPrompt.value = safePositivePrompt;
-        }
-        if (elNegativePrompt) {
-          elNegativePrompt.value = safeNegativePrompt;
-        }
-        syncGenImageButtonState();
-        await _portraitNotify('提示词已生成', 'success', overlay);
-      } catch (e) {
-        await _portraitNotify('提示词生成失败: ' + e.message, 'error', overlay);
-      } finally {
-        genPromptBtn.disabled = false;
-        genPromptBtn.textContent = '生成文生图提示词';
-      }
-    };
-  }
-
-  // 生成图片按钮
-  if (genImgBtn) {
-    genImgBtn.onclick = async function() {
-      genImgBtn.disabled = true;
-      genImgBtn.textContent = '生成中...';
-      try {
-        _portraitReadProviderConfigFromForm(overlay, config, overlay._activePortraitProvider || config.provider);
-        var prompt = elFinalPrompt ? elFinalPrompt.value.trim() : '';
-        var imageDataUrl = await callCommercialImageGen(config, prompt);
-        if (elPreview) {
-          elPreview.src = imageDataUrl;
-          elPreview.style.display = 'block';
-        }
-        if (elPreviewSection) elPreviewSection.style.display = 'block';
-        overlay._lastGeneratedImage = imageDataUrl;
-        await _portraitNotify('图片已生成', 'success', overlay);
-      } catch (e) {
-        await _portraitNotify('图片生成失败: ' + e.message, 'error', overlay);
-      } finally {
-        genImgBtn.textContent = '生成图片';
-        syncGenImageButtonState();
-      }
-    };
-  }
-
-  // 应用为肖像
-  var applyBtn = overlay.querySelector('#pg-apply-btn');
-  if (applyBtn) {
-    applyBtn.onclick = async function() {
-      if (!overlay._lastGeneratedImage) {
-        await _portraitNotify('请先生成图片', 'warning', overlay);
-        return;
-      }
-      var confirmApply = await _portraitConfirm(
-        '确认将当前生成图片应用为【' + (char.name || char.id || '该角色') + '】的肖像吗？这会覆盖该角色当前头像。'
-      );
-      if (!confirmApply) return;
-      try {
-        await applyGeneratedPortrait(char.id, char.name, overlay._lastGeneratedImage);
-      } catch (e) {
-        await _portraitNotify('应用肖像失败: ' + e.message, 'error', overlay);
-      }
-    };
-  }
-
-  // 重新生成
-  var regenBtn = overlay.querySelector('#pg-regen-btn');
-  if (regenBtn) {
-    regenBtn.onclick = function() {
-      if (genImgBtn) genImgBtn.click();
-    };
-  }
-
-  // 关闭按钮
-  var closeBtn = overlay.querySelector('.portrait-gen-close-btn');
-  if (closeBtn) {
-    closeBtn.onclick = function() {
-      overlay.classList.remove('visible');
-    };
-  }
-
-  // 点击背景关闭
-  overlay.onclick = function(e) {
-    if (e.target === overlay) overlay.classList.remove('visible');
+  routes.mountConsumerChain(PORTRAIT_GEN_CONFIG_KEY, field('pg-image-routes'), 'providers.openai');
+  field('pg-open-image-api-library').onclick = openImageApiLibrary;
+  for (const [id,key,fallback] of templates) field(id).value = config[key] || fallback || '';
+  const automatic = await loadCommercialAutoPortraitConfig();
+  field('pg-auto-enabled').checked = automatic.enabled;
+  field('pg-auto-character-references').checked = config.autoCharacterReferences === true;
+  field('pg-reset-image-templates').onclick = () => { for (const [id,,fallback] of templates) field(id).value = fallback || ''; };
+  const editedTemplates = () => Object.fromEntries(templates.map(([id, key]) => [key, field(id).value.trim()]));
+  field('pg-save-reference-templates').onclick = async () => {
+    Object.assign(config, editedTemplates(), { autoCharacterReferences: field('pg-auto-character-references').checked });
+    await savePortraitGenConfig(config);
+    _commercialAutoPortraitConfigCache = { ...automatic, enabled:field('pg-auto-enabled').checked };
+    await saveCommercialAutoPortraitConfig(_commercialAutoPortraitConfigCache);
+    if (_commercialAutoPortraitConfigCache.enabled) triggerCommercialAutoPortraitForSurroundingCharacters();
+    else abortAllCommercialAutoPortraitTasks('自动肖像已关闭');
+    showDanmaku('肖像模板已保存', 'success');
   };
-
-  overlay.classList.add('visible');
-}
-
-function _portraitRenderPlaceholderTags(overlay, values) {
-  var container = overlay.querySelector('#pg-placeholder-tags');
-  if (!container) return;
-  var html = '';
-  for (var i = 0; i < PORTRAIT_PLACEHOLDER_DEFINITIONS.length; i++) {
-    var def = PORTRAIT_PLACEHOLDER_DEFINITIONS[i];
-    var val = values[def.key] || '';
-    var truncVal = val.length > 30 ? val.substring(0, 30) + '...' : val;
-    html += '<span class="pg-placeholder-tag" data-key="' + _escapeHtml(def.key) + '" title="' + _escapeHtml(def.desc + ': ' + truncVal).replace(/"/g, '&quot;') + '">';
-    html += '${' + _escapeHtml(def.key) + '} ' + _escapeHtml(def.label);
-    html += '</span>';
-  }
-  container.innerHTML = html;
-
-  // 点击标签插入到模板
-  var tags = container.querySelectorAll('.pg-placeholder-tag');
-  for (var j = 0; j < tags.length; j++) {
-    tags[j].addEventListener('click', (function(key) {
-      return function() {
-        var textarea = overlay.querySelector('#pg-prompt-template');
-        if (!textarea) return;
-        var pos = textarea.selectionStart || textarea.value.length;
-        var text = textarea.value;
-        var placeholder = '${' + key + '}';
-        textarea.value = text.substring(0, pos) + placeholder + text.substring(pos);
-        textarea.focus();
-        textarea.selectionStart = textarea.selectionEnd = pos + placeholder.length;
-      };
-    })(PORTRAIT_PLACEHOLDER_DEFINITIONS[j].key));
-  }
-}
-
-function _portraitUpdateTemplatePreview(overlay, values) {
-  var checkbox = overlay.querySelector('#pg-show-placeholder-preview');
-  var textarea = overlay.querySelector('#pg-prompt-template');
-  if (!checkbox || !textarea) return;
-
-  if (!textarea._originalTemplate) {
-    textarea._originalTemplate = textarea.value;
-  }
-
-  if (checkbox.checked) {
-    textarea._originalTemplate = textarea.value;
-    textarea.value = _portraitFillTemplate(textarea.value, values);
-    textarea.readOnly = true;
-    textarea.style.opacity = '0.8';
-  } else {
-    if (textarea._originalTemplate) {
-      textarea.value = textarea._originalTemplate;
+  frShowImageExamples(field('pg-image-examples'), { portrait:'人物肖像', photo:'证件照', design:'人物设定图' });
+  selector.value = kind;
+  const fillPrompt = () => {
+    const latestRow = currentState?.['0']?.[char?.id] || currentState?.['7']?.[char?.id] || row;
+    prompt.value = _portraitWithAppearance(frFillBuiltinPortraitPrompt(selector.value, row, values, editedTemplates()),
+      assets,{...latestRow,'19':frPortraitAppearanceFromRow(latestRow,char?.imageGenPrompt)});
+    title.textContent = (selector.value === 'design' ? 'AI 设定图生成' : 'AI 肖像生成') + ' · ' + displayName;
+  };
+  selector.onchange = fillPrompt;
+  field('pg-fill-builtin-image-prompt').onclick = fillPrompt;
+  field('pg-preview-section').hidden = true;
+  preview.removeAttribute('src');
+  status.textContent = assetStatus.textContent = upload.value = '';
+  gen.disabled = false;
+  async function renderReferences() {
+    const current = await currentArchive();
+    const images = current ? await _portraitCollectCharacterReferences(current,char) : [];
+    if (!active()) return;
+    const previous = new Map(references.map(entry => [entry.src, entry]));
+    const seen = new Set();
+    references = [...images, ...manualReferences].filter(entry => !seen.has(entry.src) && seen.add(entry.src))
+      .map(entry => ({ ...entry, enabled:entry.required || (previous.get(entry.src)?.enabled ?? true), guide:previous.get(entry.src)?.guide || entry.guide || '' }));
+    referenceList.replaceChildren();
+    if (!references.length) referenceList.textContent = '暂无角色参考图';
+    for (const ref of references) {
+      const tile = document.createElement('div');
+      tile.className = 'fr-image-reference';
+      const label = document.createElement('label');
+      label.className = 'fr-image-check';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox'; checkbox.checked = ref.enabled;
+      checkbox.disabled = ref.required === true;
+      checkbox.onchange = () => { ref.enabled = checkbox.checked; };
+      label.append(checkbox, ref.type);
+      const img = document.createElement('img'); img.src = ref.src; img.alt = ref.type;
+      const guide = document.createElement('textarea'); guide.rows = 2;
+      guide.setAttribute('aria-label',ref.type + '使用说明'); guide.placeholder = '沿用参考图规则'; guide.value = ref.guide;
+      guide.oninput = () => { ref.guide = guide.value.trim(); };
+      tile.append(label,img,guide);
+      if (ref.manual) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'small-btn';
+        remove.textContent = '移除参考图';
+        remove.onclick = () => { manualReferences = manualReferences.filter(entry => entry.src !== ref.src); void renderReferences(); };
+        tile.append(remove);
+      }
+      const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'small-btn';
+      reset.textContent = '恢复默认说明'; reset.onclick = () => { ref.guide = images.find(entry=>entry.src===ref.src)?.guide || ''; guide.value = ref.guide; };
+      tile.append(reset);
+      referenceList.append(tile);
     }
-    textarea.readOnly = false;
-    textarea.style.opacity = '1';
   }
+  async function bindImage(type, src) {
+    if (!active()) return;
+    if (type === 'design') await _portraitWriteCharacterAsset(archiveName, char, 'design', src);
+    else if (char.id === 'B1') {
+      await dbSet(CUSTOM_AVATAR_KEY + '_' + archiveName, src);
+      await updateAvatar(currentPlayerData);
+    } else await applyGeneratedPortrait(char.id,char.name,src);
+    await refreshWorkspace();
+    await renderReferences();
+  }
+  async function runWorkspaceAction(action, message) {
+    try {
+      await action();
+      if (active()) workspaceStatus.textContent = message;
+    } catch (error) { if (active()) workspaceStatus.textContent = error.message; }
+  }
+  async function readImage(file) {
+    if (!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('请选择 PNG、JPEG 或 WebP 图片');
+    const src = await new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('无法读取图片'));
+      reader.readAsDataURL(file);
+    });
+    const image = new Image(); image.src = src; await image.decode();
+    return src;
+  }
+  function renderHistory(host, type) {
+    host.replaceChildren();
+    const entries = (assets.history || []).filter(entry => (type !== 'design' || entry.kind === 'design')
+      && (type !== 'portrait' || entry.kind !== 'design'));
+    if (!entries.length) host.textContent = '暂无可用的生图记录';
+    for (const entry of entries) {
+      const tile = document.createElement('article'); tile.className = 'fr-portrait-record';
+      const image = document.createElement('img'); image.src = entry.src; image.alt = historyLabels[entry.kind]; image.loading = 'lazy';
+      const description = document.createElement('p');
+      description.textContent = [historyLabels[entry.kind],entry.model,new Date(entry.created).toLocaleString()].filter(Boolean).join(' · ');
+      const details = document.createElement('details');
+      const summary = document.createElement('summary'); summary.textContent = '查看图片提示词';
+      const full = document.createElement('p'); full.textContent = entry.prompt;
+      details.append(summary,full); tile.append(image,description,details);
+      if (type) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'small-btn';
+        button.textContent = type === 'reference' ? '加入本次参考图' : '使用这张图';
+        button.onclick = () => {
+          if (type === 'reference') {
+            manualReferences.push({src:entry.src,type:'生图记录',name:displayName,manual:true});
+            void renderReferences();
+          } else {
+            pickType = '';
+            void runWorkspaceAction(() => bindImage(type,entry.src),'已应用图片');
+          }
+        };
+        tile.append(button);
+      }
+      host.append(tile);
+    }
+  }
+  async function refreshWorkspace(loadAppearance = false) {
+    const archive = await currentArchive();
+    if (!char || !archive || !active()) return;
+    assets = _portraitGetCharacterAssets(archive,char);
+    const avatar = await _portraitResolveExistingAvatar(char,archive);
+    if (!active()) return;
+    const small = _portraitGetSceneStripAvatarFromArchive(archive, _portraitBuildLegacyUniqueKey(char.id, char.name));
+    for (const [id,src] of [['pg-main-portrait',avatar.src],['pg-character-design',assets.design],['pg-small-avatar',small || avatar.src]]) {
+      const image = field(id); image.hidden = !src;
+      if (src) image.src = src; else image.removeAttribute('src');
+    }
+    field('pg-crop-avatar').disabled = !avatar.src;
+    field('pg-unbind-portrait').disabled = !avatar.src || avatar.source === 'visualData';
+    field('pg-unbind-design').disabled = !assets.design;
+    if (loadAppearance) {
+      const latestRow = currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || row;
+      appearance.value = frResolvePortraitAppearance(latestRow,assets,char.imageGenPrompt);
+      field('pg-appearance-supplement').value = frPortraitAppearanceSupplement(assets,appearance.value);
+      appearanceLock.checked = assets.appearanceLocked === true;
+    }
+    renderHistory(field('pg-image-history'),pickType);
+  }
+  async function start(type) {
+    workspace.hidden = true; editor.hidden = false;
+    renderRouteChoices();
+    selector.value = type; generated = null; references = []; manualReferences = [];
+    field('pg-reference-history').hidden = true; field('pg-preview-section').hidden = true;
+    status.textContent = assetStatus.textContent = ''; gen.disabled = false;
+    fillPrompt(); editor.scrollIntoView({block:'start'});
+    await renderReferences();
+  }
+  function back() {
+    editor.hidden = true; workspace.hidden = false; title.textContent = displayName + ' · 肖像绘卷';
+    workspace.scrollIntoView({block:'start'});
+    void refreshWorkspace();
+  }
+  for (const type of ['portrait','design']) {
+    field('pg-start-' + type).onclick = () => void start(type);
+    field('pg-pick-' + type).onclick = () => {
+      pickType = type; renderHistory(field('pg-image-history'),type);
+      field('pg-history-card').scrollIntoView({block:'nearest'});
+    };
+    const input = field('pg-upload-' + type);
+    input.onchange = () => {
+      const file = input.files?.[0]; input.value = '';
+      if (file) void runWorkspaceAction(async () => bindImage(type,await readImage(file)),'图片已上传并应用');
+    };
+    field('pg-unbind-' + type).onclick = async () => {
+      if (await _portraitConfirm('解除这张图的当前绑定？')) await runWorkspaceAction(() => bindImage(type,''),'已解除绑定');
+    };
+  }
+  field('pg-crop-avatar').onclick = () => void openPortraitCropModal(char,refreshWorkspace);
+  const refreshAppearance = field('pg-refresh-appearance');
+  refreshAppearance.disabled = field('pg-save-appearance').disabled = false;
+  refreshAppearance.onclick = async () => {
+    const saveAppearance = field('pg-save-appearance');
+    refreshAppearance.disabled = saveAppearance.disabled = true;
+    workspaceStatus.textContent = '正在按当前角色变量更新画像…';
+    try {
+      await runWorkspaceAction(async () => {
+        const latestRow = currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || row;
+        const previousValue = appearance.value, previousFacts = frPortraitVisualFacts(latestRow);
+        const text = await frRequestPortraitAppearance(latestRow,displayName);
+        if (!active()) return;
+        if (appearance.value !== previousValue) throw new Error('保留你正在编辑的画像提示词');
+        const liveRow = currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || row;
+        if (frPortraitVisualFacts(liveRow) !== previousFacts) throw new Error('角色变量已变化，请按最新变量重新更新');
+        await _portraitUpdateCharacterAssets(archiveName,char,latest => {
+          const previous = frResolvePortraitAppearance(liveRow,latest,char.imageGenPrompt);
+          latest.appearanceSupplement ??= frPortraitAppearanceSupplement(latest,previous);
+          latest.appearance = text;
+          latest.appearanceAtEdit = frPortraitAppearanceFromRow(liveRow,char.imageGenPrompt);
+        });
+        appearance.value = text;
+        await refreshWorkspace();
+      },'画像提示词已根据最新变量更新');
+    } finally {
+      if (active()) refreshAppearance.disabled = saveAppearance.disabled = false;
+    }
+  };
+  field('pg-save-appearance').onclick = () => void runWorkspaceAction(async () => {
+    if (!active()) return;
+    const latestRow = currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || row;
+    await _portraitUpdateCharacterAssets(archiveName,char,latest => {
+      latest.appearance = appearance.value.trim(); latest.appearanceLocked = appearanceLock.checked;
+      latest.appearanceAtEdit = frPortraitAppearanceFromRow(latestRow,char.imageGenPrompt);
+      latest.appearanceSupplement = field('pg-appearance-supplement').value.trim();
+    });
+    await refreshWorkspace(true);
+  },'画像提示词已保存');
+  field('pg-back-to-workspace').onclick = back;
+  field('pg-pick-reference').onclick = () => {
+    const list = field('pg-reference-history'); list.hidden = !list.hidden;
+    if (!list.hidden) renderHistory(list,'reference');
+  };
+  upload.onchange = async () => {
+    const files = [...upload.files]; upload.value = '';
+    try {
+      const added = await Promise.all(files.map(readImage));
+      if (!active() || editor.hidden) return;
+      manualReferences.push(...added.map(src=>({src,type:'本次上传',name:displayName,manual:true})));
+      await renderReferences(); assetStatus.textContent = '';
+    } catch(error) { if (active()) assetStatus.textContent = error.message || '无法读取参考图'; }
+  };
+  gen.onclick = async () => {
+    if (!prompt.value.trim()) { status.textContent = '请填写图片提示词'; return; }
+    gen.disabled = true; status.textContent = '正在生成图片…';
+    const selected = selector.value;
+    const request = Symbol(); editor._portraitRequest = request;
+    try {
+      const refs = frImageReferencesWithExample(selected,references.filter(ref => ref.enabled));
+      const fullPrompt = _portraitAppendReferenceGuide(prompt.value.trim(), refs, _portraitFillTemplate(field('pg-reference-guide').value,values));
+      let routeModel = '';
+      const image = await callCommercialImageGen({ ...config, provider:'openai' },fullPrompt,undefined,refs,
+        route => { routeModel = route.apiModel; },routeChoice.value);
+      if (!_portraitIsReferenceData(image)) throw new Error('图片格式无效');
+      await _portraitUpdateCharacterAssets(archiveName,char,latest => {
+        (latest.history ??= []).unshift({src:image,kind:selected,model:routeModel,prompt:fullPrompt,created:Date.now()});
+      });
+      if (!active()) return;
+      await refreshWorkspace();
+      if (!active() || editor.hidden || editor._portraitRequest !== request) return;
+      generated = { image, kind:selected }; preview.src = image;
+      field('pg-preview-section').hidden = false;
+      apply.textContent = selected === 'design' ? '保存为设定图' : '应用为肖像'; status.textContent = '图片已生成';
+    } catch(error) {
+      if (active() && editor._portraitRequest === request) {
+        (editor.hidden ? workspaceStatus : status).textContent = '生成失败 · ' + error.message;
+      } else showDanmaku('肖像生成失败 · ' + error.message,'error');
+    } finally { if (active() && editor._portraitRequest === request) gen.disabled = false; }
+  };
+  apply.onclick = async () => {
+    if (!char || !generated || currentArchiveName !== archiveName) return;
+    try {
+      const design = generated.kind === 'design';
+      if (!design && !await _portraitConfirm('将这张图应用为当前肖像？')) return;
+      await bindImage(design ? 'design' : 'portrait', generated.image);
+      if (active()) status.textContent = design ? '人物设定图已保存' : '肖像已应用';
+    } catch (error) { status.textContent = '应用失败 · ' + error.message; }
+  };
+  function close() {
+    overlay._portraitImageSession = null; overlay.classList.remove('visible');
+    if (fromImageSettings) showConcurrentEvolutionOverlay(document.getElementById('concurrent-evo-image-prompt-overlay'));
+  }
+  overlay.querySelector('.portrait-gen-close-btn').onclick = close;
+  overlay.onclick = event => { if (event.target === overlay) close(); };
+  overlay.style.zIndex = String(Math.max(2000,...[...document.querySelectorAll('.overlay.visible')]
+    .filter(panel=>panel!==overlay).map(panel=>parseInt(getComputedStyle(panel).zIndex,10)||0))+1);
+  overlay.classList.add('visible');
+  await refreshWorkspace(true);
 }
+
+function frOpenPlayerPortrait() {
+  if (!currentArchiveName) return;
+  const char = _portraitResolveCharacterForAvatarDisplay('B1') || { id:'B1' };
+  return openPortraitGenModal({ ...char, id:'B1', name:currentPlayerData?.name || char.name || '玩家' });
+}
+
+
+
+
 
 // === Technique Item Detail UI Patch (功法进阶效果分层展示) ===
 
@@ -15275,9 +15129,7 @@ async function dbRemove(key) {
         const summaryEditorOverlay = document.getElementById('summary-editor-overlay');
         const manualSegmentedMemoryOverlay = document.getElementById('manual-segmented-memory-overlay');
         const chatBackgroundSettingsOverlay = document.getElementById('chat-background-settings-overlay');
-        const backgroundUploadInput = document.getElementById('background-upload-input');
-        const aiImageGenOverlay = document.getElementById('ai-image-gen-overlay');
-        const dinoGameOverlay = document.getElementById('dino-game-overlay');
+        const backgroundUploadInput = document.getElementById('background-upload-input');        const dinoGameOverlay = document.getElementById('dino-game-overlay');
         const characterCreatorOverlay = document.getElementById('character-creator-overlay');
         const peekBackgroundBtn = document.getElementById('peek-background-btn');
         const branchToggleBtn = document.getElementById('branch-toggle-btn');
@@ -16714,8 +16566,104 @@ const textToSearch = storyText + (userInput || '');
           return sanitized;
         }
 
+        async function frAttachDialogueAvatars(element) {
+          const quotes = [...element.querySelectorAll('.fr-story-quote > .fr-story-speaker')];
+          const archiveName = currentArchiveName;
+          if (!archiveName || !quotes.length) return;
+          const archive = await db.archives.get(archiveName);
+          if (!archive || currentArchiveName !== archiveName) return;
+          const logId = element.closest('[data-log-id]')?.dataset.logId;
+          const logs = archive.data?.logs || [];
+          const logIndex = logId ? logs.findIndex(log => String(log.id) === logId) : -1;
+          const layer = logIndex < 0 ? logs.length - 1 : logIndex;
+          const chars = new Map(Object.entries(characterDatabase || {}).map(([id, char]) =>
+            [id, { ...char, id }]));
+          for (const [id, row] of Object.entries(currentState?.['0'] || {})) {
+            const char = chars.get(id) || { id };
+            const name = String(row?.['1'] || '').split(/[|｜]/)[0].trim();
+            chars.set(id, { ...char, name: name || char.name });
+          }
+          const state = archive.data?.state || {};
+          for (const key of Object.keys({ ...state.npcAvatars, ...state.npcSceneAvatars,
+            ...state.npcAvatarTimeline, ...state.npcSceneAvatarTimeline })) {
+            const { charId, charName } = _portraitSplitUniqueKey(key);
+            if (charName && !chars.get(charId)?.name) chars.set(charId, { id: charId, name: charName });
+          }
+          const names = new Map();
+          for (const char of chars.values()) {
+            if (!char.name) continue;
+            names.set(char.name, names.has(char.name) ? null : char);
+          }
+          const sources = new Map();
+          for (const speaker of quotes) {
+            const name = speaker.textContent.trim();
+            const char = /^(?:我|你|玩家|B1)$/u.test(name) ? { id: 'B1', name: currentPlayerData?.name || name }
+              : chars.get(name) || names.get(name);
+            if (!char) continue;
+            if (!sources.has(char.id)) {
+              const keys = _portraitBuildUniqueKeyCandidates(char.id, char.name, { includeStable: true });
+              const info = { exactKey: keys[0], logs };
+              const savedAvatar = (timeline, cache) =>
+                _portraitGetBestTimelineAvatarFromTimelines(timeline, keys, layer, info)
+                || (keys.some(key => timeline?.[key]?.length) ? ''
+                  : _portraitGetMapAvatarByKeyFallback(cache, char.id, char.name, { includeStable: true }));
+              const src = savedAvatar(state.npcSceneAvatarTimeline, state.npcSceneAvatars)
+                || savedAvatar(state.npcAvatarTimeline, state.npcAvatars)
+                || (char.id === 'B1' ? await dbGet(`${CUSTOM_AVATAR_KEY}_${archiveName}`) : '')
+                || _portraitResolveVisualAvatar(char);
+              sources.set(char.id, src);
+            }
+            const src = sources.get(char.id);
+            if (currentArchiveName !== archiveName || !element.contains(speaker)
+                || !/^data:image\/(?:png|jpe?g|webp|gif);base64,|^(?:https?:|blob:)/i.test(String(src || ''))) continue;
+            const card = speaker.parentElement;
+            const image = document.createElement('img');
+            image.className = 'fr-story-quote-avatar';
+            image.alt = '';
+            image.loading = 'lazy';
+            image.onerror = () => {
+              image.remove();
+              card.classList.remove('fr-story-quote-with-avatar');
+            };
+            image.src = src;
+            card.prepend(image);
+            card.classList.add('fr-story-quote-with-avatar');
+          }
+        }
+
+        function frNormalizeProseEnvelope(value) {
+          let text = String(value || '').replace(/(^|<content>)[ \t\r\n]*#{1,6}[ \t]+(?:正文|故事正文)[ \t]*\r?\n/iu, '$1\n');
+          if (/<ui_sys\b|class=["']fr-story-status["']/i.test(text)) return text;
+          const status = /^[ \t]*(?:🕒|🕐|🕓|时间[：:])[ \t]*(\d{1,6}年\d{1,2}月\d{1,2}日[ \t]+\d{1,2}:\d{2})[ \t]*\r?\n[ \t]*(?:📍|地点[：:])[ \t]*([^<>\r\n]{1,160})(?:\r?\n[ \t]*(?:👥|(?:在场|区域人气)[：:])[ \t]*([^<>\r\n]{1,200}))?(?:\r?\n[ \t]*(?:[☀☁⛅⛈🌤🌥🌦🌧🌨🌩🌪🌫]\uFE0F?|(?:天气|环境)[：:])[ \t]*([^<>\r\n]{1,200}))?/gmu;
+          const matches = [...text.matchAll(status)];
+          if (matches.length !== 1) return text;
+          const match = matches[0];
+          const after = match.index + match[0].length;
+          const suffix = text.slice(after).trimStart();
+          const hasNarrativeAfter = suffix && !/^(?:<\/(?:content)>|<(?:branches|news_ref|upstore|tableThink)>)/i.test(suffix)
+            && !/^(?:#{1,6}[ \t]+|\*\*|<strong>)[^\r\n]{0,70}(?:小结|总结|下一步|选项)/iu.test(suffix);
+          if (hasNarrativeAfter) return text;
+          const clean = value => String(value).trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const [,time,place,mood,environment] = match;
+          const block = '<ui_sys><ti>' + clean(time) + '</ti><li>' + clean(place) + '</li>'
+            + (mood ? '<sect_stat>' + clean(mood) + '</sect_stat>' : '')
+            + (environment ? '<env>' + clean(environment) + '</env>' : '') + '</ui_sys>';
+          const closing = text.indexOf('</content>', after);
+          const opening = text.lastIndexOf('<content>', match.index);
+          if (opening >= 0 && closing >= 0 && text.indexOf('</content>', opening) === closing) {
+            return text.slice(0,match.index) + text.slice(after,closing + 10) + '\n' + block + text.slice(closing + 10);
+          }
+          return text.slice(0,match.index) + block + text.slice(after);
+        }
+
         function frRenderStoryHtml(element, html) {
-          element.innerHTML = sanitizeHTML(processTextWithRules(html, PLACEMENT_MAP.AI_OUTPUT, 'story-display'));
+          const normalized = frNormalizeProseEnvelope(html);
+          const withStatus = normalized.replace(/<ui_sys>([\s\S]*?)<\/ui_sys>/gi, (_, source) => {
+            const fields = { ti:'time', li:'place', sect_stat:'mood', ei:'mood', env:'env', warn:'note' };
+            return '<div class="fr-story-status">' + source.replace(/<(ti|li|sect_stat|ei|env|warn)>([^<]*)<\/\1>/gi,
+              (_, tag, value) => '<span class="fr-story-status-' + fields[tag.toLowerCase()] + '">' + value + '</span>') + '</div>';
+          });
+          element.innerHTML = sanitizeHTML(processTextWithRules(withStatus, PLACEMENT_MAP.AI_OUTPUT, 'story-display'));
           const body = element.querySelector('content') || element;
           if (body !== element) body.classList.add('fr-story-reading');
           const ruleEnabled = id => regexConfig.rules?.some(rule => rule.id === id && !rule.disabled && rule.placement?.includes(PLACEMENT_MAP.AI_OUTPUT));
@@ -16765,6 +16713,7 @@ const textToSearch = storyText + (userInput || '');
             card.append(line);
             if (speaker?.textContent.trim()) card.append(speaker);
           }
+          void frAttachDialogueAvatars(element).catch(error => console.warn('[对白头像]', error?.message));
           const opening = [...body.childNodes].find(node =>
             (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR')
             || (node.nodeType === Node.TEXT_NODE && node.data.trim()));
@@ -16795,7 +16744,7 @@ const textToSearch = storyText + (userInput || '');
           }
           for (const status of element.querySelectorAll('.fr-story-status')) {
             const time = status.querySelector('.fr-story-status-time');
-            if (time?.textContent.trim() && body !== element && status.previousElementSibling === body) {
+            if (time?.textContent.trim() && (body === element || status.previousElementSibling === body)) {
               const place = status.querySelector('.fr-story-status-place');
               const environment = status.querySelector('.fr-story-status-env');
               const details = document.createElement('div');
@@ -17146,7 +17095,6 @@ return processedText;
 
           if (char.id === 'B1') {
             remarks['灵根'] = char.linggen;
-            remarks['善恶值'] = char.shanE;
             remarks['修为进度'] = `${char.progress || 0}%`;
             if (char.hp && char.hp.current !== undefined) {
               remarks['hp'] = `${char.hp.current}/${char.hp.max}`;
@@ -17283,6 +17231,8 @@ function frReadBondedRemarks(value) {
 
 function frProtectBondedRemarks(existingRemarks, incomingRemarks) {
   const next = frReadBondedRemarks(incomingRemarks);
+  delete next['善恶值'];
+  delete next.shanE;
   const stored = frReadBondedRemarks(existingRemarks);
   const previous = frReadBondedFlag(stored.isBonded);
   next.isBonded = previous === null ? false : previous;
@@ -17668,6 +17618,14 @@ await db.archives.put(archive);
 if (frStrict) frAssertCanonCommit();
 }
 const statusTime = frStatusWorldTime(newState);
+for (const operation of delta) {
+  const id = operation?.command === 'set' ? operation.data?.['0'] : operation?.id;
+  if (!id) continue;
+  const row = newState['0']?.[id];
+  if (row) frPreserveSpiritStoneGrades(row,baseState['0']?.[id]);
+  if (frUpdatePortraitAppearance(row || newState['7']?.[id],baseState['0']?.[id] || baseState['7']?.[id])) updatedCharacterIds.add(id);
+}
+if (delta.length && frUpdatePortraitAppearance(newState['0']?.B1,baseState['0']?.B1)) updatedCharacterIds.add('B1');
 for (const [id, row] of Object.entries(newState['0'] || {})) {
   if (!row || id === 'SCENE_MAP' || typeof row['4'] !== 'string') continue;
   const status = frNormalizeStatusText(row['4'], statusTime);
@@ -19742,7 +19700,8 @@ return { delta, smallSummary, largeSummary };
               imageGenPrompt: row['19'],
               age: remarks['年龄'] || '未知',
               shouyuan: remarks['寿元'] || '未知',
-              spiritStones: row['26'],
+              spiritStones: String(frReadSpiritStoneWallet(row).下品),
+              spiritStoneWallet: frReadSpiritStoneWallet(row),
               27: row['27'],
               28: row['28'],
               29: row['29'],
@@ -19774,7 +19733,6 @@ return { delta, smallSummary, largeSummary };
               const finalPlayerData = {
                 ...charData,
                 linggen: remarks['灵根'] || '无',
-                shanE: remarks['善恶值'] || '0',
                 progress: (remarks['修为进度'] || '0%').replace('%', ''),
                 hp: charData.detailedAttributes['血量'],
                 playerTraits: parseNestedJsonString(remarks['traits'], []),
@@ -25204,78 +25162,19 @@ function ceEscapeHtml(str) {
 }
 
 // ===== 生图提示词处理 =====
-function ceStripImagePromptWrapper(text) {
-  if (!text) return '';
-  const raw = String(text);
-  const match = raw.match(/image###([\s\S]*?)###/i);
-  const body = match && match[1] ? match[1] : raw;
-  return body.replace(/^\s*image###/i, '').replace(/###\s*$/i, '').trim();
-}
+
 
 var CE_IMAGE_GRID_ALLOWED_COUNTS = [4, 9];
 
-function ceNormalizeImageEvolutionCount(value) {
-  const num = parseInt(value, 10);
-  return CE_IMAGE_GRID_ALLOWED_COUNTS.includes(num) ? num : 4;
-}
 
-function ceGetImageGridSizeByCount(value) {
-  return ceNormalizeImageEvolutionCount(value) === 9 ? 3 : 2;
-}
 
-function ceGetImageGridModeByCount(value) {
-  const size = ceGetImageGridSizeByCount(value);
-  return `${size}x${size}`;
-}
 
-function ceNormalizeImagePromptsForGrid(imagePrompts, expectedCount) {
-  const targetCount = ceNormalizeImageEvolutionCount(expectedCount);
-  const list = [];
-  const seenAnchors = new Set();
-  if (Array.isArray(imagePrompts)) {
-    imagePrompts.forEach(item => {
-      const prompt = String(item && item.prompt || '').trim();
-      const anchor = String(item && item.anchor || '').trim();
-      if (!prompt || !anchor) return;
-      const key = anchor.replace(/\s+/g, '');
-      if (key && seenAnchors.has(key)) return;
-      if (key) seenAnchors.add(key);
-      list.push({ prompt, anchor });
-    });
-  }
-  if (list.length > targetCount) {
-    return {
-      prompts: list.slice(0, targetCount),
-      exact: true,
-      trimmed: true,
-      expected: targetCount
-    };
-  }
-  return {
-    prompts: list,
-    exact: list.length === targetCount,
-    trimmed: false,
-    expected: targetCount
-  };
-}
 
-function ceBuildImageGridConstraintPrompt(value, promptMode) {
-  const imageCount = ceNormalizeImageEvolutionCount(value);
-  const gridSize = ceGetImageGridSizeByCount(imageCount);
-  const mode = ceNormalizeImagePromptMode(promptMode);
-  const promptRule = mode === 'natural_language'
-    ? '<image> 内必须是自然语言生图描述，不要使用 image###...###。'
-    : '<image> 内必须使用 image###...### 关键词格式。';
-  return [
-    '---',
-    '# 网格拼图硬性约束（必须执行）',
-    `1. 必须且只能输出 ${imageCount} 组 <image>...</image>，每组都必须含 <anchor>正文原句片段</anchor>。`,
-    `2. 这 ${imageCount} 组用于一张 ${gridSize}x${gridSize} grid 拼图（总共 1 张大图，不是 ${imageCount} 张独立图）。`,
-    `3. ${promptRule}`,
-    '4. 所有分镜必须保持人物形象、场景逻辑、画风一致；禁止英文字幕、台词、水印和任何可见文字。',
-    '5. 若未能找到足够锚点，必须重选，直到凑满目标数量后再输出。'
-  ].join('\n');
-}
+
+
+
+
+
 
 function ceStripImagePromptBlocksFromHtml(html) {
   if (!html || typeof html !== 'string') return html || '';
@@ -25291,261 +25190,60 @@ function ceStripGeneratedImageBlocksFromHtml(html) {
     .replace(/<p[^>]*data-ce-generated-image-error[^>]*>[\s\S]*?<\/p>/gi, '');
 }
 
-function ceBuildImagePromptParagraph(promptText, options = {}) {
-  const mode = ceNormalizeImagePromptMode(options.mode || 'sd_keywords');
-  const raw = String(promptText || '').trim();
-  const text = mode === 'natural_language'
-    ? raw
-    : (/image###([\s\S]*?)###/i.test(raw) ? raw : (raw ? `image###${raw}###` : ''));
-  const safe = ceEscapeHtml(text).replace(/\n/g, '<br>');
-  const p = document.createElement('p');
-  p.setAttribute('data-ce-image-prompt', 'true');
-  p.style.cssText = 'margin:10px 0; white-space:pre-wrap; line-height:1.6;';
-  p.innerHTML = safe || '';
-  return p;
-}
-
-function ceFindAnchorContainer(root, anchorText) {
-  if (!root || !anchorText) return null;
-  const anchor = String(anchorText);
-  if (!anchor) return null;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  while ((node = walker.nextNode())) {
-    if (!node.nodeValue) continue;
-    const parent = node.parentElement;
-    if (parent && parent.closest('[data-ce-image-prompt]')) continue;
-    if (node.nodeValue.indexOf(anchor) !== -1) {
-      const block = parent ? parent.closest('p, div, li, blockquote, section') : null;
-      if (block && block.parentNode) return block;
-      if (parent && parent !== root && parent.parentNode) return parent;
-      return node;
-    }
-  }
-  return null;
-}
-
-function ceNormalizeAnchorText(text) {
-  return String(text || '').replace(/\s+/g, '').trim();
-}
-
-function ceIsAnchorNoiseChar(ch) {
-  return /[\s，。！？；：、,.!?;:'"“”‘’（）()《》〈〉【】\[\]—…·\-]/.test(ch);
-}
-
-function ceBuildNormalizedIndexMap(text) {
-  const source = String(text || '');
-  const normalized = [];
-  const indexMap = [];
-  for (let i = 0; i < source.length; i++) {
-    const ch = source[i];
-    if (ceIsAnchorNoiseChar(ch)) continue;
-    normalized.push(ch);
-    indexMap.push(i);
-  }
-  return { normalized: normalized.join(''), indexMap };
-}
-
-function ceFindAnchorIndexWithFallback(plainText, anchorText) {
-  const rawAnchor = String(anchorText || '');
-  const rawText = String(plainText || '');
-  if (!rawAnchor || !rawText) return { index: -1, reason: 'empty' };
-
-  const directIndex = rawText.indexOf(rawAnchor);
-  if (directIndex >= 0) return { index: directIndex, reason: 'direct' };
-
-  const strippedAnchor = rawAnchor.replace(/["“”‘’']/g, '');
-  const strippedIndex = strippedAnchor ? rawText.indexOf(strippedAnchor) : -1;
-  if (strippedIndex >= 0) return { index: strippedIndex, reason: 'strip_quotes' };
-
-  const textMap = ceBuildNormalizedIndexMap(rawText);
-  const anchorMap = ceBuildNormalizedIndexMap(rawAnchor);
-  if (anchorMap.normalized) {
-    const normalizedIndex = textMap.normalized.indexOf(anchorMap.normalized);
-    if (normalizedIndex >= 0) {
-      return {
-        index: textMap.indexMap[normalizedIndex] ?? -1,
-        reason: 'normalized',
-        normalizedIndex
-      };
-    }
-
-    const minChunk = 10;
-    const maxChunk = Math.min(anchorMap.normalized.length, 32);
-    for (let size = maxChunk; size >= minChunk; size -= 4) {
-      for (let i = 0; i + size <= anchorMap.normalized.length; i++) {
-        const chunk = anchorMap.normalized.slice(i, i + size);
-        const idx = textMap.normalized.indexOf(chunk);
-        if (idx >= 0) {
-          return {
-            index: textMap.indexMap[idx] ?? -1,
-            reason: 'normalized_chunk',
-            normalizedIndex: idx,
-            chunk
-          };
+function ceStoryImageParagraphs(body) {
+  const paragraphs = [];
+  let text = '', endpoint;
+  const finish = () => {
+    if (text.trim() && endpoint) paragraphs.push({text,endpoint});
+    text = '';
+    endpoint = null;
+  };
+  const walk = element => {
+    for (const node of element.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        let start = 0;
+        for (const newline of node.data.matchAll(/\r?\n/g)) {
+          text += node.data.slice(start,newline.index);
+          endpoint = [node,newline.index];
+          finish();
+          start = newline.index + newline[0].length;
         }
-      }
-    }
-  }
-
-  return { index: -1, reason: 'not_found' };
-}
-
-function ceFindAnchorContainerByIndex(root, anchorIndex) {
-  if (!root || typeof anchorIndex !== 'number' || anchorIndex < 0) return null;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  let offset = 0;
-  while ((node = walker.nextNode())) {
-    if (!node.nodeValue) continue;
-    const parent = node.parentElement;
-    if (parent && parent.closest('[data-ce-image-prompt]')) {
-      continue;
-    }
-    const len = node.nodeValue.length;
-    if (anchorIndex >= offset && anchorIndex < offset + len) {
-      const block = parent ? parent.closest('p, div, li, blockquote, section') : null;
-      if (block && block.parentNode) return block;
-      if (parent && parent !== root && parent.parentNode) return parent;
-      return node;
-    }
-    offset += len;
-  }
-  return null;
-}
-
-function ceFindTextPositionByIndex(root, anchorIndex) {
-  if (!root || typeof anchorIndex !== 'number' || anchorIndex < 0) return null;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  let offset = 0;
-  let lastNode = null;
-  while ((node = walker.nextNode())) {
-    if (!node.nodeValue) continue;
-    const parent = node.parentElement;
-    if (parent && parent.closest('[data-ce-image-prompt]')) continue;
-    const len = node.nodeValue.length;
-    lastNode = node;
-    if (anchorIndex <= offset + len) {
-      return { node, offset: Math.max(0, anchorIndex - offset) };
-    }
-    offset += len;
-  }
-  if (lastNode) return { node: lastNode, offset: lastNode.nodeValue.length };
-  return null;
-}
-
-function ceInsertImagePromptAfterIndex(root, anchorIndex, paragraphEl) {
-  if (!root || !paragraphEl) return false;
-  const pos = ceFindTextPositionByIndex(root, anchorIndex);
-  if (!pos || !pos.node) return false;
-  const node = pos.node;
-  const parent = node.parentElement || node.parentNode;
-  const block = parent && parent.closest ? parent.closest('p, div, li, blockquote, section') : null;
-  if (block && block.parentNode) {
-    block.parentNode.insertBefore(paragraphEl, block.nextSibling);
-    return true;
-  }
-  if (node.nodeType === 3 && node.parentNode) {
-    const len = node.nodeValue ? node.nodeValue.length : 0;
-    const offset = Math.min(Math.max(0, pos.offset || 0), len);
-    if (offset >= len) {
-      node.parentNode.insertBefore(paragraphEl, node.nextSibling);
-      return true;
-    }
-    const tail = node.splitText(offset);
-    tail.parentNode.insertBefore(paragraphEl, tail);
-    return true;
-  }
-  if (parent && parent.parentNode) {
-    parent.parentNode.insertBefore(paragraphEl, parent.nextSibling);
-    return true;
-  }
-  if (node.parentNode) {
-    node.parentNode.insertBefore(paragraphEl, node.nextSibling);
-    return true;
-  }
-  return false;
-}
-
-function ceInsertImagePromptsIntoHtml(html, imagePrompts, options = {}) {
-  const result = { html: html || '', insertedCount: 0 };
-  if (!html || !Array.isArray(imagePrompts) || imagePrompts.length === 0) return result;
-  const container = document.createElement('div');
-  container.innerHTML = html;
-  const plainText = container.textContent || '';
-  console.log('[生图演化][正文插入] 正文纯文本长度:', plainText.length);
-  console.log('[生图演化][正文插入] 正文纯文本:', plainText);
-  const normalizedText = ceNormalizeAnchorText(plainText);
-
-  imagePrompts.forEach(img => {
-    if (!img || !img.prompt) return;
-    const promptText = String(img.prompt || '').trim();
-    if (!promptText) return;
-    const anchorText = String(img.anchor || '');
-    const anchorResult = anchorText ? ceFindAnchorIndexWithFallback(plainText, anchorText) : { index: -1, reason: 'empty' };
-    const anchorIndex = anchorResult.index;
-    const normalizedAnchor = anchorText ? ceNormalizeAnchorText(anchorText) : '';
-    const normalizedIndex = normalizedAnchor ? normalizedText.indexOf(normalizedAnchor) : -1;
-    console.log('[生图演化][正文插入] Anchor检测:', {
-      anchor: anchorText,
-      anchorLength: anchorText.length,
-      anchorIndex,
-      normalizedIndex,
-      matchReason: anchorResult.reason,
-      matchChunk: anchorResult.chunk || ''
-    });
-    const p = ceBuildImagePromptParagraph(promptText, options);
-    let anchorContainer = anchorText ? ceFindAnchorContainer(container, anchorText) : null;
-    if (!anchorContainer && anchorIndex >= 0) {
-      anchorContainer = ceFindAnchorContainerByIndex(container, anchorIndex);
-      if (anchorContainer) {
-        console.log('[生图演化][正文插入] Anchor按索引命中节点');
-      }
-    }
-    let inserted = false;
-    const anchorEndIndex = anchorIndex >= 0 ? anchorIndex + Math.max(1, anchorText.length || 0) : -1;
-    if (anchorContainer && anchorContainer.parentNode) {
-      const tag = anchorContainer.tagName || '';
-      console.log('[生图演化][正文插入] Anchor命中节点:', {
-        tag: tag || '#text',
-        text: (anchorContainer.textContent || anchorContainer.nodeValue || '').slice(0, 200)
-      });
-      if (anchorContainer.nodeType === 3) {
-        if (anchorEndIndex >= 0 && ceInsertImagePromptAfterIndex(container, anchorEndIndex, p)) {
-          console.log('[生图演化][正文插入] Anchor文本分割插入成功');
-        } else {
-          const parent = anchorContainer.parentNode;
-          if (parent) {
-            parent.insertBefore(p, anchorContainer.nextSibling);
-          } else {
-            container.appendChild(p);
-          }
+        if (start < node.length) {
+          text += node.data.slice(start);
+          endpoint = [node,node.length];
         }
-      } else {
-        anchorContainer.parentNode.insertBefore(p, anchorContainer.nextSibling);
-      }
-      inserted = true;
-    } else {
-      if (anchorEndIndex >= 0 && ceInsertImagePromptAfterIndex(container, anchorEndIndex, p)) {
-        console.log('[生图演化][正文插入] Anchor索引定位成功(兜底插入)');
-        inserted = true;
-      } else {
-        console.log('[生图演化][正文插入] Anchor未命中，追加到末尾');
-        container.appendChild(p);
-        inserted = true;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.matches('ui_sys,.fr-story-status,[hidden],think,script,style,[data-evolution-detail],[data-ce-generated-image],[data-ce-image-prompt]')) {
+          finish();
+        } else if (node.matches('br,hr')) {
+          finish();
+        } else if (node.matches('p,blockquote,li,h1,h2,h3,h4,h5,h6')) {
+          finish();
+          text = node.textContent;
+          endpoint = [node];
+          finish();
+        } else if (node.matches('div,section,article,content,ul,ol')) {
+          finish();
+          walk(node);
+          finish();
+        } else walk(node);
       }
     }
-    if (!inserted) {
-      console.log('[生图演化][正文插入] Anchor插入失败(未知原因)，追加到末尾');
-      container.appendChild(p);
-    }
-    result.insertedCount++;
-  });
-
-  result.html = container.innerHTML;
-  return result;
+  };
+  walk(body);
+  finish();
+  return paragraphs;
 }
+
+function ceMatchStoryImageParagraph(paragraphs, anchor) {
+  const exact = paragraphs.findIndex(paragraph => paragraph.text.includes(anchor));
+  if (exact >= 0) return exact;
+  const normalize = value => value.replace(/[\s，。！？；：、,.!?;:'"“”‘’（）()《》〈〉【】\[\]—…·\-]/gu,'');
+  const key = normalize(anchor);
+  return key ? paragraphs.findIndex(paragraph => normalize(paragraph.text).includes(key)) : -1;
+}
+
+
 
 function ceBuildSafeDetailedEvolutionHtmlFragment(fragmentHtml) {
   // 人物故事由专用阅读窗承载；兼容旧存档，仅过滤正文下方的重复呈现。
@@ -25566,62 +25264,7 @@ function ceBuildSafeDetailedEvolutionHtmlFragment(fragmentHtml) {
   }
 }
 
-async function ceInsertImagePromptsToLatestLog(imagePrompts) {
-  try {
-    if (!Array.isArray(imagePrompts) || imagePrompts.length === 0) return { inserted: 0 };
-    if (!db?.archives?.get || !currentArchiveName) return { inserted: 0 };
 
-    const archive = await db.archives.get(currentArchiveName);
-    if (!archive?.data?.logs || archive.data.logs.length === 0) return { inserted: 0 };
-
-    const logs = archive.data.logs;
-    const lastAiLog = [...logs].reverse().find(log =>
-      log.type === 'ai' &&
-      !log.isGhost &&
-      !log.isDeepSummary &&
-      !log.isSnapshot &&
-      !String(log.content || '').includes('<h4>\u5929\u9053\u521d\u542f</h4>')
-    );
-    if (!lastAiLog) return { inserted: 0 };
-
-    const baseHtml = ceStripImagePromptBlocksFromHtml(String(lastAiLog.content || ''));
-    const { html, insertedCount } = ceInsertImagePromptsIntoHtml(baseHtml, imagePrompts, {
-      mode: 'sd_keywords'
-    });
-    if (!insertedCount) return { inserted: 0 };
-
-    lastAiLog.content = html;
-    const logIndex = logs.findIndex(l => l.id === lastAiLog.id);
-    if (logIndex >= 0) logs[logIndex] = lastAiLog;
-    await db.archives.put(archive);
-
-    const logEl = document.querySelector(`.log-entry[data-log-id="${lastAiLog.id}"]`);
-    if (logEl) {
-      let rendered = html;
-      try {
-        if (typeof processImageTags === 'function') {
-          rendered = processImageTags(rendered, true, false);
-        }
-      } catch (e) {}
-      const safeDetailHtml = ceBuildSafeDetailedEvolutionHtmlFragment(lastAiLog.detailedEvolutionHtml);
-      if (safeDetailHtml && !rendered.includes('data-evolution-detail')) {
-        rendered = `${rendered}\n${safeDetailHtml}`;
-      }
-      try {
-        if (typeof sanitizeHTML === 'function') {
-          rendered = sanitizeHTML(rendered);
-        }
-      } catch (e) {}
-      logEl.innerHTML = rendered;
-    }
-
-    console.log(`[生图演化] 已插入正文配图提示词: ${insertedCount} \u6761 (logId=${lastAiLog.id})`);
-    return { inserted: insertedCount };
-  } catch (e) {
-    console.warn('[生图演化] 插入正文配图提示词失败:', e);
-    return { inserted: 0, error: e?.message || String(e) };
-  }
-}
 
 function ceGetPendingCol19Map() {
   if (typeof window === 'undefined') return null;
@@ -26801,7 +26444,7 @@ function ceRenderThinkingToStreamTab(thinkingResults, entryDecisionResult, viewO
       if (imagePrompts.length > 0) {
         imagePrompts.forEach(function(img, idx) {
           var anchorText = img.anchor ? ('\u951A\u70B9: ' + img.anchor) : '';
-          var displayPrompt = ceStripImagePromptWrapper(img.prompt || '');
+          var displayPrompt = img.prompt || '';
           imageItems += '<div class="ce-entry-item">'
             + '<span class="ce-entry-badge ce-badge-reentry">\u56FE' + (idx + 1) + '</span>'
             + '<span style="font-size:12px;white-space:pre-wrap;word-break:break-all">'
@@ -27425,11 +27068,8 @@ async function loadConcurrentEvolutionConfig() {
     showProgressModal: false,
     debugLogging: false,  // 调试日志开关，默认关闭
     enableImageEvolution: false,  // 生图演化开关，默认关闭
-    imageEvolutionCount: 4,  // 生图数量，仅支持4或9，默认4
-    imagePromptMode: 'sd_keywords', // sd_keywords | natural_language
-    imageStyleMode: 'realistic', // 画风key（内置: realistic | anime | ink_wash；支持自定义）
+    imageStyleMode: '', // 未选择时采用当前正文生图的内置画风
     imageStyleProfiles: ceNormalizeImageStyleProfiles(null), // 画风配置（内置+自定义）
-    imageGenerationProvider: 'tavern_plugin', // tavern_plugin | commercial_model
     imagePromptTemplateOverrides: { // 生图提示词模板覆盖（为空=使用预设默认）
       sd_keywords: '',
       natural_language: ''
@@ -27450,6 +27090,14 @@ async function loadConcurrentEvolutionConfig() {
         resolution: '2K',
         aspectRatio: 'auto',
         responseFormat: 'url'
+      },
+      openai: {
+        apiUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        apiModel: 'gpt-image-2',
+        size: 'auto',
+        quality: 'auto',
+        outputFormat: 'png'
       },
       gemini: {
         apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
@@ -27507,21 +27155,8 @@ async function loadConcurrentEvolutionConfig() {
     merged.offscreenTagAuditRequestTimeout = ceNormalizeOffscreenTagAuditRequestTimeout(merged.offscreenTagAuditRequestTimeout);
     merged.offscreenTagAuditRetryCount = ceNormalizeOffscreenTagAuditRetryCount(merged.offscreenTagAuditRetryCount);
     merged.originalTimelineBatchLimit = Math.min(50, Math.max(1, Math.floor(Number(merged.originalTimelineBatchLimit) || 8)));
-    merged.imageEvolutionCount = ceNormalizeImageEvolutionCount(merged.imageEvolutionCount);
-    merged.imagePromptMode = ceNormalizeImagePromptMode(merged.imagePromptMode);
     merged.imageStyleProfiles = ceNormalizeImageStyleProfiles(merged.imageStyleProfiles);
-    merged.imageStyleMode = ceNormalizeImageStyleMode(merged.imageStyleMode, merged);
-    merged.imageGenerationProvider = ceGetImageGenerationProvider(merged);
-    const legacyOverride = String(merged.imagePromptTemplateOverride || '').trim();
-    if (!merged.imagePromptTemplateOverrides || typeof merged.imagePromptTemplateOverrides !== 'object') {
-      merged.imagePromptTemplateOverrides = { sd_keywords: '', natural_language: '' };
-    }
-    merged.imagePromptTemplateOverrides.sd_keywords = String(merged.imagePromptTemplateOverrides.sd_keywords || '').trim();
-    merged.imagePromptTemplateOverrides.natural_language = String(merged.imagePromptTemplateOverrides.natural_language || '').trim();
-    if (legacyOverride && !merged.imagePromptTemplateOverrides.sd_keywords) {
-      merged.imagePromptTemplateOverrides.sd_keywords = legacyOverride;
-    }
-    delete merged.imagePromptTemplateOverride;
+    merged.imageStyleMode = ceNormalizeImageStyleMode(merged.imageStyleMode,merged);
     merged.imageApiUrl = String(merged.imageApiUrl || '').trim() || defaultConfig.imageApiUrl;
     merged.imageApiModel = String(merged.imageApiModel || '').trim() || defaultConfig.imageApiModel;
     merged.imageApiResolution = String(merged.imageApiResolution || '').trim().toUpperCase() || defaultConfig.imageApiResolution;
@@ -27820,7 +27455,10 @@ function ceBuildDefaultImageStyleDescription(styleName) {
 }
 
 function ceGetBuiltInImageStyleProfiles() {
+  const donghua = frImageMaterials().storyStyle;
   return {
+    ...(donghua ? {donghua_cg:{...donghua,key:'donghua_cg',defaultDescription:donghua.description,
+      defaultPromptGuide:donghua.promptGuide,builtIn:true}} : {}),
     realistic: {
       key: 'realistic',
       label: '真人电影感',
@@ -27871,9 +27509,11 @@ function ceNormalizeImageStyleProfiles(rawProfiles) {
     const isBuiltIn = Object.prototype.hasOwnProperty.call(builtIns, key);
     const inputLabel = String(source.label || source.name || '').trim();
     const inputDescription = String(source.description || source.desc || '').trim();
+    const promptGuide = String(source.promptGuide || '').trim();
     const inputDefaultDescription = String(source.defaultDescription || source.default_description || '').trim();
     if (isBuiltIn) {
       profiles[key].description = inputDescription || profiles[key].description;
+      profiles[key].promptGuide = promptGuide || profiles[key].defaultPromptGuide;
       return;
     }
     const label = inputLabel || key;
@@ -27882,6 +27522,7 @@ function ceNormalizeImageStyleProfiles(rawProfiles) {
       key,
       label,
       description: inputDescription || defaultDescription,
+      ...(promptGuide ? {promptGuide} : {}),
       defaultDescription,
       builtIn: false
     };
@@ -27899,6 +27540,7 @@ function ceNormalizeImageStyleMode(mode, config) {
   let value = ceNormalizeImageStyleKey(mode);
   if (value && Object.prototype.hasOwnProperty.call(profiles, value)) return value;
   if (value === 'inkwash' && Object.prototype.hasOwnProperty.call(profiles, 'ink_wash')) return 'ink_wash';
+  if (Object.prototype.hasOwnProperty.call(profiles, 'donghua_cg')) return 'donghua_cg';
   if (Object.prototype.hasOwnProperty.call(profiles, 'realistic')) return 'realistic';
   const keys = Object.keys(profiles);
   return keys.length > 0 ? keys[0] : 'realistic';
@@ -27918,6 +27560,7 @@ function ceGetImageStyleProfile(config, mode) {
     key,
     label: String(profile.label || key || '画风'),
     description: String(profile.description || profile.defaultDescription || ceBuildDefaultImageStyleDescription(profile.label || key || '画风')),
+    promptGuide: String(profile.promptGuide || profile.description || profile.defaultDescription || ''),
     defaultDescription: String(profile.defaultDescription || ceBuildDefaultImageStyleDescription(profile.label || key || '画风')),
     builtIn: profile.builtIn === true,
     profiles
@@ -27926,7 +27569,7 @@ function ceGetImageStyleProfile(config, mode) {
 
 function ceBuildImageStyleOptionItems(styleProfiles) {
   const profiles = ceNormalizeImageStyleProfiles(styleProfiles);
-  const builtInOrder = ['realistic', 'anime', 'ink_wash'];
+  const builtInOrder = Object.keys(profiles).filter(key=>profiles[key].builtIn);
   const options = [];
   builtInOrder.forEach(key => {
     if (profiles[key]) {
@@ -27971,6 +27614,8 @@ function ceSaveCurrentImageStyleDescriptionFromEditor(overlay, styleKeyOverride 
   const profile = profiles[currentKey];
   if (!profile) return;
   profile.description = String(descriptionEl.value || '').trim() || String(profile.defaultDescription || ceBuildDefaultImageStyleDescription(profile.label || currentKey));
+  const guideEl = overlay.querySelector('#concurrent-evo-image-style-guide');
+  if (guideEl) profile.promptGuide = guideEl.value.trim() || profile.defaultPromptGuide;
   profiles[currentKey] = profile;
   overlay._ceImageStyleProfiles = profiles;
   overlay._ceImageStyleCurrentKey = currentKey;
@@ -27987,6 +27632,8 @@ function ceSyncImageStyleDescriptionEditor(overlay) {
   descriptionEl.value = profile
     ? String(profile.description || profile.defaultDescription || '')
     : '';
+  const guideEl = overlay.querySelector('#concurrent-evo-image-style-guide');
+  if (guideEl) guideEl.value = profile?.promptGuide || '';
   overlay._ceImageStyleProfiles = profiles;
   overlay._ceImageStyleCurrentKey = currentKey;
 }
@@ -28022,39 +27669,11 @@ function ceAddCustomImageStyleProfile(overlay, styleName) {
   return { ok: true, key, existed: false };
 }
 
-function ceNormalizeImageGenerationProvider(provider) {
-  const value = String(provider || '').trim().toLowerCase();
-  return value === 'commercial_model' ? 'commercial_model' : 'tavern_plugin';
-}
 
-function ceGetImageGenerationProvider(config) {
-  const rawProvider = String(config && config.imageGenerationProvider || '').trim();
-  if (rawProvider) {
-    return ceNormalizeImageGenerationProvider(rawProvider);
-  }
-  const mode = ceNormalizeImagePromptMode(config && config.imagePromptMode);
-  return mode === 'natural_language' ? 'commercial_model' : 'tavern_plugin';
-}
 
-function ceExtractImageEvolutionTemplateFromPreset(preset, mode = 'sd_keywords') {
-  const normalizedMode = ceNormalizeImagePromptMode(mode);
-  try {
-    const promptConfig = preset && preset.prompts ? preset.prompts.image_evolution : null;
-    const dualTemplates = promptConfig && promptConfig.default_templates;
-    if (dualTemplates && typeof dualTemplates === 'object') {
-      const modeTemplate = String(dualTemplates[normalizedMode] || '').trim();
-      if (modeTemplate) return modeTemplate;
-    }
-    const rules = parseRulesPreset(preset, 'image_evolution');
-    if (!Array.isArray(rules) || rules.length === 0) return '';
-    const enabledRules = rules.filter(rule => rule && rule.enabled !== false);
-    if (enabledRules.length === 0) return '';
-    return enabledRules.map(rule => String(rule.content || '')).join('\n\n').trim();
-  } catch (e) {
-    console.warn('[生图演化] 提取预设默认模板失败:', e);
-    return '';
-  }
-}
+
+
+
 
 function ceBuildGeneratedImageFigure(item, index) {
   const figure = document.createElement('figure');
@@ -28069,61 +27688,24 @@ function ceBuildGeneratedImageFigure(item, index) {
   return figure;
 }
 
-function ceBuildGeneratedImageErrorParagraph(item, index) {
-  const p = document.createElement('p');
-  p.setAttribute('data-ce-generated-image-error', 'true');
-  p.style.cssText = 'margin:10px 0; color:#ff7a7a; white-space:pre-wrap; line-height:1.5;';
-  const errText = item && item.error ? String(item.error) : '未知错误';
-  p.textContent = `[生图失败 ${index + 1}] ${errText}`;
-  return p;
-}
-
 function ceInsertGeneratedImagesIntoHtml(html, imageResults) {
   const result = { html: html || '', insertedCount: 0 };
   if (!html || !Array.isArray(imageResults) || imageResults.length === 0) return result;
   const container = document.createElement('div');
   container.innerHTML = html;
-  const plainText = container.textContent || '';
-
-  imageResults.forEach((item, idx) => {
-    const anchorText = String(item && item.anchor || '');
-    if (!anchorText) return;
-    const anchorResult = ceFindAnchorIndexWithFallback(plainText, anchorText);
-    const anchorIndex = anchorResult.index;
-    let anchorContainer = ceFindAnchorContainer(container, anchorText);
-    if (!anchorContainer && anchorIndex >= 0) {
-      anchorContainer = ceFindAnchorContainerByIndex(container, anchorIndex);
-    }
-    const node = item && item.imageUrl
-      ? ceBuildGeneratedImageFigure(item, idx)
-      : ceBuildGeneratedImageErrorParagraph(item, idx);
-    const anchorEndIndex = anchorIndex >= 0 ? anchorIndex + Math.max(1, anchorText.length || 0) : -1;
-    let inserted = false;
-
-    if (anchorContainer && anchorContainer.parentNode) {
-      if (anchorContainer.nodeType === 3) {
-        if (anchorEndIndex >= 0 && ceInsertImagePromptAfterIndex(container, anchorEndIndex, node)) {
-          inserted = true;
-        } else {
-          const parent = anchorContainer.parentNode;
-          if (parent) {
-            parent.insertBefore(node, anchorContainer.nextSibling);
-            inserted = true;
-          }
-        }
-      } else {
-        anchorContainer.parentNode.insertBefore(node, anchorContainer.nextSibling);
-        inserted = true;
-      }
-    } else if (anchorEndIndex >= 0 && ceInsertImagePromptAfterIndex(container, anchorEndIndex, node)) {
-      inserted = true;
-    }
-
-    if (!inserted) {
-      container.appendChild(node);
-    }
+  const paragraphs = ceStoryImageParagraphs(container.querySelector('content') || container);
+  const located = imageResults.map((item,index)=>({
+    item,index,paragraph:item?.anchor && item.imageUrl ? ceMatchStoryImageParagraph(paragraphs,item.anchor) : -1
+  })).filter(image=>image.paragraph>=0);
+  for (const {item,index,paragraph} of located.sort((a,b)=>b.paragraph-a.paragraph||b.index-a.index)) {
+    const [node,offset] = paragraphs[paragraph].endpoint;
+    const figure = ceBuildGeneratedImageFigure(item,index);
+    if (offset !== undefined) {
+      const tail = node.splitText(offset);
+      tail.before(figure);
+    } else node.after(figure);
     result.insertedCount++;
-  });
+  }
 
   result.html = container.innerHTML;
   return result;
@@ -28205,7 +27787,7 @@ function ceRoundUpTo64(value) {
 // ===== 多提供商生图辅助函数 =====
 
 function ceNormalizeImageApiProvider(v) {
-  var valid = { doubao: 1, gemini: 1, custom_openai: 1 };
+  var valid = { doubao: 1, openai: 1, gemini: 1, custom_openai: 1 };
   var s = String(v || '').trim().toLowerCase();
   return valid[s] ? s : 'doubao';
 }
@@ -28373,13 +27955,15 @@ async function ceCallCustomOpenAIImageGeneration(providerCfg, prompt, signal) {
   throw new Error('自定义兼容 OpenAI 图片生成失败: ' + (lastErr || '未知错误'));
 }
 
-async function ceCallImageGeneration(providerCfg, prompt, signal) {
+async function ceCallImageGeneration(providerCfg, prompt, signal, references = []) {
   return frRunApiRoutes('CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1','imageProviderConfigs.'+(providerCfg.provider||'doubao'),providerCfg,
-    route=>ceCallImageGenerationOnce({...providerCfg,apiUrl:route.apiUrl,apiKey:route.apiKey,apiModel:route.apiModel},prompt,signal),signal);
+    route=>ceCallImageGenerationOnce({ ...CE_CORE['api-library'].imageRouteConfig(providerCfg,route),
+      ...(providerCfg.storySize ? {size:providerCfg.storySize} : {}) },prompt,signal,references),signal);
 }
 
-async function ceCallImageGenerationOnce(providerCfg, prompt, signal) {
+async function ceCallImageGenerationOnce(providerCfg, prompt, signal, references = []) {
   var provider = String(providerCfg.provider || 'doubao');
+  if (provider === 'openai') return await _portraitCallOpenAiImageGen(providerCfg, prompt, signal, references);
   if (provider === 'gemini') return await ceCallGeminiImageGeneration(providerCfg, prompt, signal);
   if (provider === 'custom_openai') return await ceCallCustomOpenAIImageGeneration(providerCfg, prompt, signal);
   // 默认豆包
@@ -28440,95 +28024,9 @@ function ceRenderCustomOpenAIModelOptions(select, models, selected) {
   select.value = selected || (models[0] || '');
 }
 
-async function ceFetchCustomOpenAIImageModels(overlay) {
-  if (!overlay) return;
-  var urlEl = overlay.querySelector('#concurrent-evo-image-api-url');
-  var keyEl = overlay.querySelector('#concurrent-evo-image-api-key');
-  var url = urlEl ? String(urlEl.value || '').trim() : '';
-  var key = keyEl ? String(keyEl.value || '').trim() : '';
-  if (!url || !key) {
-    if (typeof showCustomAlert === 'function') {
-      await showCustomAlert('请先填写 API URL 和 API Key。', '获取模型列表');
-    }
-    return;
-  }
-  var modelsUrl = ceNormalizeApiModelsUrl(url);
-  if (!modelsUrl) {
-    if (typeof showCustomAlert === 'function') {
-      await showCustomAlert('API URL 无效，无法构建模型列表端点。', '获取模型列表');
-    }
-    return;
-  }
-  var btn = overlay.querySelector('#ce-image-fetch-custom-models-btn');
-  var originalText = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '获取中...'; }
-  try {
-    var response = await fetch(modelsUrl, {
-      method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }
-    });
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status);
-    }
-    var data = await response.json();
-    var models = ceExtractModelsFromApiResponse(data);
-    if (models.length === 0) {
-      if (typeof showCustomAlert === 'function') {
-        await showCustomAlert('API 返回成功，但未找到可用模型。', '获取模型列表');
-      }
-      return;
-    }
-    var select = overlay.querySelector('#concurrent-evo-image-api-model-custom-select');
-    var prevSelected = select ? select.value : '';
-    ceRenderCustomOpenAIModelOptions(select, models, prevSelected || models[0]);
-    if (overlay._ceImageProviderConfigs && overlay._ceImageProviderConfigs.custom_openai) {
-      overlay._ceImageProviderConfigs.custom_openai.apiModels = [];
-    }
-    if (typeof showDanmaku === 'function') {
-      showDanmaku('成功获取 ' + models.length + ' 个模型', 'success');
-    }
-  } catch (e) {
-    if (typeof showCustomAlert === 'function') {
-      await showCustomAlert('获取模型列表失败：' + (e.message || e), '获取模型列表');
-    }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = originalText; }
-  }
-}
 
-function ceCeUpdateImageProviderVisibility(overlay) {
-  var providerEl = overlay ? overlay.querySelector('#concurrent-evo-image-api-provider') : null;
-  if (!providerEl) return;
-  var provider = providerEl.value || 'doubao';
-  var selectWrap = overlay.querySelector('#ce-image-model-select-wrap');
-  var geminiWrap = overlay.querySelector('#ce-image-model-gemini-wrap');
-  var customWrap = overlay.querySelector('#ce-image-model-custom-wrap');
-  var resolutionWrap = overlay.querySelector('#ce-image-resolution-wrap');
-  var geminiAspectWrap = overlay.querySelector('#ce-image-gemini-aspect-ratio-wrap');
-  var geminiSizeWrap = overlay.querySelector('#ce-image-gemini-size-wrap');
-  var aspectRatioWrap = overlay.querySelector('#ce-image-aspect-ratio-wrap');
-  var urlEl = overlay.querySelector('#concurrent-evo-image-api-url');
-  var modelTextEl = overlay.querySelector('#concurrent-evo-image-api-model-text');
-  var isDoubao = provider === 'doubao';
-  var isGemini = provider === 'gemini';
-  var isCustom = provider === 'custom_openai';
-  if (selectWrap) selectWrap.style.display = isDoubao ? '' : 'none';
-  if (geminiWrap) geminiWrap.style.display = isGemini ? '' : 'none';
-  if (customWrap) customWrap.style.display = isCustom ? '' : 'none';
-  if (resolutionWrap) resolutionWrap.style.display = isDoubao ? '' : 'none';
-  if (geminiAspectWrap) geminiAspectWrap.style.display = isGemini ? '' : 'none';
-  if (geminiSizeWrap) geminiSizeWrap.style.display = isGemini ? '' : 'none';
-  if (aspectRatioWrap) aspectRatioWrap.style.display = isGemini ? 'none' : '';
-  if (urlEl) {
-    if (isDoubao) urlEl.placeholder = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
-    else if (isGemini) urlEl.placeholder = 'https://generativelanguage.googleapis.com/v1beta/models';
-    else urlEl.placeholder = '输入 API 端点 URL';
-  }
-  if (modelTextEl) {
-    if (isGemini) modelTextEl.placeholder = '如：gemini-3.1-flash-image-preview';
-    else modelTextEl.placeholder = '输入模型名称';
-  }
-}
+
+
 
 async function ceCallDoubaoImageGeneration(config, promptText, signal) {
   const apiUrl = String(config.imageApiUrl || '').trim();
@@ -28579,280 +28077,256 @@ async function ceCallDoubaoImageGeneration(config, promptText, signal) {
   return imageUrl;
 }
 
-function ceBuildGridCompositeImagePrompt(imagePrompts, options = {}) {
-  const config = options.config || {};
-  const imageCount = ceNormalizeImageEvolutionCount(options.imageCount);
-  const gridSize = ceGetImageGridSizeByCount(imageCount);
-  const promptMode = ceNormalizeImagePromptMode(config.imagePromptMode);
-  const styleProfile = ceGetImageStyleProfile(config, config.imageStyleMode);
-  const sceneLines = [];
-  const cleanedPrompts = Array.isArray(imagePrompts) ? imagePrompts : [];
-  cleanedPrompts.forEach((item, idx) => {
-    const anchor = String(item && item.anchor || '').trim();
-    const promptText = String(item && item.prompt || '').trim();
-    if (!anchor || !promptText) return;
-    const body = promptMode === 'sd_keywords'
-      ? ceStripImagePromptWrapper(promptText)
-      : promptText;
-    sceneLines.push(
-      `分镜${idx + 1}（锚点）: ${anchor}\n` +
-      `分镜${idx + 1}（描述）: ${body}`
-    );
-  });
 
-  const modeGuideline = promptMode === 'natural_language'
-    ? '分镜描述是自然语言，生成时保留自然语言语义。'
-    : '分镜描述是关键词串，生成时按关键词精确还原。';
 
-  return [
-    `你需要基于以下 ${imageCount} 个分镜，生成 1 张大图。`,
-    `大图布局必须是 ${gridSize}x${gridSize}（共 ${imageCount} 格），每格对应一个分镜，顺序为从左到右、从上到下。`,
-    '必须保证人物形象、服饰、画风、材质、光影在所有格子中一致。',
-    `统一画风：${styleProfile.label}。画风描述词：${styleProfile.description}`,
-    modeGuideline,
-    '只输出图片，不要输出文字说明。',
-    '图片内禁止出现英文、中文、字幕、台词、水印、Logo、边框编号。',
-    '分镜列表如下：',
-    sceneLines.join('\n\n')
-  ].join('\n\n');
+
+
+
+
+
+
+async function ceCollectStoryCharacterReferences(archive, prompts, signal) {
+  const scene = prompts.map(item => item.anchor + '\n' + item.prompt).join('\n');
+  const sceneTokens = new Set(scene.match(/[a-zA-Z0-9_-]+/g) || []);
+  const references = [];
+  const characters = Object.entries(currentState?.['0'] || {}).filter(([, row]) =>
+    row && !/离场|退场|死亡/.test(row['4'] || '')
+  );
+  for (const [id, row] of characters) {
+    const name = String(row['1'] || '').split('|')[0].trim();
+    if (!sceneTokens.has(id) && (!name || !scene.includes(name))) continue;
+    const char = _portraitResolveCharacterForAvatarDisplay(id) || { id, name };
+    const images = await _portraitCollectCharacterReferences(archive, char, signal);
+    references.push(...images);
+  }
+  // GPT Image 的多图输入最多支持 16 张。
+  return references.slice(0, 16);
 }
 
-function ceLoadImageElement(imageSrc) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.decoding = 'async';
-    img.loading = 'eager';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('图片资源加载失败'));
-    img.src = imageSrc;
-  });
+function ceIndependentStoryImageCount(config) {
+  return Math.min(9, Math.max(1, Math.floor(Number(config.imageIndependentCount) || 2)));
 }
 
-async function ceFetchImageSourceForGrid(imageUrl, signal) {
-  const src = String(imageUrl || '').trim();
-  if (!src) {
-    throw new Error('图片地址为空');
+async function ceIndependentStoryImageCandidates(archive, config) {
+  if (!archive) return [];
+  const includeOptional = config.imageSendReferences !== false && config.imageReferenceCharacters !== false;
+  const candidates = [];
+  for (const [id, row] of Object.entries(currentState?.['0'] || {})) {
+    if (!row || /离场|退场|死亡/.test(row['4'] || '')) continue;
+    const char = _portraitResolveCharacterForAvatarDisplay(id);
+    if (!char) continue;
+    const assets = _portraitGetCharacterAssets(archive, char);
+    if (_portraitIsReferenceData(assets.design) || (includeOptional &&
+        (assets.reference || (await _portraitResolveExistingAvatar(char, archive)).src))) candidates.push(char);
   }
-  if (/^data:image\//i.test(src) || /^blob:/i.test(src)) {
-    return { src, revoke: null };
+  return candidates;
+}
+
+async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveName, archive, floor, signal, context = {}) {
+  const plain = document.createElement('div');
+  plain.innerHTML = ceStripImagePromptBlocksFromHtml(ceStripGeneratedImageBlocksFromHtml(String(floor.content || '')));
+  for (const block of plain.querySelectorAll('think,script,style,[hidden],[data-evolution-detail]')) block.remove();
+  const paragraphs = ceStoryImageParagraphs(plain.querySelector('content') || plain);
+  const storyText = paragraphs.map(paragraph=>paragraph.text).join('\n').trim();
+  const candidates = new Map((await ceIndependentStoryImageCandidates(archive, config)).map(char => [char.id, char]));
+  const providerConfig = { provider: 'openai', ...ceGetProviderImageApiConfig(config, 'openai'), storySize:config.imageStorySize };
+  const earlierFigures = [];
+  if (config.imageSendReferences !== false && config.imageReferencePreviousFloor) {
+    const logs = archive?.data?.logs || [];
+    const index = logs.indexOf(floor);
+    const holder = document.createElement('template');
+    for (const log of logs.slice(0,Math.max(index,0)).reverse()) {
+      if (log.type !== 'ai' || log.isGhost || log.isDeepSummary || log.isSnapshot) continue;
+      holder.innerHTML = log.content || '';
+      for (const image of holder.content.querySelectorAll('figure[data-ce-generated-image] img')) {
+        const src = image.getAttribute('src');
+        if (_portraitIsReferenceData(src)) earlierFigures.push({src,name:'上一个有插图的回合',type:'场景延续'});
+      }
+      if (earlierFigures.length) break;
+    }
   }
-  const response = await fetch(src, {
-    method: 'GET',
-    cache: 'no-store',
-    signal: signal || null
+  const anchors = new Set();
+  const planned = imagePrompts.map(item=>({...item,paragraph:item.anchor ? ceMatchStoryImageParagraph(paragraphs,item.anchor) : -1})).filter(item => {
+    if (!item.anchor || !item.prompt || anchors.has(item.anchor) || item.paragraph<0) return false;
+    anchors.add(item.anchor);
+    return true;
   });
-  if (!response.ok) {
-    throw new Error(`下载大图失败 (${response.status})`);
-  }
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  return {
-    src: objectUrl,
-    revoke: () => {
-      try { URL.revokeObjectURL(objectUrl); } catch (e) {}
+  const prepare = async (item, previous) => {
+      const visible = new Set(item.visibleActorIds || []), locked = [];
+      const references = [], notes = [];
+      for (const id of visible) {
+        const assets = _portraitGetCharacterAssets(archive, {id});
+        const row = currentState?.['0']?.[id] || currentState?.['7']?.[id];
+        const name = String(row?.['1'] || id).split(/[|｜]/)[0];
+        const design = frCharacterDesignReference(archive,{id,name});
+        if (design) references.push(design);
+        const appearance = frResolvePortraitAppearance(row,assets);
+        const supplement = frPortraitAppearanceSupplement(assets,appearance);
+        if (appearance) {
+          if (assets.appearanceLocked) locked.push(name);
+          notes.push(name + ' · ' + (assets.appearanceLocked ? '锁定外观（优先）' : '当前画像') + ' · ' + appearance);
+        }
+        if (supplement) notes.push(name + ' · 玩家自定义补充（只采用与当前画像相容的细节） · ' + supplement);
+      }
+      for (const id of new Set(item.referenceIds || [])) {
+        if (config.imageSendReferences !== false && config.imageReferenceCharacters !== false && visible.has(id) && candidates.has(id)) {
+          references.push(...await _portraitCollectCharacterReferences(archive, candidates.get(id), signal,config.imageReferenceBothPortraits));
+        }
+      }
+      if (config.imageSendReferences !== false && previous?.imageUrl && _portraitIsReferenceData(previous.imageUrl)) {
+        references.unshift({src:previous.imageUrl,name:'同轮上一张插图',type:'场景延续',guide:'只参考共同背景、画风及仍在场角色；严格遵循本张的正文动作、位置和构图。'});
+      }
+      references.push(...earlierFigures);
+      const facts = config.imageSceneFacts ? ['【画面事实】',context.currentTime && '时间：' + context.currentTime,
+        context.currentLocation && '地点：' + context.currentLocation,'锚点：' + item.anchor].filter(Boolean).join('\n') : '';
+      const prompt = [item.prompt,facts,config.imageSendFullStory && !locked.length && '【本回合可见正文】\n' + storyText,
+        notes.length && '【人物外观】\n' + notes.join('\n')].filter(Boolean).join('\n\n');
+      return {prompt,references};
+  };
+  const generate = (prompt,references) => {
+    const attached = frImageReferencesWithExample('story',references,16);
+    return ceCallImageGeneration(providerConfig,_portraitAppendReferenceGuide(prompt,attached,
+      config.imageReferenceGuide || frImageMaterials().storyReference),signal,attached);
+  };
+  const draw = async (item, previous) => {
+    try {
+      const {prompt,references} = await prepare(item,previous);
+      const imageUrl = await generate(prompt,references);
+      return { ...item, imageUrl };
+    } catch (error) {
+      if (signal?.aborted || error?.name === 'AbortError') throw error;
+      return { ...item, error: error?.message || String(error) };
     }
   };
+  const results = [];
+  if (config.imageStoryMode === 'grid' && planned.length > 1) {
+    const ordered = [...planned].sort((a,b)=>a.paragraph-b.paragraph);
+    const panels = await Promise.all(ordered.map(item=>prepare(item)));
+    const columns = panels.length <= 4 ? 2 : 3;
+    const gridPrompt = `生成一张 ${columns}×${columns} 的分镜网格。从左到右、从上到下，每格尺寸一致，无边框、留白和文字。各格内容独立，不得跨格。用独立的背景填充未指定的格子。\n`
+      + panels.map((item,index)=>`第 ${index + 1} 格\n${item.prompt}`).join('\n\n');
+    const imageUrl = await generate(gridPrompt,panels.flatMap(item=>item.references));
+    const image = new Image(); image.src = imageUrl; await image.decode();
+    const canvas = document.createElement('canvas');
+    const cellWidth = Math.floor(image.naturalWidth / columns), cellHeight = Math.floor(image.naturalHeight / columns);
+    canvas.width = cellWidth; canvas.height = cellHeight;
+    const painter = canvas.getContext('2d');
+    ordered.forEach((item,index)=>{
+      painter.clearRect(0,0,cellWidth,cellHeight);
+      painter.drawImage(image,(index % columns) * cellWidth,Math.floor(index / columns) * cellHeight,
+        cellWidth,cellHeight,0,0,cellWidth,cellHeight);
+      results.push({...item,imageUrl:canvas.toDataURL('image/png')});
+    });
+  } else if (config.imageStoryMode === 'sequential') {
+    for (const item of planned) results.push(await draw(item,results.findLast(result=>result.imageUrl)));
+  } else results.push(...await Promise.all(planned.map(item => draw(item))));
+  signal?.throwIfAborted();
+  const ready = results.filter(item => item.imageUrl);
+  if (!ready.length) return { inserted: 0, error: results[0]?.error || '未找到可用的正文锚点' };
+  // 出图可与变量、补演并行。楼层写入收尾后才改正文 HTML，以免被快照覆盖或误判为改稿。
+  if (context.waitForFloorWrites) await context.waitForFloorWrites();
+  signal?.throwIfAborted();
+  const inserted = await ceSaveGeneratedStoryImages(archiveName, floor.id, ready, floor.content);
+  return { inserted, results };
 }
 
-async function ceSplitGridImageToTiles(imageUrl, gridSize, signal) {
-  const normalizedGridSize = Math.max(2, parseInt(gridSize, 10) || 2);
-  const source = await ceFetchImageSourceForGrid(imageUrl, signal);
-  let imageEl = null;
-  try {
-    imageEl = await ceLoadImageElement(source.src);
-    const width = imageEl.naturalWidth || imageEl.width || 0;
-    const height = imageEl.naturalHeight || imageEl.height || 0;
-    if (width <= 0 || height <= 0) {
-      throw new Error('大图尺寸无效');
-    }
-    const tileWidth = Math.floor(width / normalizedGridSize);
-    const tileHeight = Math.floor(height / normalizedGridSize);
-    if (tileWidth < 1 || tileHeight < 1) {
-      throw new Error(`大图尺寸不足以切分 ${normalizedGridSize}x${normalizedGridSize}`);
-    }
-    const offsetX = Math.floor((width - tileWidth * normalizedGridSize) / 2);
-    const offsetY = Math.floor((height - tileHeight * normalizedGridSize) / 2);
-    const tiles = [];
-    for (let row = 0; row < normalizedGridSize; row++) {
-      for (let col = 0; col < normalizedGridSize; col++) {
-        const sx = offsetX + col * tileWidth;
-        const sy = offsetY + row * tileHeight;
-        const canvas = document.createElement('canvas');
-        canvas.width = tileWidth;
-        canvas.height = tileHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Canvas 初始化失败');
-        ctx.drawImage(
-          imageEl,
-          sx, sy, tileWidth, tileHeight,
-          0, 0, tileWidth, tileHeight
-        );
-        tiles.push(canvas.toDataURL('image/png'));
-      }
-    }
-    return {
-      tiles,
-      width,
-      height,
-      tileWidth,
-      tileHeight,
-      gridSize: normalizedGridSize
-    };
-  } finally {
-    if (typeof source.revoke === 'function') {
-      source.revoke();
-    }
+async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedContent) {
+  let updatedLog, insertedCount = 0;
+  await db.archives.where('name').equals(archiveName).modify(archive => {
+    const log = archive?.data?.logs?.find(entry => entry.id === logId);
+    if (!log || (expectedContent !== undefined && log.content !== expectedContent)) return false;
+    const baseHtml = ceStripGeneratedImageBlocksFromHtml(ceStripImagePromptBlocksFromHtml(String(log.content || '')));
+    const result = ceInsertGeneratedImagesIntoHtml(baseHtml,results);
+    if (!result.insertedCount) return false;
+    log.content = result.html;
+    insertedCount = result.insertedCount;
+    updatedLog = log;
+  });
+  if (!insertedCount) return 0;
+  const logEl = currentArchiveName === archiveName
+    ? document.querySelector(`.log-entry[data-log-id="${CSS.escape(String(logId))}"]`) : null;
+  if (logEl) {
+    let rendered = updatedLog.content;
+    try {
+      if (typeof processImageTags === 'function') rendered = processImageTags(rendered, true, false);
+    } catch (e) {}
+    const safeDetailHtml = ceBuildSafeDetailedEvolutionHtmlFragment(updatedLog.detailedEvolutionHtml);
+    if (safeDetailHtml && !rendered.includes('data-evolution-detail')) rendered += '\n' + safeDetailHtml;
+    frRenderStoryHtml(logEl, rendered);
   }
+  return insertedCount;
 }
 
-async function ceGenerateAndInsertImagesToLatestLog(imagePrompts, config, signal) {
+async function ceGenerateAndInsertImagesToLatestLog(imagePrompts, config, signal, target = {}) {
   try {
     if (!Array.isArray(imagePrompts) || imagePrompts.length === 0) return { inserted: 0 };
-    if (!db?.archives?.get || !currentArchiveName) return { inserted: 0 };
-
-    const normalizedPromptData = ceNormalizeImagePromptsForGrid(
-      imagePrompts,
-      config && config.imageEvolutionCount
-    );
-    if (!normalizedPromptData.exact) {
-      return {
-        inserted: 0,
-        error: `分镜数量不足，期望 ${normalizedPromptData.expected} 条，实际 ${normalizedPromptData.prompts.length} 条`
-      };
-    }
-    const normalizedPrompts = normalizedPromptData.prompts;
-    const imageCount = normalizedPromptData.expected;
-    const gridSize = ceGetImageGridSizeByCount(imageCount);
-    const gridMode = ceGetImageGridModeByCount(imageCount);
-    const compositePrompt = ceBuildGridCompositeImagePrompt(normalizedPrompts, {
-      config,
-      imageCount
-    });
-
-    const retryDelay = Number.isFinite(config && config.retryDelay) ? Math.max(0, config.retryDelay) : 1000;
-    const maxImageRetry = Number.isFinite(config && config.retryCount) ? Math.max(0, config.retryCount) : 2;
-    if (signal && signal.aborted) {
-      return { inserted: 0, skipped: true, reason: 'aborted' };
-    }
-    const _ceImgProvider = ceNormalizeImageApiProvider(config.imageApiProvider);
-    const _ceImgProviderCfg = Object.assign(
-      { provider: _ceImgProvider },
-      ceGetProviderImageApiConfig(config, _ceImgProvider)
-    );
-    let compositeImageUrl = '';
-    let imageGenErr = null;
-    for (let attempt = 0; attempt <= maxImageRetry; attempt++) {
-      try {
-        compositeImageUrl = await ceCallImageGeneration(_ceImgProviderCfg, compositePrompt, signal);
-        imageGenErr = null;
-        break;
-      } catch (e) {
-        if (e && e.name === 'AbortError') throw e;
-        imageGenErr = e;
-        if (attempt < maxImageRetry) {
-          const retryMsg = `[生图演化] 二次生图失败，重试 (${attempt + 1}/${maxImageRetry})`;
-          console.warn(retryMsg, e);
-          if (typeof showDanmaku === 'function') showDanmaku(retryMsg, 'warning');
-          if (retryDelay > 0) await new Promise(r => setTimeout(r, retryDelay));
-          continue;
-        }
-      }
-    }
-    if (imageGenErr) throw imageGenErr;
-    if (!compositeImageUrl) throw new Error('二次生图未返回图片');
-    if (signal && signal.aborted) {
-      return { inserted: 0, skipped: true, reason: 'aborted' };
-    }
-
-    const splitResult = await ceSplitGridImageToTiles(compositeImageUrl, gridSize, signal);
-    if (!splitResult || !Array.isArray(splitResult.tiles)) {
-      throw new Error('大图裁切失败');
-    }
-    if (splitResult.tiles.length < normalizedPrompts.length) {
-      throw new Error(`裁切结果不足：期望 ${normalizedPrompts.length} 张，实际 ${splitResult.tiles.length} 张`);
-    }
-
-    const generationResults = normalizedPrompts.map((item, idx) => ({
-      anchor: String(item.anchor || '').trim(),
-      prompt: String(item.prompt || '').trim(),
-      imageUrl: splitResult.tiles[idx],
-      tileIndex: idx + 1,
-      gridMode
-    }));
-
-    if (typeof window !== 'undefined') {
-      window._ceLastCompositeGridImageUrl = compositeImageUrl;
-    }
-
-    const archive = await db.archives.get(currentArchiveName);
-    if (!archive?.data?.logs || archive.data.logs.length === 0) return { inserted: 0 };
-    const logs = archive.data.logs;
-    const lastAiLog = [...logs].reverse().find(log =>
-      log.type === 'ai' &&
-      !log.isGhost &&
-      !log.isDeepSummary &&
-      !log.isSnapshot &&
+    const archiveName = target.archiveName || currentArchiveName;
+    if (!db?.archives?.get || !archiveName) return { inserted: 0 };
+    const initialArchive = target.archive || await db.archives.get(archiveName);
+    const floor = [...(initialArchive?.data?.logs || [])].reverse().find(log =>
+      (!target.logId || log.id === target.logId) && log.type === 'ai' && !log.isGhost && !log.isDeepSummary && !log.isSnapshot &&
       !String(log.content || '').includes('<h4>天道初启</h4>')
     );
-    if (!lastAiLog) return { inserted: 0 };
-
-    const baseHtml = ceStripGeneratedImageBlocksFromHtml(ceStripImagePromptBlocksFromHtml(String(lastAiLog.content || '')));
-    const { html, insertedCount } = ceInsertGeneratedImagesIntoHtml(baseHtml, generationResults);
-    if (!insertedCount) return { inserted: 0 };
-
-    lastAiLog.content = html;
-    const logIndex = logs.findIndex(l => l.id === lastAiLog.id);
-    if (logIndex >= 0) logs[logIndex] = lastAiLog;
-    await db.archives.put(archive);
-
-    const logEl = document.querySelector(`.log-entry[data-log-id="${lastAiLog.id}"]`);
-    if (logEl) {
-      let rendered = html;
-      try {
-        if (typeof processImageTags === 'function') {
-          rendered = processImageTags(rendered, true, false);
-        }
-      } catch (e) {}
-      const safeDetailHtml = ceBuildSafeDetailedEvolutionHtmlFragment(lastAiLog.detailedEvolutionHtml);
-      if (safeDetailHtml && !rendered.includes('data-evolution-detail')) {
-        rendered = `${rendered}\n${safeDetailHtml}`;
-      }
-      try {
-        if (typeof sanitizeHTML === 'function') {
-          rendered = sanitizeHTML(rendered);
-        }
-      } catch (e) {}
-      logEl.innerHTML = rendered;
-    }
-
-    console.log(`[生图演化] 已插入正文图片: ${insertedCount} 条 (logId=${lastAiLog.id}, grid=${gridMode})`);
-    return {
-      inserted: insertedCount,
-      results: generationResults,
-      compositeImageUrl,
-      gridMode
-    };
+    if (!floor) return { inserted: 0, error: '本轮正文已删除或不可用' };
+    return await ceGenerateIndependentStoryImages(imagePrompts, config, archiveName, initialArchive, floor, signal,target);
   } catch (e) {
+    if (signal?.aborted || e?.name === 'AbortError') throw e;
     console.warn('[生图演化] 生成并插图失败:', e);
     return { inserted: 0, error: e?.message || String(e) };
   }
 }
 
-function ceGetImagePromptTemplateOverride(config, mode = 'sd_keywords') {
-  const normalizedMode = ceNormalizeImagePromptMode(mode);
-  const overrides = config && config.imagePromptTemplateOverrides;
-  if (overrides && typeof overrides === 'object') {
-    return String(overrides[normalizedMode] || '').trim();
-  }
-  return '';
+async function ceRunStoryImageJob({archiveName, logId, config, automatic = false, waitForFloorWrites}) {
+  const controller = new AbortController();
+  const {signal} = controller;
+  let bubble, stage = '分镜';
+  const clearBubble = () => {
+    if (bubble) { bubble.aborted = true; bubble.remove(); bubble = null; }
+  };
+  signal.addEventListener('abort',()=>showDanmaku('正文插图 · 已取消','info'),{once:true});
+  const showProgress = text => {
+    clearBubble();
+    bubble = showDanmaku('正文插图 · ' + text,'status',controller,true);
+  };
+  try {
+    const archive = await db.archives.get(archiveName);
+    const floor = archive?.data?.logs?.find(row => row.id === logId && row.type === 'ai');
+    if (!floor) throw new Error('找不到指定的本轮正文');
+    const storyText = ceStripGeneratedImageBlocksFromHtml(String(floor.content || ''));
+    const markup = document.createElement('template');
+    markup.innerHTML = storyText;
+    const fallback = ceExtractOriginalTimelineTimeLocationInfoFromStateLike(currentState);
+    const currentTime = [...markup.content.querySelectorAll('ui_sys ti,.fr-story-status-time,ti')].at(-1)?.textContent?.trim() || fallback.timeText;
+    const currentLocation = [...markup.content.querySelectorAll('ui_sys li,.fr-story-status-place')].at(-1)?.textContent?.trim() || fallback.locationText;
+    showProgress('正在规划分镜');
+    const plan = await requestImageEvolutionPhase({storyText,archiveName,manual:!automatic,currentTime,currentLocation,signal,
+      config,archive,entryDecisionEntries:automatic ? [] : undefined});
+    signal.throwIfAborted();
+    if (plan.skipped) return;
+    if (plan.error) throw new Error(plan.error);
+    stage = '出图';
+    const expected = ceIndependentStoryImageCount(config);
+    showProgress('正在出图（计划 ' + plan.imagePrompts.length + ' 张）');
+    const result = await ceGenerateAndInsertImagesToLatestLog(plan.imagePrompts,config,signal,{
+      archiveName,logId,archive,currentTime,currentLocation,
+      waitForFloorWrites:waitForFloorWrites && (()=>waitForFloorWrites(()=>showProgress('已收到图片，等待保存到本轮正文')))
+    });
+    signal.throwIfAborted();
+    if (!result.inserted) throw new Error(result.error || '本轮正文已修改或找不到可插入的位置');
+    clearBubble();
+    const detail = result.results?.find(item=>item.error)?.error;
+    showDanmaku('正文插图 · 已插入本轮正文 ' + result.inserted + ' 张' +
+      (result.inserted < expected ? '，另有 ' + (expected - result.inserted) + ' 张未生成' + (detail ? '（'+detail+'）' : '') : ''),
+      result.inserted < expected ? 'warning' : 'success');
+  } catch (error) {
+    clearBubble();
+    if (!signal.aborted) showDanmaku('正文插图 · ' + stage + '失败 · ' + frErrorText(error),'error');
+  } finally { clearBubble(); }
 }
 
-function ceResolveImagePromptTemplate(config, preset, mode = 'sd_keywords') {
-  const normalizedMode = ceNormalizeImagePromptMode(mode);
-  const override = ceGetImagePromptTemplateOverride(config, normalizedMode);
-  if (override) return override;
-  return ceExtractImageEvolutionTemplateFromPreset(preset, normalizedMode);
-}
+
+
+
 
 function formatFocusList(focusIds) {
   return Array.isArray(focusIds) && focusIds.length > 0 ? focusIds.join(', ') : '（无重点角色）';
@@ -40423,7 +39897,8 @@ function ceAppendNativeEvolutionStageContract(prompt, preset, type, targetId, co
     prompt=prompt.split(owned).join('').trimEnd()+'\n\n'+owned;
   }
   const statusContract = ['player','npc','beast'].includes(type) ? CE_CORE['character-status'].CHARACTER_STATUS_RULE : '';
-  return [prompt.trimEnd(), statusContract, sectIncome, terminalContract].filter(Boolean).join('\n\n');
+  const currency = type==='item_management' && !prompt.includes('【货币入账协议】') ? CE_CORE['equipment-layout']?.CURRENCY_SETTLEMENT_RULE : '';
+  return [prompt.trimEnd(), statusContract, sectIncome, terminalContract,currency].filter(Boolean).join('\n\n');
 }
 
 async function buildCharacterEvolutionPrompt(target, preset, sharedContext) {
@@ -40556,7 +40031,7 @@ async function buildCharacterEvolutionPrompt(target, preset, sharedContext) {
       });
     }
 
-    return prompt;
+    return ['player','npc'].includes(promptKey) ? prompt + '\n\n' + frPortraitVariableRule : prompt;
   }
 
   // 回退：使用 systemPrompt 字符串
@@ -40704,7 +40179,7 @@ async function buildCharacterEvolutionPrompt(target, preset, sharedContext) {
     }
   }
 
-  return prompt || null;
+  return prompt && ['player','npc'].includes(promptKey) ? prompt + '\n\n' + frPortraitVariableRule : prompt || null;
 }
 
 // ===== 并发执行函数 =====
@@ -49207,9 +48682,12 @@ async function applyConcurrentEvolutionDelta(op, target, options = {}) {
     mergeAppendBiographyForAdd(op, charData);
   }
 
+  const previousAppearance = {'1':charData['1'],'9':charData['9'],'16':charData['16'],'19':charData['19']};
   const modified = applyConcurrentEvolutionBioChanges(charData, op);
 
   if (modified) {
+    if (tableKey === '0') frPreserveSpiritStoneGrades(charData,previousAppearance);
+    if (tableKey === '0' || tableKey === '7') frUpdatePortraitAppearance(charData,previousAppearance);
     console.log(`[并发演化-Delta][${targetId}] 准备保存修改: isFromArchive=${isFromArchive}`);
     if (isFromArchive) {
       const serialized = JSON.stringify(charData, null, 2);
@@ -56178,7 +55656,6 @@ var itemManagementFallbackRows = new Map();
 // 杂项演化阶段状态元素引用
 var miscEvolutionStatusItem = null;
 // 生图演化阶段状态元素引用
-var imageEvolutionStatusItem = null;
 // 原著年表联动阶段状态元素引用
 var originalTimelineEvolutionStatusItem = null;
 
@@ -56205,6 +55682,49 @@ function closeItemManagementDanmakuStatus(owner) {
     item.remove();
     if(itemManagementStatusItem===item)itemManagementStatusItem = null;
   }
+}
+
+function frSpiritStoneCount(value) {
+  const text = String(value ?? '').trim();
+  if (!text || /^(?:0|待定|未知|无|暂无|未详)$/.test(text)) return 0;
+  const digits = /^(\d+|\d{1,3}(?:[,，]\d{3})+)\s*(?:[枚块颗]?(?:下品)?灵石|[枚块颗])?$/u.exec(text)?.[1];
+  const count = digits ? Number(digits.replace(/[,，]/g,'')) : NaN;
+  return Number.isSafeInteger(count) ? count : null;
+}
+
+function frSpiritStoneGrade(value) {
+  const name = String(value ?? '').trim().replace(/灵石$/u,'');
+  const names = {'':'下品',下品:'下品',低阶:'下品',低品:'下品',中品:'中品',中阶:'中品',上品:'上品',高阶:'上品',极品:'极品',超阶:'极品'};
+  return Object.hasOwn(names,name) ? names[name] : '';
+}
+
+function frReadSpiritStoneWallet(row) {
+  const remarks = parseRemarksString(row?.['9'] || '');
+  const balances = parseNestedJsonString(remarks.spiritStoneGrades, {}) || {};
+  const lower = String(row?.['26'] ?? '').trim();
+  return {下品:frSpiritStoneCount(!lower||/^(?:待定|未知|未详)$/.test(lower) ? remarks.spiritStones : lower) ?? 0,
+    中品:frSpiritStoneCount(balances.中品) ?? 0,上品:frSpiritStoneCount(balances.上品) ?? 0,极品:frSpiritStoneCount(balances.极品) ?? 0};
+}
+
+function frSpiritStoneWalletText(wallet, separator = ' / ') {
+  return Object.entries(wallet || {}).filter(([,amount])=>amount>0).map(([grade,amount])=>grade+'灵石 '+amount).join(separator) || '0';
+}
+
+function frWriteSpiritStoneWallet(row, wallet) {
+  row['26'] = String(wallet.下品 || 0);
+  const remarks = parseRemarksString(row['9'] || '');
+  const grades = Object.fromEntries(['中品','上品','极品'].filter(key=>wallet[key]>0).map(key=>[key,wallet[key]]));
+  if (Object.keys(grades).length) remarks.spiritStoneGrades = grades;
+  else delete remarks.spiritStoneGrades;
+  row['9'] = serializeRemarksObject(remarks);
+}
+
+function frPreserveSpiritStoneGrades(row, previous) {
+  if (!row || !previous || row['9']===previous['9'] || !JSON.stringify(previous['9'] ?? '').includes('spiritStoneGrades')) return;
+  const latest = parseRemarksString(row['9'] || '');
+  const existing = parseRemarksString(previous['9'] || '');
+  if (existing.spiritStoneGrades && !Object.hasOwn(latest,'spiritStoneGrades')) latest.spiritStoneGrades = existing.spiritStoneGrades;
+  row['9'] = serializeRemarksObject(latest);
 }
 
 function getItemManagementCharacterRow(charId) {
@@ -56306,25 +55826,6 @@ function closeMiscEvolutionDanmakuStatus(owner) {
   }
 }
 
-/**
- * 显示生图演化阶段Danmaku状态
- */
-function showImageEvolutionDanmakuStatus() {
-  if (typeof showDanmaku === 'function') {
-    const text = '正在生成图片提示词...';
-    imageEvolutionStatusItem = showDanmaku(text, 'status', concurrentEvolutionAbortController, true);
-  }
-}
-
-/**
- * 关闭生图演化阶段Danmaku状态
- */
-function closeImageEvolutionDanmakuStatus() {
-  if (imageEvolutionStatusItem) {
-    imageEvolutionStatusItem.remove();
-    imageEvolutionStatusItem = null;
-  }
-}
 
 function ceFormatOriginalTimelineEvolutionDanmakuText(text, meta = {}) {
   const extra = meta && typeof meta === 'object' ? meta : {};
@@ -56535,12 +56036,7 @@ function buildAllCharactersInventory(evolutionTargets, itemScope = {}) {
     const name = rawName.replace(/<[^>]*>/g, '') || charId;
     const realm = ceGetCharacterRealmText(row) || '未知';
     const identity = (row['2'] || '').split('|')[1] || '';
-    const normalizeSpiritStonesForSnapshot = (value) => {
-      const parsed = parseInt(value, 10);
-      if (isNaN(parsed)) return '0';
-      return String(parsed);
-    };
-    const spiritStones = normalizeSpiritStonesForSnapshot(row['26']);
+    const spiritStones = frSpiritStoneWalletText(frReadSpiritStoneWallet(row));
     const motive = row['27'] || '';
 
     const remarks = readRemarks(row);
@@ -56695,7 +56191,7 @@ function ceBuildManagedCharacterItemState(target) {
   const name = rawName.replace(/<[^>]*>/g, '') || charId;
   const realm = ceGetCharacterRealmText(row) || '未知';
   const identity = String(row['2'] || '').split('|')[1] || '';
-  const spiritRaw = parseInt(row['26'], 10);
+  const spiritWallet = frReadSpiritStoneWallet(row);
   const equipmentProjection=FrEquipmentRuntime.project(row);
   const remarks = equipmentProjection.remarks;
   const sceneType = target && target.sceneType
@@ -56818,7 +56314,8 @@ function ceBuildManagedCharacterItemState(target) {
     sceneType,
     realm,
     identity,
-    spiritStones: Number.isFinite(spiritRaw) ? String(spiritRaw) : '0',
+    spiritStones: frSpiritStoneWalletText(spiritWallet),
+    spiritWallet,
     totalAttributes: ceTryGetBonusedAttributesForPrompt(charId, row) || null,
     inventory,
     equipment,
@@ -57572,7 +57069,7 @@ function ceIsMiscTaskId(id) {
  * 构建在场角色的完整信息摘要（含列16、列2、列1等关键外观信息）
  * @returns {string} 格式化的角色信息文本
  */
-function buildOnscreenCharactersFullSummary() {
+function buildOnscreenCharactersFullSummary(referenceFirst = new Set()) {
   if (!currentState || !currentState['0']) return '（无角色数据）';
 
   const chars = currentState['0'];
@@ -57592,6 +57089,11 @@ function buildOnscreenCharactersFullSummary() {
     const realmIdentity = identity ? `${realm}|${identity}` : realm;
     const personality = row['3'] || '';
     const actionAppearance = row['16'] || '无行为数据';
+    if (referenceFirst.has(id)) {
+      const [action,,location] = actionAppearance.split(/[|｜]/);
+      lines.push(['---','ID: ' + id,'名称|性别: ' + nameGender,'行为: ' + (action || '未知'),'位置: ' + (location || '未知')].join('\n'));
+      return;
+    }
     const linggen = row['5'] || '';
     const specialConstitution = row['6'] || '';
 
@@ -57959,8 +57461,7 @@ function ceBuildRuntimeSceneCharacterPromptSnapshotBlock(char) {
   const shouyuan = char.shouyuan || remarks['寿元'] || '未知';
   const linggen = char.linggen || char['5'] || remarks['灵根'] || '无';
   const constitution = char.constitution || char['6'] || '无';
-  const spiritStones = char.spiritStones || char['26'] || remarks['spiritStones'] || '0';
-  const shanE = char.shanE || remarks['善恶值'] || '0';
+  const spiritStones = frSpiritStoneWalletText(char.spiritStoneWallet || frReadSpiritStoneWallet({26:char['26'] ?? char.spiritStones,9:remarks}));
   const actionText = String(char.action || char['16'] || char.location || '').trim();
   const motive = String(char['27'] || char.motive || '').trim();
   const shortGoal = String(char['28'] || char.shortGoal || '').trim();
@@ -57969,7 +57470,7 @@ function ceBuildRuntimeSceneCharacterPromptSnapshotBlock(char) {
   return [
     `> 人物: [NPC] ${name} | ${gender} | ${realm} | ${progress} | ${identity}`,
     `> 状态: HP:${hpText}, MP:${mpText}, 神识:${senseText}`,
-    `> 档案: 年龄:${age}, 寿元:${shouyuan}, 灵根:${linggen}, 体质:${constitution || '无'}, 灵石:${spiritStones}, 善恶:${shanE}`,
+    `> 档案: 年龄:${age}, 寿元:${shouyuan}, 灵根:${linggen}, 体质:${constitution || '无'}, 灵石:${spiritStones}`,
     `> Buff: ${status}`,
     actionText ? (`> 行为: ${actionText}`) : '',
     motive ? (`> 当前动机: ${motive}`) : '',
@@ -58175,63 +57676,42 @@ async function ceBuildFocusNpcPromptSummary(options = {}) {
  * @returns {string|null} 构建的 prompt，失败返回 null
  */
 function buildImageEvolutionPrompt(context) {
-  const preset = context.preset;
   const config = context.config || {};
-  const promptMode = ceNormalizeImagePromptMode(config.imagePromptMode);
-  const styleProfile = ceGetImageStyleProfile(config, config.imageStyleMode);
-  if (!preset) {
-    console.warn('[生图演化] 无预设数据');
-    return null;
-  }
-
-  const template = ceResolveImagePromptTemplate(config, preset, promptMode);
-  if (!template) {
-    console.warn('[生图演化] 未找到可用的生图提示词模板');
-    return null;
-  }
-
-  // 构建占位符值
-  const values = {};
-  var rawStory = context.storyText || '（无正文）';
-  values['story_text'] = rawStory.replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n').trim();
-  values['user_input'] = context.userInput || '';
-  values['current_time'] = context.currentTime || '未知';
-  values['current_location'] = context.currentLocation || '未知';
-  values['onscreen_characters_full'] = buildOnscreenCharactersFullSummary();
-
-  // 从登场判断结果提取新角色信息
-  var newCharInfo = '';
-  if (window.lastEntryDecisionResult) {
-    var entries = window.lastEntryDecisionResult.entries || [];
-    var newEntries = entries.filter(function(e) { return e.type === 'new'; });
-    if (newEntries.length > 0) {
-      newCharInfo = newEntries.map(function(e) {
-        return 'ID: ' + e.id + ', 名称: ' + (e.name || '未知');
-      }).join('\n');
-    }
-  }
-  values['entry_decision_new_characters'] = newCharInfo || '（无新登场角色）';
-
-  // 生图数量（仅支持 4 / 9，优先使用运行时缓存）
-  var imgCount = ceNormalizeImageEvolutionCount(
-    window._ceImageEvolutionCount || config.imageEvolutionCount
-  );
-  values['image_count'] = String(imgCount);
-  values['image_grid_size'] = String(ceGetImageGridSizeByCount(imgCount));
-  values['image_grid_mode'] = ceGetImageGridModeByCount(imgCount);
-  values['image_prompt_mode'] = promptMode;
-  values['image_style_mode'] = styleProfile.key;
-  values['image_style_name'] = styleProfile.label;
-  values['image_style_description'] = styleProfile.description;
-  values['image_style_prompt_guide'] = `画风名称：${styleProfile.label}\n画风描述词：${styleProfile.description}`;
-
-  // 组装 prompt
-  let prompt = template;
-  prompt = replacePlaceholders(prompt, values);
-  prompt += '\n\n' + ceBuildImageGridConstraintPrompt(imgCount, promptMode);
-
-  console.log('[生图演化] Prompt 构建完成，长度:', prompt.length);
-  return prompt;
+  const template = config.imageIndependentTemplate || frImageMaterials().story;
+  if (!template) return null;
+  const style = ceGetImageStyleProfile(config, config.imageStyleMode);
+  const imageCount = ceIndependentStoryImageCount(config);
+  const execution = {
+    grid:'逐个锚点设计单格画面，程序将它们拼成一次网格出图。各格独立，保持相邻画面的空间与角色连续性。',
+    sequential:'按剧情顺序出图；上一张成功的图可作为下一张的场景参考。每张提示词独立完整。',
+    parallel:'各张并发出图；同一回合其他成图不随请求发送，每张提示词独立完整。'
+  };
+  const candidates = (context.referenceCandidates || []).map(char=>char.id + ' · ' + (char.name || char.id) + ' · 参考图: 有').join('\n') || '无';
+  const referenceRules = config.imageReferenceGuide || frImageMaterials().storyReference || '';
+  const sceneRules = config.imageSceneFacts ? '按锚点附近的正文还原动作、时间、地点与空间关系。' : '';
+  const story = document.createElement('template');
+  story.innerHTML = ceStripImagePromptBlocksFromHtml(ceStripGeneratedImageBlocksFromHtml(String(context.storyText || '')))
+    .replace(/<\/(?:p|div|li|blockquote|section|h[1-6])>|<br\s*\/?>/gi,'$&\n');
+  for (const element of story.content.querySelectorAll('think,script,style,[hidden],[data-evolution-detail]')) element.remove();
+  const values = {
+    story_text:ceStoryImageParagraphs(story.content.querySelector('content') || story.content).map(paragraph=>paragraph.text).join('\n').trim(),
+    current_time:context.currentTime || '未知', current_location:context.currentLocation || '未知',
+    onscreen_characters_full:buildOnscreenCharactersFullSummary(config.imageReferenceVisualPriority
+      ? new Set((context.referenceCandidates || []).map(char=>char.id)) : undefined),
+    entry_decision_new_characters:(context.entryDecisionEntries ?? window.lastEntryDecisionResult?.entries ?? []).filter(entry=>entry.type==='new')
+      .map(entry=>entry.id + ' · ' + entry.name).join('\n') || '无',
+    image_count:String(imageCount), image_style_name:style.label, image_style_description:style.description,
+    image_style_prompt_guide:style.promptGuide,
+    image_generation_mode:({grid:'单图网格',sequential:'独立顺序',parallel:'独立并发'})[config.imageStoryMode] || '独立并发',
+    image_story_execution:execution[config.imageStoryMode] || execution.parallel,
+    image_reference_candidates:candidates,
+    image_reference_rules:referenceRules,
+    image_scene_rules:sceneRules,
+    openai_story_image_references:candidates,
+    openai_story_image_reference_rules:referenceRules,
+    openai_story_image_scene_rules:sceneRules
+  };
+  return replacePlaceholders(template,values) + '\n\n只返回 {"images":[{"anchor":"正文中的连续原文","prompt":"独立画面描述","visibleActorIds":[],"referenceIds":[]}]} 格式的 JSON，images 目标为 ' + imageCount + ' 张。';
 }
 
 /**
@@ -58240,44 +57720,18 @@ function buildImageEvolutionPrompt(context) {
  * @returns {Object} 解析结果 { thinking, col19Data, imagePrompts, rawResponse }
  */
 function parseImageEvolutionResponse(response) {
-  const result = {
-    thinking: '',
-    col19Data: [],
-    imagePrompts: [],
-    rawResponse: response || ''
-  };
-
-  if (!response || typeof response !== 'string') {
-    result.error = '响应为空';
-    return result;
-  }
-
-  // 提取 thinking
-  result.thinking = ceExtractThinkingContent(response);
-
-  // 提取列19数据 (<col19 id="C1">...</col19>)
-  const col19Regex = /<col19\s+id="([^"]+)">([\s\S]*?)<\/col19>/gi;
-  let col19Match;
-  while ((col19Match = col19Regex.exec(response)) !== null) {
-    result.col19Data.push({
-      id: col19Match[1],
-      content: col19Match[2].trim()
-    });
-  }
-
-  // 提取正文生图提示词 (<image>...</image>)
-  const imageRegex = /<image>([\s\S]*?)<\/image>/gi;
-  let imageMatch;
-  while ((imageMatch = imageRegex.exec(response)) !== null) {
-    var imageContent = imageMatch[1].trim();
-    // 提取锚点文本 (<anchor>...</anchor>)
-    var anchorMatch = imageContent.match(/<anchor>([\s\S]*?)<\/anchor>/i);
-    result.imagePrompts.push({
-      prompt: imageContent.replace(/<anchor>[\s\S]*?<\/anchor>/gi, '').trim(),
-      anchor: anchorMatch ? anchorMatch[1].trim() : ''
-    });
-  }
-
+  const result = { imagePrompts:[], rawResponse:response || '' };
+  try {
+    const raw = String(response || '').replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi,'').trim()
+      .replace(/^```(?:json)?\s*|\s*```$/gi,'');
+    const plan = JSON.parse(raw);
+    if (!Array.isArray(plan?.images)) throw new Error('缺少 images 列表');
+    const ids = value => Array.isArray(value) ? [...new Set(value.filter(id=>typeof id==='string').map(id=>id.trim()).filter(Boolean))] : [];
+    result.imagePrompts = plan.images.filter(item=>typeof item?.anchor==='string' && typeof item.prompt==='string')
+      .map(item=>({anchor:item.anchor.trim(),prompt:item.prompt.trim(),visibleActorIds:ids(item.visibleActorIds),referenceIds:ids(item.referenceIds)}))
+      .filter(item=>item.anchor && item.prompt);
+    if (!result.imagePrompts.length) throw new Error('没有可用的分镜');
+  } catch (error) { result.error = '分镜计划解析失败 · ' + error.message; }
   return result;
 }
 
@@ -58287,174 +57741,28 @@ function parseImageEvolutionResponse(response) {
  * @returns {Object} 执行结果
  */
 async function requestImageEvolutionPhase(options = {}) {
-  if(typeof frCanonTraceTag==='function')frCanonTraceTag(options.signal,'images');
-  const { storyText, userInput, currentTime, currentLocation, evolutionTargets, preset, signal } = options;
-
-  console.log('[生图演化] ========== 生图演化阶段开始 ==========');
-
-  // 加载 API 配置（复用并发演化配置）
-  const config = await loadConcurrentEvolutionConfig();
-  if (!config.apiUrl || !config.apiKey || !config.apiModel) {
-    console.warn('[生图演化] API 配置不完整，跳过');
-    return { skipped: true, reason: 'invalid_config' };
-  }
-
-  // 检查开关
-  if (config.enableImageEvolution !== true) {
-    console.log('[生图演化] 未启用，跳过');
-    return { skipped: true, reason: 'disabled' };
-  }
-
-  // 检查预设中是否有 image_evolution 配置
-  if (!preset || !preset.prompts || !preset.prompts.image_evolution) {
-    console.warn('[生图演化] 预设中无 image_evolution 配置，跳过');
-    return { skipped: true, reason: 'no_preset' };
-  }
-
-  if (preset.prompts.image_evolution.enabled === false) {
-    console.log('[生图演化] image_evolution 已禁用，跳过');
-    return { skipped: true, reason: 'disabled' };
-  }
-
-  // 缓存生图数量供 buildImageEvolutionPrompt 使用（仅支持 4 / 9）
-  window._ceImageEvolutionCount = ceNormalizeImageEvolutionCount(config.imageEvolutionCount);
-
-  // 显示 Danmaku 状态
-  showImageEvolutionDanmakuStatus();
-
+  const {signal} = options;
+  if (typeof frCanonTraceTag === 'function') frCanonTraceTag(signal,'images');
+  const config = options.config || await loadConcurrentEvolutionConfig();
+  if (!options.manual && config.enableImageEvolution !== true) return {skipped:true,reason:'disabled'};
+  const routeKey = 'FR_STORY_IMAGE_PLANNER_V1';
+  const existing = getApiConfigsToTry(config)[0];
+  if (!frApiRoutes(routeKey)?.length && !existing) return {error:'请在生图设置中配置分镜规划模型'};
   try {
-    // 构建 Prompt
-    const prompt = buildImageEvolutionPrompt({
-      storyText,
-      userInput,
-      currentTime,
-      currentLocation,
-      evolutionTargets,
-      preset,
-      config
-    });
-
-    if (!prompt) {
-      console.warn('[生图演化] Prompt 构建失败，跳过');
-      return { skipped: true, reason: 'prompt_failed' };
-    }
-
-    const messages = [
-      { role: 'user', content: prompt }
-    ];
-
-    console.log('[生图演化] 开始API调用...');
-    console.log('[生图演化] Prompt:', prompt);
-
-    // 调用 API（支持备用API配置 + 重试）
-    const retryDelay = Number.isFinite(config.retryDelay) ? Math.max(0, config.retryDelay) : 1000;
-    const maxApiRetry = Number.isFinite(config.retryCount) ? Math.max(0, config.retryCount) : 2;
-    const _imgApiConfigs = getApiConfigsToTry(config);
-    let _imgApiErr = null;
-    let response = null;
-
-    for (let _imgci = 0; _imgci < _imgApiConfigs.length; _imgci++) {
-      const _imgCurCfg = _imgApiConfigs[_imgci];
-      let _apiRetryCount = 0;
-
-      while (true) {
-        try {
-          response = await frFeatureChat('CULTIVATION_IMAGE_TAGGING_API_CONFIG_V1', undefined, 
-            _imgCurCfg.apiUrl,
-            _imgCurCfg.apiKey,
-            _imgCurCfg.apiModel,
-            messages,
-            signal
-          );
-
-
-          // 兼容“返回文本提示失败但未抛异常”的上游
-          ceThrowIfApiFailureText(response, '生图演化');
-          _imgApiErr = null;
-          break;
-        } catch (e) {
-          if (e && e.name === 'AbortError') throw e; // 用户取消，不切换备用
-          _imgApiErr = e;
-          if (_apiRetryCount < maxApiRetry) {
-            _apiRetryCount++;
-            const retryMsg = `[生图演化] API请求失败，重试 (${_apiRetryCount}/${maxApiRetry})`;
-            console.warn(retryMsg, e);
-            if (typeof showDanmaku === 'function') showDanmaku(retryMsg, 'warning');
-            if (retryDelay > 0) await new Promise(r => setTimeout(r, retryDelay));
-            continue;
-          }
-          break;
-        }
-      }
-
-      if (!_imgApiErr && response) break;
-      if (_imgci < _imgApiConfigs.length - 1) {
-        if (typeof showDanmaku === 'function') showDanmaku(`生图演化：API ${_imgci + 1} 失败，切换备用 ${_imgci + 2}`, 'warning');
-      }
-    }
-    if (_imgApiErr) throw _imgApiErr;
-    if (!response || typeof response !== 'string') {
-      throw new Error('[生图演化] 未获得有效响应');
-    }
-
-    console.log('[生图演化] API返回:', response);
-
-    // 解析响应
+    const archiveName = options.archiveName || currentArchiveName;
+    const archive = options.archive || (archiveName ? await db.archives.get(archiveName) : null);
+    const candidates = await ceIndependentStoryImageCandidates(archive,config);
+    const prompt = buildImageEvolutionPrompt({ ...options,config,referenceCandidates:candidates });
+    if (!prompt) return {error:'未找到正文分镜模板'};
+    const messages = [{role:'user',content:prompt}];
+    const route = existing || {};
+    const key = frApiRoutes(routeKey)?.length ? routeKey : CONCURRENT_EVOLUTION_CONFIG_KEY;
+    const response = await frFeatureChat(key,undefined,route.apiUrl,route.apiKey,route.apiModel,messages,signal);
+    ceThrowIfApiFailureText(response,'正文分镜');
     const parsed = parseImageEvolutionResponse(response);
-
-    if (parsed.error) {
-      console.warn('[生图演化] 解析失败:', parsed.error);
-      return { skipped: false, error: parsed.error, rawResponse: response };
-    }
-
-    const normalizedPromptData = ceNormalizeImagePromptsForGrid(
-      parsed.imagePrompts,
-      window._ceImageEvolutionCount
-    );
-    if (!normalizedPromptData.exact) {
-      const msg = `正文配图数量不足：期望 ${normalizedPromptData.expected} 条，实际 ${normalizedPromptData.prompts.length} 条`;
-      console.warn('[生图演化] ' + msg);
-      return {
-        skipped: false,
-        error: msg,
-        thinking: parsed.thinking,
-        col19Data: parsed.col19Data,
-        imagePrompts: normalizedPromptData.prompts,
-        rawResponse: response
-      };
-    }
-
-    if (normalizedPromptData.trimmed) {
-      console.warn(
-        `[生图演化] 配图提示词超出目标数量，已截断为 ${normalizedPromptData.expected} 条`
-      );
-    }
-
-    console.log('[生图演化] 解析结果:',
-      '列19数据:', parsed.col19Data.length, '条,',
-      '正文提示词:', normalizedPromptData.prompts.length, '条');
-
-    // 存储结果（本阶段只打印到控制台，不写入 state）
-    const result = {
-      skipped: false,
-      thinking: parsed.thinking,
-      col19Data: parsed.col19Data,
-      imagePrompts: normalizedPromptData.prompts,
-      rawResponse: response
-    };
-
-    window.lastImageEvolutionResult = result;
-
-    console.log('[生图演化] ========== 生图演化阶段完成 ==========');
-    return result;
-
-  } catch (e) {
-    console.error('[生图演化] 执行异常:', e);
-    window.lastImageEvolutionResult = null;
-    return { skipped: false, error: e.message };
-  } finally {
-    closeImageEvolutionDanmakuStatus();
-  }
+    parsed.imagePrompts = parsed.imagePrompts.slice(0,ceIndependentStoryImageCount(config));
+    return parsed;
+  } catch (error) { return {error:error?.message || String(error)}; }
 }
 
 function ceIsMiscEvolutionOp(op) {
@@ -61830,7 +61138,7 @@ function ceBuildOriginalTimelineItemOperationSignature(op) {
     case 'transferItem':
       return ['transferItem', from, to, itemKey, String(op.quantity || '')].filter(Boolean).join('|');
     case 'transferSpiritStones':
-      return ['transferSpiritStones', from, to, String(op.amount || 0)].join('|');
+      return ['transferSpiritStones', from, to, frSpiritStoneGrade(op.grade ?? op.品级), String(op.amount || 0),op.toGrade||'',op.receivedAmount||''].join('|');
     case 'consumeItem':
     case 'destroyItem':
     case 'equipItem':
@@ -62131,7 +61439,7 @@ async function ceExecuteItemOperationsWithUi(operations, options = {}) {
     return ceBuildEmptyItemExecutionResult();
   }
 
-  const executedOps = await executeItemOperations(safeOperations, {npcLoadoutIds:opts.npcLoadoutIds});
+  const executedOps = await executeItemOperations(safeOperations, {npcLoadoutIds:opts.npcLoadoutIds,techniqueStory:opts.techniqueStory});
   if (frStrict) frAssertCanonCommit();
   const successCount = executedOps.filter(item => item && item.success).length;
   const failCount = executedOps.filter(item => !item || !item.success).length;
@@ -63870,10 +63178,10 @@ function parseItemManagementCommands(commandsString) {
     return { operations, errorMessages };
   }
 
-  const commandRegex = /(createItem|transferItem|transferSpiritStones|consumeItem|destroyItem|equipItem|unequipItem|refreshItemData|updateItemQuantity)\s*\(/g;
+  const commandRegex = /(createItem|transferItem|transferSpiritStones|灵石变动|consumeItem|destroyItem|equipItem|unequipItem|refreshItemData|updateItemQuantity)\s*\(/g;
   let match;
   while ((match = commandRegex.exec(cleaned)) !== null) {
-    const command = match[1];
+    const command = match[1]==='灵石变动' ? 'transferSpiritStones' : match[1];
     const startIndex = match.index + match[0].length;
     const endIndex = findMatchingParen(cleaned, startIndex);
     if (endIndex === -1) {
@@ -63924,7 +63232,7 @@ function parseItemManagementResponse(responseText) {
     .replace(/<\/??upstore>/ig, ' ')
     .replace(/```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```/g, '$1')
     .trim();
-  if (/(createItem|transferItem|transferSpiritStones|consumeItem|destroyItem|equipItem|unequipItem|refreshItemData|updateItemQuantity)\s*\(/.test(directCommandText)) {
+  if (/(createItem|transferItem|transferSpiritStones|灵石变动|consumeItem|destroyItem|equipItem|unequipItem|refreshItemData|updateItemQuantity)\s*\(/.test(directCommandText)) {
     const { operations, errorMessages } = parseItemManagementCommands(directCommandText);
     if (errorMessages.length > 0) {
       const summary = errorMessages.map(e => e.details || e.title).filter(Boolean).join('; ');
@@ -63971,7 +63279,7 @@ function parseItemManagementResponse(responseText) {
 
   const thinking = parsed.thinking || '';
   const noOperations = parsed.noOperations === true;
-  let operations = parsed.operations;
+  let operations = Array.isArray(parsed.operations) ? parsed.operations.map(op=>op?.type==='灵石变动' ? {...op,type:'transferSpiritStones'} : op) : parsed.operations;
 
   const allowedTypes=new Set(['createItem','transferItem','transferSpiritStones','consumeItem','destroyItem','equipItem',
     'unequipItem','refreshItemData','updateItemQuantity']);
@@ -64792,6 +64100,34 @@ function unequipIfEquipped(charId, itemId) {
 /**
  * 执行创建物品操作
  */
+function frCashItemName(item) {
+  const name = String(item?.['1'] || item?.name || '').replace(/<[^>]*>/g,'').trim();
+  if (/^(?:铜钱|铜板|制钱|铜板钱|铜子儿|大钱)$/.test(name)) return '铜钱';
+  if (/^(?:碎银|碎银子)$/.test(name)) return '碎银';
+  if (/^(?:银两|金锭|银锭|银票|钱票|纸钞|银元|铜元)$/.test(name)) return name;
+  return '';
+}
+
+function frMergeCashItemStack(owner, item) {
+  const name = frCashItemName(item);
+  const quantity = Number(item['5'] ?? item.quantity ?? 1);
+  if (!name || !Number.isSafeInteger(quantity) || quantity<1 || item.quantityDetail || /票|钞|锭/.test(name)) return '';
+  const row = owner==='B1' ? null : getItemManagementCharacterRow(owner);
+  if (owner!=='B1'&&!row) return '';
+  const remarks = row ? parseRemarksString(row['9'] || '') : null;
+  const inventory = row ? parseNestedJsonString(remarks.inventory,[]) : Object.values(currentState?.['1'] || {});
+  if (!Array.isArray(inventory)) return '';
+  const stack = inventory.find(existing=>frCashItemName(existing)===name && !existing.quantityDetail &&
+    (String(existing['1'] || '').trim()===String(item['1'] || '').trim() || name==='铜钱'));
+  const id = getManagedItemId(stack);
+  const sum = Number(stack?.['5'] ?? stack?.quantity) + quantity;
+  if (!id || !Number.isSafeInteger(sum) || sum<quantity) return '';
+  stack['5'] = String(sum);
+  if (Object.hasOwn(stack,'quantity')) stack.quantity = sum;
+  if (row) { remarks.inventory=inventory; row['9']=serializeRemarksObject(remarks); }
+  return id;
+}
+
 function executeCreateItem(op) {
   const owner = op.owner;
   const itemData = op.item && typeof op.item==='object' ? ceRemoveRetiredItemColumns({...op.item},op.item['2'] || op.item.type) : op.item;
@@ -64812,6 +64148,12 @@ function executeCreateItem(op) {
   // 确保至少有 0, 1, 2 字段
   if (!itemData['1']) {
     return { success: false, error: '物品缺少名称(字段1)', op };
+  }
+  if (frCashItemName(itemData)) {
+    itemData['2'] = '杂物';
+    if (itemData['5']==null&&Number.isSafeInteger(Number(op.quantity))&&Number(op.quantity)>0) itemData['5']=String(op.quantity);
+    const stackId = frMergeCashItemStack(owner,itemData);
+    if (stackId) return {success:true,itemId:stackId,itemName:itemData['1'],owner};
   }
 
   // 自动生成或修复 ID
@@ -64992,6 +64334,9 @@ function executeTransferItem(op) {
   }
 
   // 3. 生成新 ID（目标方）
+  const targetCashItem = {...sourceItem,'5':String(transferQty)};
+  const stackedCashId = frMergeCashItemStack(to,targetCashItem);
+  if (stackedCashId) return {success:true,oldId:itemId,newId:stackedCashId,itemName:getManagedItemName(sourceItem),from,to,quantity:transferQty,remaining:sourceRemaining};
   const newId = getNextAvailableItemId(to);
   const oldId = sourceItem['0'] || sourceItem.id;
   const targetItem = JSON.parse(JSON.stringify(sourceItem));
@@ -65040,62 +64385,30 @@ function executeTransferItem(op) {
  * 执行灵石变动操作
  */
 function executeTransferSpiritStones(op) {
-  const from = op.from;
-  const to = op.to;
-  const amount = parseInt(op.amount, 10);
-
-  if (isNaN(amount) || amount <= 0) {
-    return { success: false, error: '灵石数量无效: ' + op.amount, op };
+  const {from,to} = op;
+  const amount = Number(op.amount);
+  const grade = frSpiritStoneGrade(op.grade ?? op.品级);
+  const toGrade = op.toGrade == null ? grade : frSpiritStoneGrade(op.toGrade);
+  const received = op.receivedAmount == null ? amount : Number(op.receivedAmount);
+  const exchange = from && from===to && grade!==toGrade;
+  if ((!from && !to) || !grade || !toGrade || !Number.isSafeInteger(amount) || amount<=0 ||
+      !Number.isSafeInteger(received) || received<=0 || (from && from===to && !exchange) ||
+      (!exchange && (grade!==toGrade || amount!==received))) {
+    return {success:false,error:'灵石的品级、方向或数量无效',op};
   }
-
-  // 预验证双方存在性（原子性保证：先验证再修改）
-  const fromRow = from ? getItemManagementCharacterRow(from) : null;
-  const toRow = to ? getItemManagementCharacterRow(to) : null;
-
-  if (from && !fromRow) {
-    console.warn('[物品管理] 灵石源角色不存在:', from);
-    return { success: false, error: '源角色不存在: ' + from, op };
-  }
-  if (to && !toRow) {
-    console.warn('[物品管理] 灵石目标角色不存在:', to);
-    return { success: false, error: '目标角色不存在: ' + to, op };
-  }
-
-  let sourceRemaining = null;
-  let targetNew = null;
-
-  const normalizeSpiritStones = (rawValue, ownerId) => {
-    const parsed = parseInt(rawValue, 10);
-    if (isNaN(parsed)) {
-      console.warn('[物品管理] 灵石值异常，已按0处理:', ownerId, rawValue);
-      return 0;
-    }
-    return parsed;
-  };
-
-  // 扣减源
-  if (fromRow) {
-    const currentStones = normalizeSpiritStones(fromRow['26'], from);
-    if (currentStones < amount) {
-      console.warn('[物品管理] 灵石不足:', from, '当前:', currentStones, '需要:', amount);
-      fromRow['26'] = '0';
-      sourceRemaining = 0;
-    } else {
-      fromRow['26'] = String(currentStones - amount);
-      sourceRemaining = currentStones - amount;
-    }
-    console.log('[物品管理] 灵石扣减:', from, currentStones, '->', fromRow['26']);
-  }
-
-  // 增加目标
-  if (toRow) {
-    const currentStones = normalizeSpiritStones(toRow['26'], to);
-    toRow['26'] = String(currentStones + amount);
-    targetNew = currentStones + amount;
-    console.log('[物品管理] 灵石增加:', to, currentStones, '->', toRow['26']);
-  }
-
-  return { success: true, from, to, amount, sourceRemaining, targetNew };
+  const fromRow = from && getItemManagementCharacterRow(from);
+  const toRow = to && getItemManagementCharacterRow(to);
+  if ((from && !fromRow) || (to && !toRow)) return {success:false,error:'灵石结算角色不存在',op};
+  const source = fromRow && frReadSpiritStoneWallet(fromRow);
+  const target = exchange ? source : toRow && frReadSpiritStoneWallet(toRow);
+  if (source && source[grade]<amount) return {success:false,error:grade+'灵石余额不足',op};
+  if (target && !Number.isSafeInteger(target[toGrade]+received)) return {success:false,error:'灵石余额超出可记账范围',op};
+  if (source) source[grade]-=amount;
+  if (target) target[toGrade]+=received;
+  if (fromRow) frWriteSpiritStoneWallet(fromRow,source);
+  if (toRow && toRow!==fromRow) frWriteSpiritStoneWallet(toRow,target);
+  return {success:true,from,to,grade,toGrade,amount,receivedAmount:received,
+    sourceRemaining:source ? source[grade] : null,targetNew:target ? target[toGrade] : null};
 }
 
 /**
@@ -65232,7 +64545,7 @@ function executeDestroyItem(op) {
 /**
  * 执行装备物品操作
  */
-function executeEquipItem(op){
+function executeEquipItem(op,selection){
  const {owner,slot,itemId}=op;if(!owner||!slot||!itemId)return {success:false,error:'装备参数不完整',op};
  const row=getItemManagementCharacterRow(owner);if(!row)return {success:false,error:'角色不存在: '+owner,op};
  const p=FrEquipmentRuntime.project(row),bag=owner==='B1'?Object.values(currentState['1']||{}):p.remarks.inventory;
@@ -65257,7 +64570,7 @@ function executeEquipItem(op){
  if(!inBag&&equippedIndex>=0&&!allowed.includes(equippedIndex))return skipped('已装备物品快照与原槽位不匹配，保留原装备');
  if(specified!==undefined&&(!Number.isInteger(specified)||specified<0||specified>=slots.length||!allowed.includes(specified)))return skipped('物品与命名槽位不匹配');
  let index=specified!==undefined?specified:equippedIndex>=0?equippedIndex:allowed.find(i=>!arr[i]);
- const compare=old=>frContainerCore()?.compareNpcEquipment(itemData,old,row)??null;
+ const compare=old=>frContainerCore()?.compareNpcEquipment(itemData,old,row,selection)??null;
  if(index===undefined){
    const measured=owner!=='B1'&&slot!=='technique'
      ? allowed.map(i=>({i,gain:compare(arr[i])})).filter(option=>option.gain!==null).sort((a,b)=>b.gain-a.gain) : [];
@@ -65268,8 +64581,10 @@ function executeEquipItem(op){
  const old=arr[index];
  if(owner!=='B1'&&getManagedItemId(old)!==itemId){
    const effective=compare(old);
-   if(typeof effective==='number'&&effective<=0)return skipped(old?'现有装备的实际收益不低于候选装备':'候选装备当前没有实际加成');
-   if(effective==null&&old&&ceScoreEquipmentCandidate(itemData,slot)<=ceScoreEquipmentCandidate(old,slot))return skipped('已有更优装备');
+   const reasonedTechnique=slot==='technique'&&old&&typeof op.reason==='string'&&op.reason.trim();
+   if(typeof effective==='number'&&effective<=0&&!(effective===0&&reasonedTechnique))
+     return skipped(old?'现有装备的实际收益不低于候选装备':'候选装备当前没有实际加成');
+   if(effective==null&&old&&!reasonedTechnique&&ceScoreEquipmentCandidate(itemData,slot)<=ceScoreEquipmentCandidate(old,slot))return skipped('已有更优装备');
  }
  if(slot==='technique')ceUpdateTechniqueItemCurrentEffect(itemData,ceGetCharacterRealmText(row));
  FrEquipmentRuntime.adopt(row,p,currentState);FrEquipmentRuntime.write(currentState,row,slot,index,itemData);ceSyncCharacterTechniqueEffects(owner,row);
@@ -65537,7 +64852,8 @@ function reorderItemOperations(operations) {
  * @param {Array} operations - 操作数组
  * @returns {Array} 执行结果数组
  */
-async function executeItemOperations(operations, {npcLoadoutIds=[]}={}) {
+async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStory='',preserveTechnique=false}={}) {
+  const selection=owner=>typeof techniqueStory==='string'?{techniqueStory}:{techniqueStory:techniqueStory?.[owner],actorScoped:true};
   const frStrict = typeof frInCanonCommit === 'function' && frInCanonCommit();
   if (frStrict) frAssertCanonCommit();
   const results = [];
@@ -65612,7 +64928,7 @@ async function executeItemOperations(operations, {npcLoadoutIds=[]}={}) {
           result = executeDestroyItem(op);
           break;
         case 'equipItem':
-          result = executeEquipItem(op);
+          result = executeEquipItem(op,selection(op.owner));
           break;
         case 'unequipItem':
           result = executeUnequipItem(op);
@@ -65655,9 +64971,9 @@ async function executeItemOperations(operations, {npcLoadoutIds=[]}={}) {
     const bag=ceParseItemManagementNested(loadout.remarks.inventory,[]);
     const blocked=new Set(sortedOperations.filter(op=>op.owner===cid&&op.type==='unequipItem').map(op=>op.itemId));
     for(const {slotKey,index,item} of frContainerCore()?.planNpcLoadout(bag.filter(item=>
-      !blocked.has(getManagedItemId(item))&&(Number(item?.['5']??item?.quantity)===1||
-        FrEquipmentRuntime.core().isTreasureSet(item))),loadout.equipment,row)||[]){
-      const settled=executeEquipItem({owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)});
+      !blocked.has(getManagedItemId(item))&&(!preserveTechnique||FrEquipmentRuntime.core().classifyItem(item).slotKey!=='technique')&&
+      (Number(item?.['5']??item?.quantity)===1||FrEquipmentRuntime.core().isTreasureSet(item))),loadout.equipment,row,selection(cid))||[]){
+      const settled=executeEquipItem({owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)},selection(cid));
       if(settled.success&&!settled.skipped){
         affectedCharIds.add(cid);
         if(!frStrict)results.push({...settled,type:'equipItem',operation:{type:'equipItem',owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)},reason:'已持有的可用装备中自动择优'});
@@ -66022,7 +65338,8 @@ async function requestItemManagementPhase(options = {}) {
     const itemExecutionResult = await ceExecuteItemOperationsWithUi(operations, {
       syncState: true,
       renderInventory: true,
-      npcLoadoutIds
+      npcLoadoutIds,
+      techniqueStory:storyText
     });
 
     const successCount = itemExecutionResult.successCount;
@@ -66087,6 +65404,7 @@ async function buildMergedEvolutionPrompt(options = {}) {
   // 只展开预设自带的文字模板；未知引用留给统一残留检查，不加载代码或外部内容。
   for (let pass = 0; pass < 4; pass++) template = template.replace(/\{\{template:([^}]+)\}\}/g, (match, key) => typeof preset.contentTemplates?.[key] === 'string' ? preset.contentTemplates[key] : match);
   if (targets.length) template += '\n\n' + CE_CORE['character-status'].CHARACTER_STATUS_RULE;
+  if (!options.sharedOnly && targets.some(target=>target.type==='player' || target.type==='npc')) template += '\n\n' + frPortraitVariableRule;
   const ids = options.canonVariables ? {} : await buildEntryCharacterIdContext();
   const unavailable = '当前前端未提供此项，禁止推断、创建对应状态或据此改写角色。';
   const independent = new Set(config.mergedIndependentTargetIds || []);
@@ -67004,12 +66322,9 @@ async function runConcurrentEvolution(options = {}) {
     }
 
     const shouldRunItemManagement = !!(preset.prompts && preset.prompts.item_management && preset.prompts.item_management.enabled !== false);
-    const shouldRunImageEvolution = !!(config.enableImageEvolution === true
-      && preset.prompts?.image_evolution?.enabled !== false);
 
     let itemManagementResult = null;
     let miscEvolutionResult = null;
-    let imageEvolutionResult = null;
 
     if (shouldRunItemManagement && ceStageSelected('items')) {
       await frCeStage('items');
@@ -67297,54 +66612,9 @@ async function runConcurrentEvolution(options = {}) {
     await frCeStage(null);
     throwIfAborted();
 
-    // 8.2 杂项演化后顺序执行生图演化
-    if (shouldRunImageEvolution && !ceReplaySession) {
-      try {
-        imageEvolutionResult = await requestImageEvolutionPhase({
-          storyText: sharedContext.storyText,
-          userInput: sharedContext.userInput,
-          currentTime: sharedContext.currentTime,
-          currentLocation: sharedContext.currentLocation,
-          evolutionTargets: targets,
-          preset: preset,
-          signal: runtimeAbortSignal
-        });
-        window.lastImageEvolutionResult = imageEvolutionResult;
-        if (imageEvolutionResult && !imageEvolutionResult.skipped && !imageEvolutionResult.error) {
-          console.log('[生图演化] ========== 结果 ==========');
-          console.log('[生图演化] 列19数据:', imageEvolutionResult.col19Data);
-          console.log('[生图演化] 正文提示词:', imageEvolutionResult.imagePrompts);
-          try {
-            const imageProvider = ceGetImageGenerationProvider(config);
-            if (imageProvider === 'commercial_model') {
-              void ceGenerateAndInsertImagesToLatestLog(
-                imageEvolutionResult.imagePrompts,
-                config,
-                runtimeAbortSignal
-              );
-            } else {
-              void ceInsertImagePromptsToLatestLog(imageEvolutionResult.imagePrompts);
-            }
-          } catch (e) {
-            console.warn('[生图演化] 正文插入失败:', e);
-          }
-          try {
-            ceQueueCol19Updates(imageEvolutionResult.col19Data, { targetMap });
-          } catch (e) {
-            console.warn('[生图演化] 列19队列写入失败:', e);
-          }
-        }
-      } catch (e) {
-        console.warn('[生图演化] 执行失败:', e);
-        window.lastImageEvolutionResult = { skipped: false, error: e?.message || String(e) };
-      }
-    }
-
-    throwIfAborted();
-
     if(ceReplaySession){
       const oldImage=ceReplaySession.backup.memory.windows?.lastImageEvolutionResult?.value;
-      if(oldImage&&!oldImage.error){window.lastImageEvolutionResult=structuredClone(oldImage);ceQueueCol19Updates(oldImage.col19Data,{targetMap});}
+      if (oldImage && !oldImage.error) window.lastImageEvolutionResult = structuredClone(oldImage);
     }
     // 应用生图列19（若目标已完成演化但未在队列中合并）
     try {
@@ -72844,7 +72114,7 @@ ${corePrincipleText}
 ## 输出要求
 
 - 除第0列（ID）与第35列（经历链）外，其他首轮应有信息都要按“正常新NPC首轮生成”标准一次性补齐
-- 第9列不能再留空：必须在保留系统原有锚点/来源键的前提下，用 \`add("角色ID", {"9": {...}})\` 补齐基础档案字段，至少写出 **年龄、寿元、isBonded**；必要时把灵根、善恶值、修为进度等备注类基础信息一并写入
+- 第9列不能再留空：必须在保留系统原有锚点/来源键的前提下，用 \`add("角色ID", {"9": {...}})\` 补齐基础档案字段，至少写出 **年龄、寿元、isBonded**；必要时把灵根、修为进度等备注类基础信息一并写入
 - 若已有字段内容只是后台预填、过于粗略，或不符合正文/原著材料，应直接在同一ID上用 \`add\` 覆盖成完整版本
 - 需要详细属性时，继续使用 \`updateAttribute\` 指令
 - 若角色当前不在场，也要给出完整且自然的人物信息；“是否在场”只影响当前状态与位置，不影响首轮人物信息的完整生成
@@ -73548,128 +72818,7 @@ async function testOriginalTimelineEvolution() {
 
 // ===== 测试生图演化函数 =====
 
-async function testImageEvolution() {
-  const config = await loadConcurrentEvolutionConfig();
-
-  if (!config.apiUrl || !config.apiKey || !config.apiModel) {
-    await showCustomAlert('请先配置API。', '测试失败');
-    return;
-  }
-
-  const preset = await getActiveConcurrentEvolutionPreset();
-
-  let storyText = typeof lastAiStoryText !== 'undefined' && lastAiStoryText ? lastAiStoryText : '';
-  if (!storyText) {
-    storyText = await getLastStoryFromArchive();
-  }
-
-  const sharedContext = buildSharedEvolutionContext(storyText);
-
-  const target = {
-    id: 'IMAGE_EVOLUTION',
-    type: 'image_evolution',
-    name: '生图演化',
-    data: {},
-    biography: null
-  };
-
-  ceTestCurrentConfig = config;
-  ceTestCurrentTarget = target;
-
-  const modeForTest = ceNormalizeImagePromptMode(config.imagePromptMode);
-  const resolvedImageTemplate = ceResolveImagePromptTemplate(config, preset, modeForTest);
-  if (resolvedImageTemplate) {
-    ceTestCurrentSections = [{
-      id: 'image-template',
-      name: ceGetImagePromptTemplateOverride(config, modeForTest) ? '生图模板（自定义覆盖）' : '生图模板（预设默认）',
-      content: resolvedImageTemplate,
-      enabled: true,
-      role: 'system'
-    }];
-  } else {
-    const imageKey = 'image_evolution';
-    ceTestCurrentSections = parseRulesPreset(preset, imageKey);
-    if (ceTestCurrentSections.length === 0 &&
-        preset.prompts &&
-        preset.prompts.image_evolution &&
-        preset.prompts.image_evolution.systemPrompt) {
-      ceTestCurrentSections = [{
-        id: 'main-prompt',
-        name: '主提示词',
-        content: preset.prompts.image_evolution.systemPrompt,
-        enabled: true,
-        role: 'system'
-      }];
-    }
-  }
-
-  if (ceTestCurrentSections.length === 0) {
-    await showCustomAlert('当前预设没有生图演化规则，请先配置。', '测试失败');
-    return;
-  }
-
-  ceTestSectionEnabledMap = {};
-  ceTestCurrentSections.forEach(s => {
-    ceTestSectionEnabledMap[s.id] = s.enabled !== false;
-  });
-
-  ceTestPlaceholderValues = buildPlaceholderValues(target, sharedContext);
-
-  const rawStory = sharedContext.storyText || '（无正文）';
-  ceTestPlaceholderValues['story_text'] = rawStory.replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n').trim();
-  ceTestPlaceholderValues['onscreen_characters_full'] = buildOnscreenCharactersFullSummary();
-
-  let newCharInfo = '';
-  if (window.lastEntryDecisionResult) {
-    const entries = window.lastEntryDecisionResult.entries || [];
-    const newEntries = entries.filter(e => e.type === 'new');
-    if (newEntries.length > 0) {
-      newCharInfo = newEntries.map(e => {
-        return 'ID: ' + e.id + ', 名称: ' + (e.name || '未知');
-      }).join('\n');
-    }
-  }
-  ceTestPlaceholderValues['entry_decision_new_characters'] = newCharInfo || '（无新登场角色）';
-
-  const imgCount = ceNormalizeImageEvolutionCount(config.imageEvolutionCount);
-  ceTestPlaceholderValues['image_count'] = String(imgCount);
-  ceTestPlaceholderValues['image_grid_size'] = String(ceGetImageGridSizeByCount(imgCount));
-  ceTestPlaceholderValues['image_grid_mode'] = ceGetImageGridModeByCount(imgCount);
-  ceTestPlaceholderValues['image_prompt_mode'] = ceNormalizeImagePromptMode(config.imagePromptMode);
-  const styleProfile = ceGetImageStyleProfile(config, config.imageStyleMode);
-  ceTestPlaceholderValues['image_style_mode'] = styleProfile.key;
-  ceTestPlaceholderValues['image_style_name'] = styleProfile.label;
-  ceTestPlaceholderValues['image_style_description'] = styleProfile.description;
-  ceTestPlaceholderValues['image_style_prompt_guide'] = `画风名称：${styleProfile.label}\n画风描述词：${styleProfile.description}`;
-
-  const overlay = document.getElementById('concurrent-evolution-test-overlay');
-  const titleEl = document.getElementById('ce-test-title');
-  const charNameEl = document.getElementById('ce-test-char-name');
-  const responseEl = document.getElementById('ce-test-response-content');
-  const sendBtn = document.getElementById('ce-test-send-btn');
-  const replaceCheckbox = document.getElementById('ce-test-replace-placeholders');
-
-  if (!overlay || !charNameEl || !responseEl || !sendBtn) {
-    console.error('[并发演化] 测试modal元素未找到');
-    await showCustomAlert('测试面板元素未找到，请检查HTML是否正确注入。', '变量演化');
-    return;
-  }
-
-  if (titleEl) titleEl.textContent = '测试生图演化';
-  charNameEl.textContent = target.name;
-  responseEl.textContent = '等待发送...';
-  responseEl.classList.add('loading');
-  sendBtn.disabled = false;
-  sendBtn.textContent = '发送测试';
-
-  if (replaceCheckbox) {
-    replaceCheckbox.checked = true;
-  }
-
-  renderSectionList(ceTestCurrentSections, ceTestSectionEnabledMap);
-  refreshPromptPreview();
-  showConcurrentEvolutionOverlay(overlay);
-}
+async function testImageEvolution() { await openConcurrentEvolutionImagePromptModal(); }
 
 // 发送测试请求
 async function sendTestRequest() {
@@ -73828,429 +72977,156 @@ function ceRenderApiModelOptions(selectEl, models, selectedModel, placeholderTex
   }
 }
 
-function ceUpdateCommercialPromptModeWarning(overlay) {
-  if (!overlay) return;
-  const warningEl = overlay.querySelector('#concurrent-evo-commercial-mode-warning');
-  const modeEl = overlay.querySelector('#concurrent-evo-image-prompt-mode');
-  const providerEl = overlay.querySelector('input[name="concurrent-evo-image-generator"]:checked');
-  if (!warningEl || !modeEl) return;
-  const provider = ceNormalizeImageGenerationProvider(providerEl ? providerEl.value : '');
-  const mode = ceNormalizeImagePromptMode(modeEl.value);
-  warningEl.style.display = (provider === 'commercial_model' && mode !== 'natural_language') ? 'block' : 'none';
+function openImageApiLibrary() {
+  const panel = document.getElementById('unified-api-settings-overlay');
+  panel.style.zIndex = String(Math.max(2000,...Array.from(document.querySelectorAll('.overlay.visible'),
+    overlay=>Number.parseInt(getComputedStyle(overlay).zIndex,10)||0))+1);
+  document.getElementById('open-unified-api-settings-btn').click();
 }
 
 async function openConcurrentEvolutionImagePromptModal() {
   const overlay = document.getElementById('concurrent-evo-image-prompt-overlay');
-  if (!overlay) {
-    await showCustomAlert('未找到生图提示词设置面板。', '变量演化');
-    return;
-  }
-
+  const field = id => overlay.querySelector('#' + id);
   const config = await loadConcurrentEvolutionConfig();
-  const preset = await getActiveConcurrentEvolutionPreset();
-  const mode = ceNormalizeImagePromptMode(config.imagePromptMode);
-  const provider = ceGetImageGenerationProvider(config);
-  const defaultsByMode = {
-    sd_keywords: ceExtractImageEvolutionTemplateFromPreset(preset, 'sd_keywords'),
-    natural_language: ceExtractImageEvolutionTemplateFromPreset(preset, 'natural_language')
-  };
-  const overridesByMode = {
-    sd_keywords: ceGetImagePromptTemplateOverride(config, 'sd_keywords'),
-    natural_language: ceGetImagePromptTemplateOverride(config, 'natural_language')
-  };
-  const templatesByMode = {
-    sd_keywords: overridesByMode.sd_keywords || defaultsByMode.sd_keywords || '',
-    natural_language: overridesByMode.natural_language || defaultsByMode.natural_language || ''
-  };
-
-  const modeEl = document.getElementById('concurrent-evo-image-prompt-mode');
-  const styleEl = document.getElementById('concurrent-evo-image-style-mode');
-  const styleNameInputEl = document.getElementById('concurrent-evo-image-style-name-input');
-  const styleDescriptionEl = document.getElementById('concurrent-evo-image-style-description');
-  const styleAddBtn = document.getElementById('concurrent-evo-image-style-add-btn');
-  const styleRestoreBtn = document.getElementById('concurrent-evo-image-style-restore-btn');
-  const templateEl = document.getElementById('concurrent-evo-image-prompt-template');
-  const apiUrlEl = document.getElementById('concurrent-evo-image-api-url');
-  const apiKeyEl = document.getElementById('concurrent-evo-image-api-key');
-  const apiModelEl = document.getElementById('concurrent-evo-image-api-model');
-  const apiResolutionEl = document.getElementById('concurrent-evo-image-api-resolution');
-  const apiAspectRatioEl = document.getElementById('concurrent-evo-image-api-aspect-ratio');
-  const providerEls = overlay.querySelectorAll('input[name="concurrent-evo-image-generator"]');
-
-  if (modeEl) modeEl.value = mode;
-  const styleProfiles = ceGetImageStyleProfiles(config);
-  const selectedStyleKey = ceNormalizeImageStyleMode(config.imageStyleMode, { imageStyleProfiles: styleProfiles });
-  overlay._ceImageStyleProfiles = styleProfiles;
-  overlay._ceImageStyleCurrentKey = selectedStyleKey;
-  if (styleEl) {
-    ceRenderImageStyleModeSelect(styleEl, styleProfiles, selectedStyleKey);
+  const defaults = frImageMaterials();
+  const lib = CE_CORE['api-library'];
+  const tabButtons = [...overlay.querySelectorAll('[data-image-tab]')];
+  function selectTab(name) {
+    for (const button of tabButtons) button.setAttribute('aria-pressed', String(button.dataset.imageTab === name));
+    for (const pane of overlay.querySelectorAll('[data-image-pane]')) pane.hidden = pane.dataset.imagePane !== name;
+    overlay.querySelector('.fr-image-body').scrollTop = 0;
   }
-  if (styleDescriptionEl) {
+  for (const button of tabButtons) button.onclick = () => selectTab(button.dataset.imageTab);
+  selectTab('display');
+  field('ce-image-enable-story').checked = config.enableImageEvolution === true;
+  for (const input of overlay.querySelectorAll('[data-story-image-option]')) {
+    input.checked = config[input.dataset.storyImageOption] ?? input.hasAttribute('data-default-on');
+  }
+  const mode = ['sequential','grid'].includes(config.imageStoryMode) ? config.imageStoryMode : 'parallel';
+  field('ce-story-mode-' + mode).checked = true;
+  const size = field('ce-story-image-size'), custom = field('ce-story-size-custom');
+  size.replaceChildren(new Option('跟随生图线路',''), new Option('自动','auto'),
+    ...lib.imageSizes.map(value=>new Option(value.replace('x',' × '),value)), new Option('自定义…','custom'));
+  const savedSize = config.imageStorySize || '';
+  size.value = ['', 'auto', ...lib.imageSizes].includes(savedSize) ? savedSize : 'custom';
+  custom.value = size.value === 'custom' ? savedSize : '';
+  size.onchange = () => { field('ce-story-size-custom-wrap').hidden = size.value !== 'custom'; };
+  size.onchange();
+  function readStorySize() {
+    if (size.value !== 'custom') return size.value;
+    const value = lib.normalizeImageRequestProfile({size:custom.value}).size;
+    if (!value || value === 'auto') throw new Error('请输入宽度 × 高度，例如 1920x1280。');
+    return value;
+  }
+  overlay._readStoryImageSize = readStorySize;
+  field('ce-story-independent-count').value = ceIndependentStoryImageCount(config);
+  const storyTemplate = field('ce-story-independent-template');
+  const builtInTemplate = defaults.story || '';
+  storyTemplate.value = config.imageIndependentTemplate || builtInTemplate;
+  function updateStoryTemplateSource() {
+    const value = storyTemplate.value.trim();
+    field('ce-story-template-source').textContent = !value || value === builtInTemplate ? '内置模板' : '自定义模板';
+  }
+  storyTemplate.oninput = updateStoryTemplateSource;
+  updateStoryTemplateSource();
+  field('ce-image-reference-guide').value = config.imageReferenceGuide || defaults.storyReference || '';
+  field('ce-story-independent-reset').onclick = () => {
+    storyTemplate.value = builtInTemplate;
+    storyTemplate.scrollTop = 0;
+    updateStoryTemplateSource();
+  };
+  field('ce-story-reference-reset').onclick = () => { field('ce-image-reference-guide').value = defaults.storyReference || ''; };
+  frShowImageExamples(field('ce-story-image-example'), { story:'正文插图' });
+  lib.mountConsumerChain('FR_STORY_IMAGE_PLANNER_V1',field('ce-image-planning-routes'));
+  lib.mountConsumerChain(CONCURRENT_EVOLUTION_CONFIG_KEY,field('ce-image-routes'),'imageProviderConfigs.openai');
+  field('ce-open-image-api-library').onclick = openImageApiLibrary;
+  field('ce-image-open-portrait-btn').onclick = async () => {
+    hideConcurrentEvolutionOverlay(overlay);
+    await openPortraitGenModal(null,{fromImageSettings:true});
+  };
+  const test = field('ce-image-test-btn'), preview = field('ce-image-test-preview'), status = field('ce-image-test-status');
+  preview.hidden = true; preview.removeAttribute('src'); status.textContent = '';
+  test.onclick = async () => {
+    test.disabled = true; preview.hidden = true; status.textContent = '正在生成测试图…';
+    try {
+      const references = frImageReferencesWithExample('story',[]);
+      const prompt = _portraitAppendReferenceGuide('仙侠小说插图，薄雾漫过竹林石桥，清晨柔光，无文字。',references,'');
+      const result = await ceCallImageGeneration({ ...ceGetProviderImageApiConfig(await loadConcurrentEvolutionConfig(),'openai'),
+        provider:'openai',storySize:readStorySize() },
+        prompt,undefined,references);
+      preview.src = result; await preview.decode(); preview.hidden = false; status.textContent = '测试成功，收到有效图片。';
+    } catch (error) { status.textContent = '测试失败 · ' + error.message; }
+    finally { test.disabled = false; }
+  };
+  const style = field('concurrent-evo-image-style-mode'), styleName = field('concurrent-evo-image-style-name-input');
+  const profiles = ceGetImageStyleProfiles(config);
+  overlay._ceImageStyleProfiles = profiles;
+  overlay._ceImageStyleCurrentKey = '';
+  ceRenderImageStyleModeSelect(style,profiles,config.imageStyleMode);
+  ceSyncImageStyleDescriptionEditor(overlay);
+  field('concurrent-evo-image-style-description').oninput = () => ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
+  field('concurrent-evo-image-style-guide').oninput = () => ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
+  style.onchange = () => ceSyncImageStyleDescriptionEditor(overlay);
+  styleName.value = '';
+  field('concurrent-evo-image-style-add-btn').onclick = () => {
+    if (!styleName.value.trim()) return;
+    const added = ceAddCustomImageStyleProfile(overlay,styleName.value);
+    if (!added.ok) return;
+    ceRenderImageStyleModeSelect(style,overlay._ceImageStyleProfiles,added.key);
     ceSyncImageStyleDescriptionEditor(overlay);
-    styleDescriptionEl.oninput = () => {
-      ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
-    };
-  }
-  if (styleEl) {
-    styleEl.onchange = () => {
-      const previousKey = overlay._ceImageStyleCurrentKey || '';
-      ceSaveCurrentImageStyleDescriptionFromEditor(overlay, previousKey);
-      ceSyncImageStyleDescriptionEditor(overlay);
-    };
-  }
-  if (styleNameInputEl) {
-    styleNameInputEl.value = '';
-  }
-  if (styleAddBtn && styleEl && styleNameInputEl) {
-    styleAddBtn.onclick = async () => {
-      const inputName = String(styleNameInputEl.value || '').trim();
-      if (!inputName) {
-        if (typeof showCustomAlert === 'function') {
-          await showCustomAlert('请输入要新增的画风名称。', '生图提示词设置');
-        }
-        return;
-      }
-      ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
-      const added = ceAddCustomImageStyleProfile(overlay, inputName);
-      if (!added.ok) return;
-      const profiles = ceNormalizeImageStyleProfiles(overlay._ceImageStyleProfiles || {});
-      overlay._ceImageStyleProfiles = profiles;
-      ceRenderImageStyleModeSelect(styleEl, profiles, added.key);
-      ceSyncImageStyleDescriptionEditor(overlay);
-      styleNameInputEl.value = '';
-      if (typeof showDanmaku === 'function') {
-        showDanmaku(added.existed ? '画风已存在，已切换到该画风' : '已添加自定义画风', 'success');
-      }
-    };
-  }
-  if (styleRestoreBtn) {
-    styleRestoreBtn.onclick = () => {
-      ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
-      const styleSelectEl = overlay.querySelector('#concurrent-evo-image-style-mode');
-      const profiles = ceNormalizeImageStyleProfiles(overlay._ceImageStyleProfiles || {});
-      const styleKey = ceNormalizeImageStyleMode(styleSelectEl ? styleSelectEl.value : '', { imageStyleProfiles: profiles });
-      const profile = profiles[styleKey];
-      if (!profile) return;
-      profile.description = String(profile.defaultDescription || ceBuildDefaultImageStyleDescription(profile.label || styleKey));
-      profiles[styleKey] = profile;
-      overlay._ceImageStyleProfiles = profiles;
-      ceSyncImageStyleDescriptionEditor(overlay);
-      if (typeof showDanmaku === 'function') {
-        showDanmaku('已恢复当前画风默认描述词', 'success');
-      }
-    };
-  }
-  if (templateEl) templateEl.value = templatesByMode[mode] || '';
-
-  // === 多提供商生图配置加载 ===
-  const imageApiProvider = ceNormalizeImageApiProvider(config.imageApiProvider);
-  const providerConfigs = (config.imageProviderConfigs && typeof config.imageProviderConfigs === 'object')
-    ? JSON.parse(JSON.stringify(config.imageProviderConfigs))
-    : {};
-  overlay._ceImageProviderConfigs = providerConfigs;
-  const imageProviderSelectEl = overlay.querySelector('#concurrent-evo-image-api-provider');
-  if (imageProviderSelectEl) {
-    imageProviderSelectEl.value = imageApiProvider;
-  }
-  // 加载当前提供商的配置到表单
-  const curProviderCfg = ceGetProviderImageApiConfig(config, imageApiProvider);
-  const mountImageLibraryPicker = (providerKey) => {
-    if (!apiUrlEl || !apiUrlEl.parentElement) return;
-    const draft = overlay._ceImageProviderConfigs[providerKey] || {};
-    overlay._ceImageProviderConfigs[providerKey] = draft;
-    const host=overlay.querySelector('.fr-provider-api-chain')||document.createElement('div');
-    host.className='fr-provider-api-chain';
-    apiUrlEl.parentElement.before(host);
-    CE_CORE['api-library'].mountConsumerChain(CONCURRENT_EVOLUTION_CONFIG_KEY,host,'imageProviderConfigs.'+providerKey);
+    styleName.value = '';
   };
-  mountImageLibraryPicker(imageApiProvider);
-  if (apiUrlEl) apiUrlEl.value = String(curProviderCfg.apiUrl || '').trim();
-  if (apiKeyEl) apiKeyEl.value = String(curProviderCfg.apiKey || '').trim();
-  if (apiModelEl) {
-    const modelValue = String(curProviderCfg.apiModel || '').trim() || 'doubao-seedream-5-0-260128';
-    ceEnsureImageApiModelOption(apiModelEl, modelValue);
-    apiModelEl.value = modelValue;
-  }
-  const apiModelTextEl = overlay.querySelector('#concurrent-evo-image-api-model-text');
-  if (apiModelTextEl) apiModelTextEl.value = String(curProviderCfg.apiModel || '').trim();
-  // 加载 custom_openai 模型列表到下拉框
-  if (imageApiProvider === 'custom_openai') {
-    const customSelectEl = overlay.querySelector('#concurrent-evo-image-api-model-custom-select');
-    const savedModel = String(curProviderCfg.apiModel || '').trim();
-    ceRenderCustomOpenAIModelOptions(customSelectEl, [], savedModel);
-  }
-  if (apiResolutionEl) apiResolutionEl.value = ceNormalizeImageResolution(curProviderCfg.resolution || config.imageApiResolution);
-  if (apiAspectRatioEl) apiAspectRatioEl.value = ceNormalizeImageAspectRatio(curProviderCfg.aspectRatio || config.imageApiAspectRatio);
-  if (imageApiProvider === 'gemini') {
-    const geminiAspectEl = overlay ? overlay.querySelector('#concurrent-evo-image-gemini-aspect-ratio') : null;
-    const geminiSizeEl = overlay ? overlay.querySelector('#concurrent-evo-image-gemini-image-size') : null;
-    if (geminiAspectEl) geminiAspectEl.value = String(curProviderCfg.aspectRatio || '1:1').trim();
-    if (geminiSizeEl) geminiSizeEl.value = String(curProviderCfg.imageSize || '2K').trim();
-  }
-
-  // 更新显示/隐藏状态
-  ceCeUpdateImageProviderVisibility(overlay);
-
-  // 绑定 custom_openai 获取模型列表按钮
-  const fetchCustomModelsBtn = overlay.querySelector('#ce-image-fetch-custom-models-btn');
-  if (fetchCustomModelsBtn) {
-    fetchCustomModelsBtn.onclick = () => ceFetchCustomOpenAIImageModels(overlay);
-  }
-
-  // 提供商切换事件
-  if (imageProviderSelectEl) {
-    imageProviderSelectEl.onchange = () => {
-      // 保存当前提供商的输入值
-      const prevProvider = overlay._ceCurrentImageApiProvider || imageApiProvider;
-      const prevCfg = overlay._ceImageProviderConfigs[prevProvider] || {};
-      const curApiUrl = apiUrlEl ? String(apiUrlEl.value || '').trim() : '';
-      const curApiKey = apiKeyEl ? String(apiKeyEl.value || '').trim() : '';
-      const isDoubaoProvider = prevProvider === 'doubao';
-      const isCustomProvider = prevProvider === 'custom_openai';
-      let curApiModel;
-      if (isDoubaoProvider) {
-        curApiModel = apiModelEl ? String(apiModelEl.value || '').trim() : '';
-      } else if (isCustomProvider) {
-        const customSel = overlay.querySelector('#concurrent-evo-image-api-model-custom-select');
-        curApiModel = customSel ? String(customSel.value || '').trim() : '';
-        overlay._ceImageProviderConfigs[prevProvider] = Object.assign({}, prevCfg, {
-          apiUrl: curApiUrl,
-          apiKey: curApiKey,
-          apiModel: curApiModel,
-          apiModels: []
-        });
-      } else {
-        curApiModel = apiModelTextEl ? String(apiModelTextEl.value || '').trim() : '';
-      }
-      if (!isCustomProvider) {
-        const curResolution = apiResolutionEl ? String(apiResolutionEl.value || '').trim() : '';
-        let curAspectRatio = apiAspectRatioEl ? String(apiAspectRatioEl.value || '').trim() : '';
-        const saveObj = {
-          apiUrl: curApiUrl,
-          apiKey: curApiKey,
-          apiModel: curApiModel,
-          resolution: curResolution,
-          aspectRatio: curAspectRatio
-        };
-        if (prevProvider === 'gemini') {
-          const gAspectEl = overlay.querySelector('#concurrent-evo-image-gemini-aspect-ratio');
-          const gSizeEl = overlay.querySelector('#concurrent-evo-image-gemini-image-size');
-          saveObj.aspectRatio = gAspectEl ? String(gAspectEl.value || '1:1').trim() : (prevCfg.aspectRatio || '1:1');
-          saveObj.imageSize = gSizeEl ? String(gSizeEl.value || '2K').trim() : (prevCfg.imageSize || '2K');
-        }
-        overlay._ceImageProviderConfigs[prevProvider] = Object.assign({}, prevCfg, saveObj);
-      }
-      // 切换到新提供商
-      const newProvider = ceNormalizeImageApiProvider(imageProviderSelectEl.value);
-      overlay._ceCurrentImageApiProvider = newProvider;
-      const newCfg = overlay._ceImageProviderConfigs[newProvider] || {};
-      mountImageLibraryPicker(newProvider);
-      if (apiUrlEl) apiUrlEl.value = String(newCfg.apiUrl || '').trim();
-      if (apiKeyEl) apiKeyEl.value = String(newCfg.apiKey || '').trim();
-      if (apiModelEl) {
-        const newModel = String(newCfg.apiModel || '').trim() || 'doubao-seedream-5-0-260128';
-        ceEnsureImageApiModelOption(apiModelEl, newModel);
-        apiModelEl.value = newModel;
-      }
-      if (apiModelTextEl) apiModelTextEl.value = String(newCfg.apiModel || '').trim();
-      // 恢复 custom_openai 下拉框
-      if (newProvider === 'custom_openai') {
-        const newCustomSel = overlay.querySelector('#concurrent-evo-image-api-model-custom-select');
-        ceRenderCustomOpenAIModelOptions(newCustomSel, newCfg.apiModels || [], String(newCfg.apiModel || '').trim());
-      }
-      if (apiResolutionEl) apiResolutionEl.value = ceNormalizeImageResolution(newCfg.resolution || '2K');
-      if (apiAspectRatioEl) apiAspectRatioEl.value = ceNormalizeImageAspectRatio(newCfg.aspectRatio || 'auto');
-      if (newProvider === 'gemini') {
-        const geminiAspectEl = overlay.querySelector('#concurrent-evo-image-gemini-aspect-ratio');
-        const geminiSizeEl = overlay.querySelector('#concurrent-evo-image-gemini-image-size');
-        if (geminiAspectEl) geminiAspectEl.value = String(newCfg.aspectRatio || '1:1').trim();
-        if (geminiSizeEl) geminiSizeEl.value = String(newCfg.imageSize || '2K').trim();
-      }
-      ceCeUpdateImageProviderVisibility(overlay);
-    };
-  }
-  overlay._ceCurrentImageApiProvider = imageApiProvider;
-
-  if (providerEls && providerEls.length > 0) {
-    let matched = false;
-    providerEls.forEach(el => {
-      const checked = ceNormalizeImageGenerationProvider(el.value) === provider;
-      el.checked = checked;
-      matched = matched || checked;
-      el.onchange = () => {
-        ceUpdateCommercialPromptModeWarning(overlay);
-      };
-    });
-    if (!matched) {
-      providerEls[0].checked = true;
-    }
-  }
-
-  overlay.dataset.defaultTemplates = JSON.stringify(defaultsByMode);
-  overlay._ceImagePromptTemplatesByMode = templatesByMode;
-  overlay._ceImagePromptCurrentMode = mode;
-  if (modeEl && templateEl) {
-    modeEl.onchange = () => {
-      const previousMode = ceNormalizeImagePromptMode(overlay._ceImagePromptCurrentMode || modeEl.value);
-      if (overlay._ceImagePromptTemplatesByMode && Object.prototype.hasOwnProperty.call(overlay._ceImagePromptTemplatesByMode, previousMode)) {
-        overlay._ceImagePromptTemplatesByMode[previousMode] = String(templateEl.value || '');
-      }
-      const selected = ceNormalizeImagePromptMode(modeEl.value);
-      const byMode = overlay._ceImagePromptTemplatesByMode || {};
-      templateEl.value = String(byMode[selected] || '');
-      overlay._ceImagePromptCurrentMode = selected;
-      ceUpdateCommercialPromptModeWarning(overlay);
-    };
-  }
-  ceUpdateCommercialPromptModeWarning(overlay);
+  field('concurrent-evo-image-style-restore-btn').onclick = () => {
+    const profile = overlay._ceImageStyleProfiles[style.value];
+    profile.description = profile.defaultDescription || ceBuildDefaultImageStyleDescription(profile.label);
+    profile.promptGuide = profile.defaultPromptGuide;
+    ceSyncImageStyleDescriptionEditor(overlay);
+  };
+  const previewSection = field('ce-story-assembled-preview'), assembled = field('ce-story-assembled-text');
+  previewSection.open = false;
+  assembled.value = '';
+  const refreshPreview = async () => {
+    const archiveName = currentArchiveName;
+    const draft = ceStoryImagePromptSettingsFromUI(overlay,config);
+    const archive = archiveName ? await db.archives.get(archiveName) : null;
+    const storyText = await _portraitGetLastStoryFromArchive();
+    const {timeText,locationText} = ceGetAuthoritativeTimeLocationInfo();
+    const referenceCandidates = await ceIndependentStoryImageCandidates(archive,draft);
+    if (archiveName !== currentArchiveName) return;
+    assembled.value = buildImageEvolutionPrompt({config:draft, storyText:storyText || '（暂无正文）',
+      currentTime:timeText,currentLocation:locationText,referenceCandidates}) || '';
+  };
+  const showPreview = () => { void refreshPreview().catch(error => { assembled.value = '无法生成预览 · ' + error.message; }); };
+  previewSection.ontoggle = () => { if (previewSection.open) showPreview(); };
+  field('ce-story-refresh-preview').onclick = showPreview;
   showConcurrentEvolutionOverlay(overlay);
 }
 
-async function saveConcurrentEvolutionImagePromptSettingsFromUI() {
-  const config = await loadConcurrentEvolutionConfig();
-  const overlay = document.getElementById('concurrent-evo-image-prompt-overlay');
-  const modeEl = document.getElementById('concurrent-evo-image-prompt-mode');
-  const styleEl = document.getElementById('concurrent-evo-image-style-mode');
-  const templateEl = document.getElementById('concurrent-evo-image-prompt-template');
-  const apiUrlEl = document.getElementById('concurrent-evo-image-api-url');
-  const apiKeyEl = document.getElementById('concurrent-evo-image-api-key');
-  const apiModelEl = document.getElementById('concurrent-evo-image-api-model');
-  const apiResolutionEl = document.getElementById('concurrent-evo-image-api-resolution');
-  const apiAspectRatioEl = document.getElementById('concurrent-evo-image-api-aspect-ratio');
-  const providerEl = overlay ? overlay.querySelector('input[name="concurrent-evo-image-generator"]:checked') : null;
-
-  ceSaveCurrentImageStyleDescriptionFromEditor(overlay);
-  const styleProfiles = ceNormalizeImageStyleProfiles((overlay && overlay._ceImageStyleProfiles) || config.imageStyleProfiles);
-  config.imagePromptMode = ceNormalizeImagePromptMode(modeEl ? modeEl.value : config.imagePromptMode);
-  config.imageStyleProfiles = styleProfiles;
-  config.imageStyleMode = ceNormalizeImageStyleMode(styleEl ? styleEl.value : config.imageStyleMode, { imageStyleProfiles: styleProfiles });
-  config.imageGenerationProvider = ceNormalizeImageGenerationProvider(providerEl ? providerEl.value : config.imageGenerationProvider);
-  let defaultsByMode = {};
-  try {
-    defaultsByMode = JSON.parse(String(overlay && overlay.dataset ? overlay.dataset.defaultTemplates || '{}' : '{}'));
-  } catch (e) {
-    defaultsByMode = {};
-  }
-  const selectedMode = ceNormalizeImagePromptMode(modeEl ? modeEl.value : config.imagePromptMode);
-  if (overlay && overlay._ceImagePromptTemplatesByMode && templateEl) {
-    overlay._ceImagePromptTemplatesByMode[selectedMode] = String(templateEl.value || '');
-  }
-  const templatesByMode = (overlay && overlay._ceImagePromptTemplatesByMode) || {
-    sd_keywords: String(templateEl ? templateEl.value : ''),
-    natural_language: String(templateEl ? templateEl.value : '')
-  };
-  if (!config.imagePromptTemplateOverrides || typeof config.imagePromptTemplateOverrides !== 'object') {
-    config.imagePromptTemplateOverrides = { sd_keywords: '', natural_language: '' };
-  }
-  ['sd_keywords', 'natural_language'].forEach(modeKey => {
-    const editedTemplate = String(templatesByMode[modeKey] || '').trim();
-    const defaultTemplate = String(defaultsByMode[modeKey] || '').trim();
-    config.imagePromptTemplateOverrides[modeKey] = editedTemplate && editedTemplate !== defaultTemplate ? editedTemplate : '';
-  });
-  config.imagePromptTemplateOverrides.sd_keywords = String(config.imagePromptTemplateOverrides.sd_keywords || '').trim();
-  config.imagePromptTemplateOverrides.natural_language = String(config.imagePromptTemplateOverrides.natural_language || '').trim();
-
-  // === 多提供商配置保存 ===
-  const imageApiProviderSelectEl = overlay ? overlay.querySelector('#concurrent-evo-image-api-provider') : null;
-  const apiModelTextEl = overlay ? overlay.querySelector('#concurrent-evo-image-api-model-text') : null;
-  const curProvider = ceNormalizeImageApiProvider(imageApiProviderSelectEl ? imageApiProviderSelectEl.value : config.imageApiProvider);
-  config.imageApiProvider = curProvider;
-  // 先把 overlay 中所有提供商的临时缓存合并回配置（可能包含切换期间的暂存值）
-  const cachedProviderConfigs = (overlay && overlay._ceImageProviderConfigs) ? overlay._ceImageProviderConfigs : {};
-  if (!config.imageProviderConfigs || typeof config.imageProviderConfigs !== 'object') {
-    config.imageProviderConfigs = {};
-  }
-  // 先将缓存的其他提供商配置写回
-  Object.keys(cachedProviderConfigs).forEach(function(p) {
-    if (p !== curProvider) {
-      config.imageProviderConfigs[p] = Object.assign({}, config.imageProviderConfigs[p] || {}, cachedProviderConfigs[p]);
-    }
-  });
-  // 保存当前提供商（从 UI 当前值读取）
-  const isDoubaoProvider = curProvider === 'doubao';
-  const isCustomOpenAI = curProvider === 'custom_openai';
-  const savedApiUrl = String(apiUrlEl ? apiUrlEl.value : '').trim();
-  const savedApiKey = String(apiKeyEl ? apiKeyEl.value : '').trim();
-  let savedApiModel;
-  let savedApiModels;
-  if (isDoubaoProvider) {
-    savedApiModel = String(apiModelEl ? apiModelEl.value : '').trim() || 'doubao-seedream-5-0-260128';
-  } else if (isCustomOpenAI) {
-    const customSelectEl = overlay ? overlay.querySelector('#concurrent-evo-image-api-model-custom-select') : null;
-    savedApiModel = customSelectEl ? String(customSelectEl.value || '').trim() : '';
-    savedApiModels = customSelectEl
-      ? Array.from(customSelectEl.options).map(function(o) { return o.value; }).filter(Boolean)
-      : [];
-  } else {
-    savedApiModel = String(apiModelTextEl ? apiModelTextEl.value : '').trim();
-  }
-  const savedResolution = ceNormalizeImageResolution(apiResolutionEl ? apiResolutionEl.value : '2K');
-  let savedAspectRatio, savedImageSize;
-  if (curProvider === 'gemini') {
-    const gAspectEl = overlay ? overlay.querySelector('#concurrent-evo-image-gemini-aspect-ratio') : null;
-    const gSizeEl = overlay ? overlay.querySelector('#concurrent-evo-image-gemini-image-size') : null;
-    savedAspectRatio = gAspectEl ? String(gAspectEl.value || '1:1').trim() : '1:1';
-    savedImageSize = gSizeEl ? String(gSizeEl.value || '2K').trim() : '2K';
-  } else {
-    savedAspectRatio = ceNormalizeImageAspectRatio(apiAspectRatioEl ? apiAspectRatioEl.value : 'auto');
-  }
-  if (!config.imageProviderConfigs[curProvider] || typeof config.imageProviderConfigs[curProvider] !== 'object') {
-    config.imageProviderConfigs[curProvider] = {};
-  }
-  const currentDraft = cachedProviderConfigs[curProvider];
-  if (currentDraft && Object.prototype.hasOwnProperty.call(currentDraft, 'apiPresetId')) {
-    config.imageProviderConfigs[curProvider].apiPresetId = currentDraft.apiPresetId || '';
-    config.imageProviderConfigs[curProvider].apiPresetSnapshot = currentDraft.apiPresetSnapshot || null;
-  }
-  config.imageProviderConfigs[curProvider].apiUrl = savedApiUrl;
-  config.imageProviderConfigs[curProvider].apiKey = savedApiKey;
-  config.imageProviderConfigs[curProvider].apiModel = savedApiModel;
-  config.imageProviderConfigs[curProvider].resolution = savedResolution;
-  config.imageProviderConfigs[curProvider].aspectRatio = savedAspectRatio;
-  if (curProvider === 'gemini' && savedImageSize !== undefined) {
-    config.imageProviderConfigs[curProvider].imageSize = savedImageSize;
-  }
-  if (isCustomOpenAI && savedApiModels !== undefined) {
-    config.imageProviderConfigs[curProvider].apiModels = savedApiModels;
-  }
-  if (curProvider === 'doubao') {
-    config.imageProviderConfigs[curProvider].responseFormat = 'url';
-  }
-  // 同步维护旧的 flat 字段（向后兼容）
-  const activeProviderCfg = config.imageProviderConfigs[curProvider];
-  config.imageApiUrl = String(activeProviderCfg.apiUrl || '').trim() || 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
-  config.imageApiKey = String(activeProviderCfg.apiKey || '').trim();
-  config.imageApiModel = String(activeProviderCfg.apiModel || '').trim() || 'doubao-seedream-5-0-260128';
-  config.imageApiResolution = savedResolution;
-  config.imageApiAspectRatio = savedAspectRatio;
-  config.imageApiSize = ceBuildSizeFromResolutionAndAspectRatio(config.imageApiResolution, config.imageApiAspectRatio);
-  config.imageApiResponseFormat = 'url';
-
-  await saveConcurrentEvolutionConfig(config);
-  hideConcurrentEvolutionOverlay(overlay);
-  if (typeof showDanmaku === 'function') {
-    showDanmaku('生图提示词设置已保存', 'success');
-  }
+function ceStoryImagePromptSettingsFromUI(overlay, saved) {
+  const field = id => overlay.querySelector('#' + id);
+  const config = {...saved};
+  const defaults = frImageMaterials();
+  const template = field('ce-story-independent-template').value.trim();
+  const referenceGuide = field('ce-image-reference-guide').value.trim();
+  config.enableImageEvolution = field('ce-image-enable-story').checked;
+  for (const input of overlay.querySelectorAll('[data-story-image-option]')) config[input.dataset.storyImageOption] = input.checked;
+  config.imageStoryMode = overlay.querySelector('[name="ce-story-image-mode"]:checked').value;
+  config.imageIndependentCount = ceIndependentStoryImageCount({ imageIndependentCount:field('ce-story-independent-count').value });
+  config.imageIndependentTemplate = template === defaults.story ? '' : template;
+  config.imageReferenceGuide = referenceGuide === defaults.storyReference ? '' : referenceGuide;
+  config.imageStyleProfiles = ceNormalizeImageStyleProfiles(overlay._ceImageStyleProfiles);
+  config.imageStyleMode = field('concurrent-evo-image-style-mode').value;
+  return config;
 }
 
-function restoreConcurrentEvolutionImagePromptTemplateFromPreset() {
+async function saveConcurrentEvolutionImagePromptSettingsFromUI() {
   const overlay = document.getElementById('concurrent-evo-image-prompt-overlay');
-  const templateEl = document.getElementById('concurrent-evo-image-prompt-template');
-  const modeEl = document.getElementById('concurrent-evo-image-prompt-mode');
-  if (!overlay || !templateEl || !modeEl) return;
-  const selectedMode = ceNormalizeImagePromptMode(modeEl.value);
-  let defaultsByMode = {};
-  try {
-    defaultsByMode = JSON.parse(String(overlay.dataset.defaultTemplates || '{}'));
-  } catch (e) {
-    defaultsByMode = {};
-  }
-  const restored = String(defaultsByMode[selectedMode] || '').trim();
-  templateEl.value = restored;
-  if (!overlay._ceImagePromptTemplatesByMode || typeof overlay._ceImagePromptTemplatesByMode !== 'object') {
-    overlay._ceImagePromptTemplatesByMode = {};
-  }
-  overlay._ceImagePromptTemplatesByMode[selectedMode] = restored;
+  const config = ceStoryImagePromptSettingsFromUI(overlay,await loadConcurrentEvolutionConfig());
+  try { config.imageStorySize = overlay._readStoryImageSize(); }
+  catch (error) { showDanmaku(error.message,'warning'); return; }
+  await saveConcurrentEvolutionConfig(config);
+  hideConcurrentEvolutionOverlay(overlay);
+  showDanmaku('生图设置已保存','success');
 }
 
 function ceEnsureOriginalTimelineSettingsControls(overlay) {
@@ -74493,9 +73369,7 @@ async function manageConcurrentEvolutionSettings() {
     setChecked('concurrent-evo-show-error-modal', config.showErrorModal !== false);
     setChecked('concurrent-evo-continue-on-error', config.continueOnError !== false);
     // 生图演化
-    setChecked('concurrent-evo-enable-image-evolution', config.enableImageEvolution === true);
-    var imgCountInput = document.getElementById('concurrent-evo-image-count');
-    if (imgCountInput) imgCountInput.value = String(ceNormalizeImageEvolutionCount(config.imageEvolutionCount));
+
     // 调试选项
     setChecked('concurrent-evo-debug-logging', config.debugLogging === true);
     if (typeof window !== 'undefined') {
@@ -76357,9 +75231,7 @@ async function saveConcurrentEvolutionSettingsFromUI() {
   config.showErrorModal = document.getElementById('concurrent-evo-show-error-modal').checked;
   config.continueOnError = document.getElementById('concurrent-evo-continue-on-error').checked;
   // 生图演化开关与数量
-  config.enableImageEvolution = document.getElementById('concurrent-evo-enable-image-evolution')?.checked === true;
-  var imgCountVal = parseInt(document.getElementById('concurrent-evo-image-count')?.value, 10);
-  config.imageEvolutionCount = ceNormalizeImageEvolutionCount(imgCountVal);
+
   // 调试选项
   config.debugLogging = document.getElementById('concurrent-evo-debug-logging').checked;
   if (typeof window !== 'undefined') {
@@ -78716,9 +77588,11 @@ document.addEventListener('click', e => {
     return;
   }
 
-  const openImagePromptSettingsBtn = target.closest('#concurrent-evo-image-prompt-settings-btn');
+  const openImagePromptSettingsBtn = target.closest('#concurrent-evo-image-prompt-settings-btn, #open-image-settings-stage-btn, #open-image-settings-system-btn');
   if (openImagePromptSettingsBtn) {
     e.preventDefault();
+    if (openImagePromptSettingsBtn.id==='open-image-settings-system-btn')
+      document.getElementById('system-settings-overlay')?.classList.remove('visible');
     openConcurrentEvolutionImagePromptModal();
     return;
   }
@@ -78744,12 +77618,6 @@ document.addEventListener('click', e => {
     return;
   }
 
-  const imagePromptRestoreBtn = target.closest('#concurrent-evo-image-prompt-restore-btn');
-  if (imagePromptRestoreBtn) {
-    e.preventDefault();
-    restoreConcurrentEvolutionImagePromptTemplateFromPreset();
-    return;
-  }
 
   // 添加备用API配置按钮
   const addBackupBtn = target.closest('#add-backup-api-btn');
@@ -80984,7 +79852,8 @@ try {
                 /* 这里原来直接 String(...)：接口返回对象时会变成 "[object Object]" 一路传下去。
                  * 改用 frCoerceGeneratedText：字符串直接用，对象取文本字段，取不到就抛明确错误。
                  */
-                const generated = await tavernGenerateFunc(params, window.__FR_STANDALONE__ && promptIdentity ? { signal, promptIdentity } : signal ? { signal } : undefined);
+                const generated = await tavernGenerateFunc(params, window.__FR_STANDALONE__
+                  ? { signal, promptIdentity, proseRequest:true } : signal ? { signal } : undefined);
                 checkAbort();
                 const finalAiResponse=frCoerceGeneratedText(generated).trim(),failure=frMainResponseError(finalAiResponse,!!promptIdentity);
                 if(failure)throw failure;
@@ -81004,11 +79873,13 @@ try {
         }
 
         async function saveToLog(archiveName, newEntry) {
+          let saved = false;
           try {
             const archive = await db.archives.get(archiveName);
-            if (!archive) return;
+            if (!archive) return false;
             archive.data.logs.push(newEntry);
             await db.archives.put(archive);
+            saved = true;
             if(newEntry?.type==='ai'&&typeof frCanonCurrentDisplayAnchor==='function'){
               const savedFloor=frCanonCurrentDisplayFloor(archive.data.logs);
               if(typeof frCanonCurrentDisplayAdopted==='function')await frCanonCurrentDisplayAdopted(archiveName,savedFloor);
@@ -81017,6 +79888,17 @@ try {
           } catch (e) {
             console.error('保存日志到数据库失败:', e);
           }
+          return saved;
+        }
+
+        function frShouldSendSegmentedMemory(config, legacy) {
+          return config?.segmentedMemoryEnabled === true ||
+            (config?.segmentedMemoryOwnsContext !== true && legacy?.vectorSendSegmentedMemory === true);
+        }
+
+        function frSelectSegmentedSummary(log, ghostIndex, reverseIndex, largeSummaryStart) {
+          const {smallSummary,largeSummary}=ceResolveEffectiveSummariesForLog(log,ghostIndex);
+          return reverseIndex>=largeSummaryStart ? largeSummary||smallSummary : smallSummary||largeSummary;
         }
 
         function getLogsForContext(allLogs, archive) {
@@ -81040,7 +79922,8 @@ try {
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
           // 预计算分段记忆配置
-          const segmentedEnabled = summaryConfig.segmentedMemoryEnabled;
+          const segmentedEnabled = frShouldSendSegmentedMemory(summaryConfig,
+            typeof knowledgeSearchGlobalConfig !== 'undefined' ? knowledgeSearchGlobalConfig : null);
           const chatLayers = segmentedEnabled ? (parseInt(summaryConfig.segmentedChatLayers, 10) || 20) : 0;
           const largeSummaryStart = segmentedEnabled ? (parseInt(summaryConfig.segmentedLargeSummaryStart, 10) || 50) : 0;
 
@@ -81080,8 +79963,7 @@ try {
                 // 超过 chatLayers 的层：只发送 AI 回复的总结，跳过玩家输入
                 if (log.type === 'ai') {
                   // 判断使用小总结还是大总结
-                  const {smallSummary,largeSummary}=ceResolveEffectiveSummariesForLog(log,summaryGhostIndex);
-                  const contentToUse = reverseIndex >= largeSummaryStart ? (largeSummary||smallSummary) : (smallSummary||largeSummary);
+                  const contentToUse = frSelectSegmentedSummary(log,summaryGhostIndex,reverseIndex,largeSummaryStart);
 
                   if (contentToUse) {
                     // 【修改】收集过往记忆内容，不再单独添加
@@ -82218,7 +81100,7 @@ if (statusDanmaku) statusDanmaku.remove();
             else if (key === '视觉细节(动作/穿着/位置/身段/样貌)') row['16'] = value;
             else if (key === '当前灵石') row['26'] = value;
             else if (key === '生平经历') row['35'] = value;
-            else if (['年龄', '寿元', '善恶值', 'isBonded'].includes(key)) {
+            else if (['年龄', '寿元', 'isBonded'].includes(key)) {
               remarks[key] = value;
             } else if (value.includes('/')) {
               const valParts = value.split('/');
@@ -84474,7 +83356,6 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
 
           (async () => {
             const finalBackgroundTasks = [];
-            finalBackgroundTasks.push(processNpcImages());
             const finalResults = await Promise.allSettled(finalBackgroundTasks);
             finalResults.forEach((result, index) => {
               if (result.status === 'rejected') console.error(`一个最终异步任务失败 (索引 ${index}):`, result.reason);
@@ -85719,7 +84600,8 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
           const routes=frApiRoutes('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2','embeddingApiPresetId');
           if(routes==null)return null;
           // Existing vectors can only be searched or extended by the same embedding model.
-          return routes.filter(route=>route.apiModel===routes[0]?.apiModel);
+          return routes.filter(route=>route.apiModel===routes[0]?.apiModel
+            && route.embeddingProfile?.dimensions===routes[0]?.embeddingProfile?.dimensions);
         }
 
         function frResolveVectorRetrievalEmbedding(config) {
@@ -85793,10 +84675,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${config.apiKey}`,
               },
-              body: JSON.stringify({
-                input: inputData,
-                model: config.apiModel,
-              }),
+              body: JSON.stringify(CE_CORE['api-library'].embeddingRequestBody(config.apiModel,inputData,config.route)),
             });
             if (!response.ok) {
               const errText = await response.text();
@@ -85842,7 +84721,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
           if(failureScope&&!failures.has(failureScope))failures.set(failureScope,routeFailures);
           if(routeFailures?.has(routeKey))throw Object.assign(new Error('该重排接口本轮已返回 HTTP '+routeFailures.get(routeKey)+'，请检查重排接口与模型'),{status:routeFailures.get(routeKey)});
           const fetchUrl = CE_CORE['api-library'].modelEndpoint(config.rerankUrl.trim(), 'rerank');
-          const requestedLimit = Math.floor(Number(config.rerankMaxDocuments));
+          const requestedLimit = Math.floor(Number(config.route?.rerankProfile?.maxDocuments || config.rerankMaxDocuments));
           // Aurentis limits each request to 25 texts. Preserve all selected candidates.
           const providerLimit = new URL(fetchUrl).hostname === 'aurentis.veletis.com' ? 25 : documents.length;
           const documentLimit = Math.min(providerLimit, requestedLimit > 0 ? requestedLimit : documents.length);
@@ -85860,12 +84739,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
               'Content-Type': 'application/json',
               Authorization: `Bearer ${config.apiKey}`,
             },
-            body: JSON.stringify({
-              model: config.rerankModel,
-              query: query,
-              documents: batchDocuments,
-              top_n: batchDocuments.length,
-            }),
+            body: JSON.stringify(CE_CORE['api-library'].rerankRequestBody(config.rerankModel,query,batchDocuments)),
           });
           if (!response.ok) {
             const errText = await response.text();
@@ -90912,10 +89786,6 @@ listEl.appendChild(fragment);
                     </div>
                     <!-- 【添加结束】 -->
 
-                    <div class="context-control-item" style="margin-top: 10px;">
-                        <input id="vector-send-segmented-memory-toggle" type="checkbox">
-                        <label for="vector-send-segmented-memory-toggle">发送分段记忆</label>
-                    </div>
             </div>
         </div>
 
@@ -91539,7 +90409,6 @@ listEl.appendChild(fragment);
 
           setVal('vector-cooldown-rounds-input', knowledgeSearchGlobalConfig.vectorCooldownRounds || 0);
 
-          setVal('vector-send-segmented-memory-toggle', knowledgeSearchGlobalConfig.vectorSendSegmentedMemory);
           setVal('vector-search-api-url', knowledgeSearchGlobalConfig.vectorSearchApiUrl);
           setVal('vector-search-api-key', knowledgeSearchGlobalConfig.vectorSearchApiKey);
           initModelSelect('vector-search-api-model', knowledgeSearchGlobalConfig.vectorSearchApiModel);
@@ -91746,7 +90615,7 @@ listEl.appendChild(fragment);
               vectorMinScore: getFloat('vector-min-score-input', 0.4),
               vectorContextLimit: getNum('vector-context-limit-input', 1),
               vectorCooldownRounds: getNum('vector-cooldown-rounds-input', 0),
-              vectorSendSegmentedMemory: getCheck('vector-send-segmented-memory-toggle'),
+              vectorSendSegmentedMemory: knowledgeSearchGlobalConfig.vectorSendSegmentedMemory === true,
 
               enableRerank: getCheck('vector-enable-rerank-toggle'),
               rerankUrl: getVal('vector-rerank-url-input'),
@@ -93591,7 +92460,8 @@ listEl.appendChild(fragment);
               imageGenPrompt: rowData['19'],
               age: remarks['年龄'],
               shouyuan: remarks['寿元'],
-              spiritStones: rowData['26'],
+              spiritStones: String(frReadSpiritStoneWallet(rowData).下品),
+              spiritStoneWallet: frReadSpiritStoneWallet(rowData),
               27: rowData['27'],
               28: rowData['28'],
               29: rowData['29'],
@@ -94456,6 +93326,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           var ceCanonGuidanceKey = null;
           var ceCanonGuidanceBlock = '';
           var frGeneratedStory = null;
+          let finishStoryImageWrites;
           var frMainStage = '正文请求前准备';
           /* ★★★ 2026-11-03 玩家：「包括进行下一轮推进剧情也要清理掉临时的内容。」
            *
@@ -94876,6 +93747,7 @@ vectorContextString = await prepareVectorContext(cleanMessageTextForAI, archive,
             let logsForPrompt;
             const vectorCfg = knowledgeSearchGlobalConfig || {};
             const useVectorOverride = vectorCfg.vectorAutoInject && vectorCfg.vectorContextLimit > 0;
+            const sendSegmentedMemory = frShouldSendSegmentedMemory(summaryConfig,vectorCfg);
             if (isSummaryRequest && options.summaryContent) {
               currentMainContent = options.summaryContent;
               logsForPrompt = [
@@ -94904,7 +93776,9 @@ vectorContextString = await prepareVectorContext(cleanMessageTextForAI, archive,
                   type: 'system',
                   content: `[世界背景设定]:\n${openingLog.content.replace(/<[^>]+>/g, '').trim()}`,
                 });
-              if (vectorCfg.vectorSendSegmentedMemory) {
+              if (sendSegmentedMemory) {
+                const summaryStart = parseInt(summaryConfig.segmentedLargeSummaryStart,10) || 50;
+                const depths = new Map(chatLogs.map((log,index)=>[log.id,chatLogs.length-1-index]));
                 const segmentedMemories = [];
                 const pastMemoriesContent = []; // 【修改】收集过往记忆内容
                 for (let i = allLogs.length - 1; i >= 0; i--) {
@@ -94921,8 +93795,8 @@ vectorContextString = await prepareVectorContext(cleanMessageTextForAI, archive,
                     });
                   } else if (log.type==='ai'&&!log.isGhost&&!log.isSnapshot&&!log.isUndoSnapshot&&
                     log!==openingLog&&!recentIds.has(log.id)) {
-                    const {smallSummary,largeSummary}=ceResolveEffectiveSummariesForLog(log,summaryGhostIndex);
-                    if(largeSummary||smallSummary)pastMemoriesContent.unshift(largeSummary||smallSummary);
+                    const text=frSelectSegmentedSummary(log,summaryGhostIndex,depths.get(log.id)??0,summaryStart);
+                    if(text)pastMemoriesContent.unshift(text);
                   }
                 }
 
@@ -94991,7 +93865,7 @@ return text;
               if (!window.FRWorldview?.cfgLoad().enabled || isSummaryRequest || isHiddenSystem) return '';
               try {
                 const materials = await frBuildWorldviewTurnMaterials(logsForPrompt, archive?.data?.logs || [],
-                  !useVectorOverride || vectorCfg.vectorSendSegmentedMemory);
+                  !useVectorOverride || sendSegmentedMemory);
                 return await window.FRWorldview.guideProse({
                   userInput: userInputText,
                   ...materials,
@@ -95366,7 +94240,7 @@ if (worldBookContext) {
               }
             }
             frMainStage='正文正则与内容解析';
-            let processedResponse = processTextWithRules(correctedApiResponse, PLACEMENT_MAP.AI_OUTPUT, 'chain');
+            let processedResponse = frNormalizeProseEnvelope(processTextWithRules(correctedApiResponse, PLACEMENT_MAP.AI_OUTPUT, 'chain'));
             let openingClock = '';
             if (frPreparedMain.openingStart) {
               const reconciledOpening = ceFrCorrectOpeningStoryDate(processedResponse, frPreparedMain.openingStart);
@@ -95683,6 +94557,30 @@ if(typeof frPrepareRequiredCanonBoundary==='function'){
 }
 frMainStage='变量与状态保存';
 if(frGeneratedStory)frGeneratedStory.stage=frMainStage;
+
+const storyArchiveName = currentArchiveName;
+const logEntry = {
+  id: newLogId,
+  timestamp: new Date().toISOString(),
+  content: processedHtmlContent,
+  unoptimizedContent: storyContentForOptimization,
+  stateSnapshot: null,
+  type: 'ai',
+  branchContent: branchContent,
+  newsReference: newsReferenceContent || '无',
+};
+if(frEarlyPreparation?.requiredBoundary)logEntry.canonPending={status:'running',reason:'本轮边界已判定，等待普通与原著任务保存'};
+const storyImageConfig = await loadConcurrentEvolutionConfig();
+const autoStoryImage = storyImageConfig.enableImageEvolution === true;
+if (autoStoryImage) {
+  if (!await saveToLog(storyArchiveName, logEntry)) throw new Error('本轮正文保存失败，未启动正文插图');
+  let writesFinished = false;
+  const floorWrites = new Promise(resolve => {
+    finishStoryImageWrites = () => { writesFinished = true; resolve(); };
+  });
+  void ceRunStoryImageJob({archiveName:storyArchiveName,logId:logEntry.id,config:storyImageConfig,automatic:true,
+    waitForFloorWrites:onWaiting=>{if (!writesFinished) onWaiting(); return floorWrites;}});
+}
 
 const processVariablesPromise = (async () => {
               timers.variables = {
@@ -96177,18 +95075,7 @@ try {
             }
 
             // ===========================================
-            const logEntry = {
-              id: newLogId,
-              timestamp: new Date().toISOString(),
-              content: lastAiStoryText,
-              unoptimizedContent: storyContentForOptimization,
-              stateSnapshot: null,
-              type: 'ai',
-              branchContent: branchContent,
-              newsReference: newsReferenceContent || '无',
-            };
-            if(frEarlyPreparation?.requiredBoundary)logEntry.canonPending={status:'running',reason:'本轮边界已判定，等待普通与原著任务保存'};
-            await saveToLog(currentArchiveName, logEntry);
+            if (!autoStoryImage) await saveToLog(storyArchiveName, logEntry);
             if(typeof frCanonTraceBindLog==='function')await frCanonTraceBindLog(frTurnController.signal,logEntry.id);
             if(frCanonTimingEnabled&&!frEarlyPreparation&&typeof frStartCanonEarlyPreparation==='function'){
               frEarlyPreparation=frStartCanonEarlyPreparation({storyText:finalStoryContentForDisplay || '',userInput:cleanMessageText || '',logId:logEntry.id,signal:frTurnController.signal});
@@ -96399,6 +95286,7 @@ try {
               clearInterval(timerInterval);
               renderTimers();
             }
+            finishStoryImageWrites?.();
             isMainApiGenerating = false;
             sendMessageButton.disabled = false;
             sendMessageButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
@@ -96420,7 +95308,6 @@ try {
             { key: 'age', label: '年龄', isEnabled: true },
             { key: 'shouyuan', label: '寿元', isEnabled: true },
             { key: 'realm', label: '境界', isEnabled: true },
-            { key: 'shanE', label: '善恶值', isEnabled: true },
             { key: 'location', label: '所在地', isEnabled: true },
             { key: 'spiritStones', label: '当前灵石', isEnabled: true },
           ];
@@ -96432,6 +95319,7 @@ try {
             const savedSettings = await dbGet(PLAYER_DISPLAY_SETTINGS_KEY);
             if (savedSettings && savedSettings.defaultFields) {
               playerDisplaySettings = savedSettings;
+              playerDisplaySettings.defaultFields = savedSettings.defaultFields.filter(field=>field.key!=='shanE');
               defaultFields.forEach(df => {
                 if (!playerDisplaySettings.defaultFields.some(sf => sf.key === df.key)) {
                   playerDisplaySettings.defaultFields.push(df);
@@ -96636,10 +95524,9 @@ const age = remarks['年龄'] || '未知';
 const shouyuan = remarks['寿元'] || '未知';
 const linggen = charRow['5'] && charRow['5'] !== '待定' ? charRow['5'] : (remarks['灵根'] || '无');
 const constitution = charRow['6'] && charRow['6'] !== '待定' ? charRow['6'] : '无';
-const spiritStones = charRow['26'] && charRow['26'] !== '待定' ? charRow['26'] : (remarks['spiritStones'] || '0');
-const shanE = remarks['善恶值'] || '0';
+const spiritStones = frSpiritStoneWalletText(frReadSpiritStoneWallet(charRow));
 
-let archiveLine = `> 档案: 年龄:${age}, 寿元:${shouyuan}, 灵根:${linggen}, 体质:${constitution}, 灵石:${spiritStones}, 善恶:${shanE}`;
+let archiveLine = `> 档案: 年龄:${age}, 寿元:${shouyuan}, 灵根:${linggen}, 体质:${constitution}, 灵石:${spiritStones}`;
 
 // --- 处理自定义变量 ---
 let displaySettings = charId === 'B1' ? playerDisplaySettings : npcDisplaySettings;
@@ -97709,7 +96596,6 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
 
             (async () => {
               const finalBackgroundTasks = [];
-              finalBackgroundTasks.push(processNpcImages());
               await Promise.allSettled(finalBackgroundTasks);
             })();
           } catch (error) {
@@ -98589,47 +97475,7 @@ mainContentArea.scrollTop = mainContentArea.scrollHeight;
           }
         }
 
-        function openPlayerImageGenModal() {
-          const npcImageGenOverlay = document.getElementById('npc-image-gen-overlay');
-          if (!npcImageGenOverlay) return;
-
-          characterDetailOverlay.classList.remove('visible');
-
-          const [name, gender] = (currentPlayerData.name || '|').split('|');
-
-          document.getElementById('npc-image-gen-title').textContent = `为 ${name} 生成形象`;
-
-          const basePrompts = [
-            'masterpiece',
-            'best quality',
-            'solo',
-            currentPlayerData.gender === '女' ? '1girl' : '1boy',
-          ];
-
-          const descriptivePrompts = [
-            currentPlayerData.appearance,
-            currentPlayerData.figure,
-            currentPlayerData.attire,
-            currentPlayerData.action,
-          ];
-          const finalPrompt = [...basePrompts, ...descriptivePrompts]
-            .filter(p => p && p.trim() && p.trim() !== '未知' && p.trim() !== '无')
-            .join(', ');
-
-          document.getElementById('npc-gen-prompt').value = finalPrompt;
-
-          document.getElementById('npc-gen-width').value = npcDisplaySettings.npcImageWidth || 512;
-          document.getElementById('npc-gen-height').value = npcDisplaySettings.npcImageHeight || 768;
-
-          document.getElementById('npc-gen-status').textContent = '';
-
-          const startGenBtn = document.getElementById('npc-gen-start-btn');
-          const newBtn = startGenBtn.cloneNode(true);
-          startGenBtn.parentNode.replaceChild(newBtn, startGenBtn);
-          newBtn.addEventListener('click', handlePlayerImageGenRequest);
-
-          npcImageGenOverlay.classList.add('visible');
-        }
+        function openPlayerImageGenModal() { return frOpenPlayerPortrait(); }
 
         function renderPlayerAttributes() {
 const listEl = document.getElementById('attributes-list');
@@ -98733,7 +97579,6 @@ gender: { icon: 'fa-venus-mars', color: '#f48fb1' },
 age: { icon: 'fa-hourglass-start', color: '#a5d6a7' },
 shouyuan: { icon: 'fa-hourglass-end', color: '#ffb74d' },
 realm: { icon: 'fa-user-astronaut', color: '#ba68c8' },
-shanE: { icon: 'fa-yin-yang', color: '#e0e0e0' },
 location: { icon: 'fa-map-marker-alt', color: '#81c784' },
 spiritStones: { icon: 'fa-gem', color: '#ffd700' }
 };
@@ -98741,7 +97586,7 @@ spiritStones: { icon: 'fa-gem', color: '#ffd700' }
 // 渲染默认属性 (排除 hp, 因为上面已经渲染了)
 if (playerDisplaySettings.defaultFields) {
 playerDisplaySettings.defaultFields.forEach(field => {
-if (field.isEnabled && field.key !== 'hp') {
+if (field.isEnabled && field.key !== 'hp' && field.key !== 'shanE') {
 let value = '未知';
 switch (field.key) {
 case 'linggen': value = currentPlayerData.linggen; break;
@@ -98749,14 +97594,15 @@ case 'gender': value = currentPlayerData.gender; break;
 case 'age': value = currentPlayerData.age; break;
 case 'shouyuan': value = currentPlayerData.shouyuan; break;
 case 'realm': value = currentPlayerData.realm; break;
-case 'shanE': value = currentPlayerData.shanE; break;
 case 'location': value = currentPlayerData.location; break;
-case 'spiritStones': value = currentPlayerData.spiritStones; break;
+case 'spiritStones': value = frSpiritStoneWalletText(currentPlayerData.spiritStoneWallet || frReadSpiritStoneWallet({26:currentPlayerData.spiritStones}),'\n'); break;
 }
 
 if (value !== undefined && value !== null) {
 const conf = configMap[field.key] || { icon: 'fa-circle', color: '#ccc' };
-gridContainer.appendChild(createAttrCard(field.label, value, conf.icon, conf.color));
+const card = createAttrCard(field.label, value, conf.icon, conf.color);
+if (field.key === 'spiritStones') card.classList.add('fr-wallet-card');
+gridContainer.appendChild(card);
 }
 }
 });
@@ -99813,6 +98659,7 @@ console.log('【调试】renderInventory 被调用');
           const isUserOrAi = activeLogEntry.classList.contains('user') || activeLogEntry.classList.contains('ai');
           document.getElementById('ctx-edit-btn').disabled = !isUserOrAi || notEditable;
           document.getElementById('ctx-delete-btn').disabled = !isUserOrAi || notEditable;
+          document.getElementById('ctx-image-btn').hidden = !activeLogEntry.classList.contains('ai') || !activeLogEntry.dataset.logId;
 
           messageContextMenu.classList.remove('hidden');
           positionMenu(messageContextMenu, e);
@@ -100079,100 +98926,12 @@ console.log('【调试】renderInventory 被调用');
         }
 
         // --- 修复：将 processNpcImages 提升为全局函数 ---
-        async function processNpcImages() {
-          // 检查开关和是否有更新的角色
-          if (!funSettings.autoGenNpcImage || !updatedCharacterIds || updatedCharacterIds.size === 0) {
-            return;
-          }
-
-          try {
-            const archive = await db.archives.get(currentArchiveName);
-            const npcAvatars = archive?.data?.state?.npcAvatars || {};
-            const imageGenPromises = [];
-
-            // 遍历本次更新的角色ID
-            for (const charId of updatedCharacterIds) {
-              // 只处理NPC (C或G开头)
-              if (!charId.startsWith('C') && !charId.startsWith('G')) continue;
-
-              const charData = characterDatabase[charId];
-              if (charData && charData.imageGenPrompt) {
-                const uniqueImageKey = `${charId}_${charData.name}`;
-                // 只有当该NPC还没有头像时才生成，避免重复消耗
-                if (!npcAvatars[uniqueImageKey]) {
-                  imageGenPromises.push(handleNpcAutoImageGen(charId, charData.imageGenPrompt));
-                }
-              }
-            }
-            await Promise.all(imageGenPromises);
-          } catch (error) {
-            console.error('执行NPC自动生图时出错:', error);
-          } finally {
-            // 清空更新列表，防止重复处理
-            if (updatedCharacterIds) updatedCharacterIds.clear();
-          }
-        }
+        
         // ------------------------------------------------
 
-        async function handleNpcAutoImageGen(charId, prompt) {
-          if (typeof eventEmit !== 'function') {
-            console.error('自动生图错误: 未找到前端助手通信接口 (eventEmit)。');
-            return;
-          }
+        
 
-          const width = npcDisplaySettings.npcImageWidth || 512;
-          const height = npcDisplaySettings.npcImageHeight || 768;
-
-          const requestId = `npc_${charId}_${Date.now()}`;
-          const requestData = { id: requestId, prompt, width, height, type: 1 };
-
-          const charName = characterDatabase[charId]?.name || '新人物';
-          let statusDanmaku = showDanmaku(`正在自动生成 ${charName} 的形象...`, 'status', null, true);
-
-          if (statusDanmaku) {
-            activeImageGenDanmaku.set(requestId, statusDanmaku);
-          }
-
-          try {
-            await eventEmit('generate-image-request', requestData);
-            await eventEmit('generate_image_request', requestData);
-          } catch (e) {
-            console.error(`为 ${charName} 发送生图请求失败: `, e);
-            if (statusDanmaku) statusDanmaku.remove();
-            activeImageGenDanmaku.delete(requestId);
-          }
-        }
-
-        function openNpcImageGenModal(char) {
-          if (!char) return;
-          document.getElementById('npc-image-gen-title').textContent = `为 ${char.name} 生成形象`;
-
-          let finalPrompt = '';
-          if (char.imageGenPrompt && char.imageGenPrompt.trim()) {
-            finalPrompt = char.imageGenPrompt;
-          } else {
-            const basePrompts = ['masterpiece', 'best quality', 'solo', char.gender === '男' ? '1boy' : '1girl'];
-
-            const descriptivePrompts = [char.appearance, char.figure, char.attire, char.action];
-            finalPrompt = [...basePrompts, ...descriptivePrompts]
-              .filter(p => p && p.trim() && p.trim() !== '未知' && p.trim() !== '无')
-              .join(', ');
-          }
-          document.getElementById('npc-gen-prompt').value = finalPrompt;
-
-          document.getElementById('npc-gen-width').value = npcDisplaySettings.npcImageWidth || 512;
-          document.getElementById('npc-gen-height').value = npcDisplaySettings.npcImageHeight || 768;
-
-          document.getElementById('npc-gen-status').textContent = '';
-          const startGenBtn = document.getElementById('npc-gen-start-btn');
-          const newBtn = startGenBtn.cloneNode(true);
-          startGenBtn.parentNode.replaceChild(newBtn, startGenBtn);
-
-          newBtn.addEventListener('click', () => {
-            handleNpcImageGenRequest();
-          });
-          npcImageGenOverlay.classList.add('visible');
-        }
+        function openNpcImageGenModal(char) { return openPortraitGenModal(char); }
         async function requestImageGeneration(
           prompt,
           width,
@@ -100234,92 +98993,9 @@ console.log('【调试】renderInventory 被调用');
           await eventEmit('generate_image_request', requestData);
         }
 
-        async function handlePlayerImageGenRequest() {
-          const prompt = document.getElementById('npc-gen-prompt').value;
-          const width = parseInt(document.getElementById('npc-gen-width').value);
-          const height = parseInt(document.getElementById('npc-gen-height').value);
-          const statusEl = document.getElementById('npc-gen-status');
-          const requestId = `player_${currentArchiveName}_${Date.now()}`;
+        
 
-          npcDisplaySettings.npcImageWidth = width;
-          npcDisplaySettings.npcImageHeight = height;
-          await dbSet(NPC_DISPLAY_SETTINGS_KEY, npcDisplaySettings);
-
-          const danmaku = showDanmaku(`正在为 [你] 生成形象...`, 'status', null, true);
-          if (danmaku) activeImageGenDanmaku.set(requestId, danmaku);
-
-          await requestImageGeneration(prompt, width, height, requestId, statusEl, danmaku, async imageData => {
-            await dbSet(`${CUSTOM_AVATAR_KEY}_${currentArchiveName}`, imageData);
-            await updateAvatar(currentPlayerData);
-            if (statusEl) statusEl.textContent = '头像已更新！';
-            setTimeout(() => {
-              const overlay = document.getElementById('npc-image-gen-overlay');
-              if (overlay) overlay.classList.remove('visible');
-            }, 1500);
-          });
-        }
-
-        async function handleNpcImageGenRequest() {
-          const targetNpcId = currentEditingNpcId;
-          if (!targetNpcId) return;
-
-          const charName = characterDatabase[targetNpcId]?.name || '该人物';
-          const prompt = document.getElementById('npc-gen-prompt').value;
-          const width = parseInt(document.getElementById('npc-gen-width').value);
-          const height = parseInt(document.getElementById('npc-gen-height').value);
-          const statusEl = document.getElementById('npc-gen-status');
-          const requestId = `npc_${targetNpcId}_${Date.now()}`;
-
-          npcDisplaySettings.npcImageWidth = width;
-          npcDisplaySettings.npcImageHeight = height;
-          await dbSet(NPC_DISPLAY_SETTINGS_KEY, npcDisplaySettings);
-
-          const danmaku = showDanmaku(`正在为 ${charName} 生成形象...`, 'status', null, true);
-          if (danmaku) activeImageGenDanmaku.set(requestId, danmaku);
-
-          try {
-            await requestImageGeneration(
-              prompt,
-              width,
-              height,
-              requestId,
-              statusEl,
-              danmaku,
-              async (imageData, usedPrompt) => {
-                const archive = await db.archives.get(currentArchiveName);
-                if (!archive.data.state.npcAvatars) archive.data.state.npcAvatars = {};
-
-                const uniqueImageKey = `${targetNpcId}_${charName}`;
-                archive.data.state.npcAvatars[uniqueImageKey] = imageData;
-                await db.archives.put(archive);
-
-                if (characterDatabase[targetNpcId]) {
-                  characterDatabase[targetNpcId].imageGenPrompt = usedPrompt;
-                }
-                if (currentState['0'][targetNpcId]) {
-                  currentState['0'][targetNpcId]['19'] = usedPrompt;
-                  await saveCurrentState();
-                }
-
-                if (statusEl) statusEl.textContent = '头像已更新！';
-
-                const updatedChar = characterDatabase[targetNpcId];
-                if (updatedChar) {
-                  showCharacterDetailPanel(updatedChar);
-                }
-
-                setTimeout(() => {
-                  const npcImageGenOverlay = document.getElementById('npc-image-gen-overlay');
-                  if (npcImageGenOverlay) npcImageGenOverlay.classList.remove('visible');
-                }, 1500);
-              },
-            );
-          } catch (e) {
-            if (statusEl) statusEl.textContent = `保存失败: ${e.message}`;
-            if (danmaku) danmaku.remove();
-            activeImageGenDanmaku.delete(requestId);
-          }
-        }
+        
 
         function showPersistentStatus(message) {
           let statusIndicator = document.getElementById('persistent-status-indicator');
@@ -103171,21 +101847,21 @@ characterDetailView.classList.remove('hidden');
                   let image;
                   if (consumer?.path?.[0] === 'imageProviderConfigs') {
                     const saved = await loadConcurrentEvolutionConfig();
-                    image = await ceCallImageGenerationOnce({...saved.imageProviderConfigs?.[provider],
-                      ...config,provider},prompt,signal);
+                    image = await ceCallImageGenerationOnce(libPack.imageRouteConfig(
+                      {...saved.imageProviderConfigs?.[provider],provider},config),prompt,signal);
                   } else if (provider) {
                     const saved = await loadPortraitGenConfig();
                     _portraitEnsureProviderConfigs(saved);
                     image = await callCommercialImageGenOnce({...saved,provider},prompt,signal,
-                      {..._portraitGetProviderConfig(saved,provider),...config});
+                      libPack.imageRouteConfig(_portraitGetProviderConfig(saved,provider),config));
                   } else if (new URL(config.apiUrl).hostname === 'generativelanguage.googleapis.com' ||
                       /:generateContent$/i.test(new URL(config.apiUrl).pathname)) {
                     image = await _portraitCallGeminiImageGen(config,prompt,signal);
                   } else {
                     const url = new URL(config.apiUrl);
-                    const endpoint = /\/chat\/completions\/?$/i.test(url.pathname) ? config.apiUrl :
-                      libPack.modelEndpoint(config.apiUrl,'images/generations');
-                    image = await _portraitCallCustomOpenAiImageGen({...config,apiUrl:endpoint},prompt,signal);
+                    image = /\/chat\/completions\/?$/i.test(url.pathname)
+                      ? await _portraitCallCustomOpenAiImageGen(config,prompt,signal)
+                      : await _portraitCallOpenAiImageGen(libPack.imageRouteConfig({},config),prompt,signal);
                   }
                   if (!image) throw new Error('未收到有效图片');
                 }});
@@ -103208,20 +101884,12 @@ characterDetailView.classList.remove('hidden');
 
           document.getElementById('export-segmented-memory-btn').addEventListener('click', exportSegmentedMemory);
           document.getElementById('import-segmented-memory-btn').addEventListener('click', importSegmentedMemory);
-          document.getElementById('auto-gen-npc-image-toggle').addEventListener('change', async e => {
-            funSettings.autoGenNpcImage = e.target.checked;
-            await saveFunSettings();
-            showDanmaku(`NPC自动生图已${e.target.checked ? '开启' : '关闭'}`, 'world');
-          });
 
-          npcImageGenOverlay
-            .querySelector('.modal-close-btn')
-            .addEventListener('click', () => npcImageGenOverlay.classList.remove('visible'));
+
           document.getElementById('npc-avatar-fullscreen-overlay').addEventListener('click', () => {
             document.getElementById('npc-avatar-fullscreen-overlay').classList.remove('visible');
           });
 
-          document.getElementById('npc-gen-start-btn').addEventListener('click', handleNpcImageGenRequest);
           document.getElementById('ctx-resend-btn').addEventListener('click', async () => {
             /* 2026-11-02：原来这里 if(isMainApiGenerating) return; 是**静默**返回，
              * 玩家点下去没有任何反馈，观感就是"点不动、卡死了"。
@@ -103763,6 +102431,15 @@ characterDetailView.classList.remove('hidden');
           });
           characterDisplay.addEventListener('click', openCharacterDetail);
           document.getElementById('change-avatar-btn').addEventListener('click', handleChangeAvatar);
+          for (const id of ['cultivation-avatar','custom-avatar-img','modal-avatar-img','modal-custom-avatar-img']) {
+            const avatar = document.getElementById(id);
+            avatar.setAttribute('role','button');
+            avatar.setAttribute('aria-label','打开我的肖像绘卷');
+            avatar.tabIndex = 0;
+            const open = event => { event.preventDefault(); event.stopPropagation(); void frOpenPlayerPortrait(); };
+            avatar.addEventListener('click',open);
+            avatar.addEventListener('keydown',event => { if (event.key === 'Enter' || event.key === ' ') open(event); });
+          }
           avatarUploadInput.addEventListener('change', e => handleAvatarUpload(e, 'player'));
           npcAvatarUploadInput.addEventListener('change', e => handleAvatarUpload(e, 'npc'));
           modalCloseBtn.addEventListener('click', closeCharacterDetail);
@@ -103847,6 +102524,13 @@ characterDetailView.classList.remove('hidden');
                 showCustomAlert('复制失败');
               });
             hideContextMenu();
+          });
+          document.getElementById('ctx-image-btn').addEventListener('click', async () => {
+            const id = activeLogEntry?.dataset.logId;
+            const archiveName = currentArchiveName;
+            hideContextMenu();
+            if (!id || !archiveName) return;
+            await ceRunStoryImageJob({archiveName,logId:id,config:await loadConcurrentEvolutionConfig()});
           });
 
 document.getElementById('ctx-memory-btn').addEventListener('click', () => {
@@ -104805,20 +103489,6 @@ if (dbItem) openVectorEditor(dbItem);
           updateAvatar(currentPlayerData);
           checkPlayerDeath();
 
-          if (funSettings.autoGenNpcImage) {
-            const archive = await db.archives.get(currentArchiveName);
-            const npcAvatars = archive?.data?.state?.npcAvatars || {};
-
-            for (const charId in currentState['0']) {
-              if (charId.startsWith('C') || charId.startsWith('G')) {
-                const charData = currentState['0'][charId];
-                const imageGenPrompt = charData['19']?.trim();
-                const uniqueImageKey = `${charId}_${charData['1']?.split('|')[0] || charId}`;
-
-                handleNpcAutoImageGen(charId, imageGenPrompt);
-              }
-            }
-          }
         }
 
         function compareInventory(prevInventory, latestInventory) {
@@ -105390,7 +104060,7 @@ ${delBtn}
             summaryConfig.largeSummaryPrompt || defaultLargeSummaryPrompt;
 
           document.getElementById('segmented-memory-enabled-toggle').checked =
-            summaryConfig.segmentedMemoryEnabled || false;
+            frShouldSendSegmentedMemory(summaryConfig,typeof knowledgeSearchGlobalConfig !== 'undefined' ? knowledgeSearchGlobalConfig : null);
           document.getElementById('segmented-chat-layers').value = summaryConfig.segmentedChatLayers || 20;
           document.getElementById('segmented-large-summary-start').value =
             summaryConfig.segmentedLargeSummaryStart || 50;
@@ -105500,6 +104170,7 @@ ${delBtn}
           const chatLayers = parseInt(document.getElementById('segmented-chat-layers').value) || 0;
           const largeSummaryStart = parseInt(document.getElementById('segmented-large-summary-start').value) || 0;
           configToSave.segmentedMemoryEnabled = document.getElementById('segmented-memory-enabled-toggle').checked;
+          configToSave.segmentedMemoryOwnsContext = true;
           configToSave.segmentedChatLayers = chatLayers;
           configToSave.segmentedLargeSummaryStart = largeSummaryStart;
           configToSave.segmentedSummaryThreshold =
@@ -107036,8 +105707,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
             }</span></div>
             <div id="npc-avatar-actions-container" style="display: flex; gap: 10px; margin-bottom: 15px;">
                 <button id="change-npc-avatar-btn" class="major-action-button" style="flex: 1;"><i class="fas fa-image"></i> 更换形象</button>
-                <button id="generate-npc-avatar-btn" class="major-action-button" style="flex: 1;"><i class="fas fa-paint-brush"></i> AI生图</button>
-<button id="portrait-gen-btn" class="major-action-button" style="flex: 1;"><i class="fas fa-palette"></i> 商用模型生图</button>
+                <button id="generate-npc-avatar-btn" class="major-action-button" style="flex: 1;"><i class="fas fa-paint-brush"></i> 肖像绘卷</button>
 <button id="portrait-crop-btn" class="major-action-button" style="flex: 1;"><i class="fas fa-crop-alt"></i> 裁剪头像</button>
             </div>
             <div class="char-detail-tabs">
@@ -107125,27 +105795,15 @@ renderCharDetailTab('info', char);
 
           const avatarContainer = document.getElementById('char-detail-avatar-container');
           avatarContainer.style.cursor = 'pointer';
-          avatarContainer.addEventListener('click', () => {
-            const overlay = document.getElementById('npc-avatar-fullscreen-overlay');
-            const fullscreenImg = document.getElementById('npc-avatar-fullscreen-img');
-            const visibleImg = avatarContainer.querySelector('img');
-            if (visibleImg && visibleImg.src) {
-              const surroundingModal = document.getElementById('surrounding-characters-overlay');
-              const currentZ = parseInt(window.getComputedStyle(surroundingModal).zIndex, 10);
-              overlay.style.zIndex = isNaN(currentZ) ? 2000 : currentZ + 10;
-              fullscreenImg.src = visibleImg.src;
-              overlay.classList.add('visible');
-            }
+          avatarContainer.setAttribute('role','button');
+          avatarContainer.setAttribute('aria-label','打开' + char.name + '的肖像绘卷');
+          avatarContainer.tabIndex = 0;
+          const openPortrait = () => void openPortraitGenModal(char);
+          avatarContainer.addEventListener('click',openPortrait);
+          avatarContainer.addEventListener('keydown',event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPortrait(); }
           });
 
-          const _portraitGenBtn = document.getElementById('portrait-gen-btn');
-if (_portraitGenBtn) {
-  _portraitGenBtn.onclick = async () => {
-    if (typeof openPortraitGenModal === 'function') {
-      await openPortraitGenModal(char);
-    }
-  };
-}
 const _portraitCropBtn = document.getElementById('portrait-crop-btn');
 if (_portraitCropBtn) {
   _portraitCropBtn.disabled = true;
@@ -107513,7 +106171,7 @@ if (!isReadOnly) {
               secretsHtml += `
                 <div class="secret-card">
                     <div class="secret-header"><i class="fas fa-id-card"></i> 基础档案</div>
-                    ${npcDisplaySettings.showSpiritStones ? `<div class="secret-row"><span class="secret-label">当前灵石</span><span class="secret-value">${char.spiritStones || '0'}</span></div>` : ''}
+                    ${npcDisplaySettings.showSpiritStones ? `<div class="secret-row"><span class="secret-label">当前灵石</span><span class="secret-value fr-wallet-value">${frSpiritStoneWalletText(char.spiritStoneWallet || frReadSpiritStoneWallet({26:char.spiritStones}),'\n')}</span></div>` : ''}
                     ${npcDisplaySettings.showLinggen ? `<div class="secret-row"><span class="secret-label">灵根资质</span><span class="secret-value">${char.linggen || '未知'}</span></div>` : ''}
                     ${npcDisplaySettings.showSpecialConstitution ? `<div class="secret-row"><span class="secret-label">特殊体质</span><span class="secret-value">${char.specialConstitution || '无'}</span></div>` : ''}
                     <div class="secret-row"><span class="secret-label">对你称呼</span><span class="secret-value">${char.appellation || '道友'}</span></div>
@@ -110959,7 +109617,7 @@ snapshotEditorOverlay.classList.add('visible');
             },
             血月当空: {
               desc: '红月长存，魔道昌盛，人心浮躁，杀戮即是修行。',
-              effect: '魔道功法修炼速度+30%，正道功法受压制。善恶值倾向于负面发展。',
+              effect: '魔道功法修炼速度+30%，正道功法受压制。',
             },
             洞天破碎: {
               desc: '空间极不稳定，充满裂缝，但也联通着无数遗迹。',
@@ -112790,7 +111448,7 @@ ${
 
             const newTableState = getInitialTableState();
             const rootDescription = CREATION_CONFIG.LINGGEN[creationState.selectedLinggen]?.desc || '';
-            const playerRemarks = `灵根:${creationState.selectedLinggen}|灵根说明:${rootDescription}|善恶值:0|年龄:${
+            const playerRemarks = `灵根:${creationState.selectedLinggen}|灵根说明:${rootDescription}|年龄:${
               creationState.initialAge
             }|寿元:100|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
               creationState.avatarAppearance
@@ -112837,7 +111495,7 @@ ${
               16: '待定',
               19: '待定',
               25: '待定',
-              26: '待定',
+              26: '0',
               27: '待定',
               28: '待定',
               29: '待定',
@@ -114708,6 +113366,8 @@ async function getCustomTraits() {
         }
 
         function openSegmentedMemorySettings() {
+          document.getElementById('segmented-memory-enabled-toggle').checked = frShouldSendSegmentedMemory(summaryConfig,
+            typeof knowledgeSearchGlobalConfig !== 'undefined' ? knowledgeSearchGlobalConfig : null);
           segmentedMemoryOverlay.classList.add('visible');
           // 刷新深度总结信息面板
           refreshDeepSummaryInfo();
@@ -114724,6 +113384,7 @@ async function getCustomTraits() {
           }
 
           summaryConfig.segmentedMemoryEnabled = document.getElementById('segmented-memory-enabled-toggle').checked;
+          summaryConfig.segmentedMemoryOwnsContext = true;
           summaryConfig.segmentedChatLayers = chatLayers;
           summaryConfig.segmentedLargeSummaryStart = largeSummaryStart;
           summaryConfig.segmentedSummaryThreshold = summaryThreshold;

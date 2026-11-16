@@ -1,5 +1,6 @@
-import { resolveCultivationSpeedCell, techniqueSpeedBaseline } from './cultivation-speed.js';
+import { resolveCultivationSpeedCell, resolveTechniqueSpeed, splitTechniqueEffectStages, techniqueImmortalRealmRank } from './cultivation-speed.js';
 import { classifyItem, equipmentEligibility, equipmentRealmName, isTreasureSet } from './equipment-layout.js';
+import { NUMERIC_REALM_ROWS, resolveNumericRealm } from './numeric-realms.js';
 import { numericSetting } from './numeric-settings.js';
 // Pure, single-item container contract. No character totals, storage, or migration.
 const ATTRIBUTES = new Set([
@@ -314,37 +315,99 @@ function changchunEdition(item){
   return /^长春功[（(](?:完整|全本)[）)]$/u.test(name)?2:0;
 }
 
-export function compareNpcEquipment(candidate,current,columns){
-  if(classifyItem(candidate).slotKey!=='technique')return compareContainerEquipment(candidate,current,columns);
-  if(!current)return 1;
-  const nextEdition=changchunEdition(candidate),oldEdition=changchunEdition(current);
-  if(nextEdition&&oldEdition&&nextEdition!==oldEdition)return nextEdition-oldEdition;
-  const next=techniqueSpeedBaseline(candidate),old=techniqueSpeedBaseline(current);
-  return next.tier&&old.tier?next.percent-old.percent:null;
+function techniqueRealmOrder(text, ceiling = false) {
+  const name = String(text || '').split('|')[0].replace(/\s+/gu, '').replace(/[（(][^）)]*[）)]$/u, '');
+  const immortal = techniqueImmortalRealmRank(name);
+  if (immortal !== null) return immortal;
+  const realm = resolveNumericRealm(name);
+  if (realm) return NUMERIC_REALM_ROWS.findIndex(row => row.realm === realm);
+  const major = name.match(/^(炼气|练气|筑基|结丹|元婴|化神|炼虚|合体|大乘)期?$/u)?.[1]?.replace('练气', '炼气');
+  if (!major) return null;
+  const match = row => row.realm.startsWith(major);
+  return ceiling ? NUMERIC_REALM_ROWS.findLastIndex(match) : NUMERIC_REALM_ROWS.findIndex(match);
 }
 
-export function npcEquipmentUpgrade(item,equipment,columns){
+function techniqueComparableSpeed(item, columns) {
+  const ownerRank = techniqueRealmOrder(equipmentRealmName(columns));
+  const active = splitTechniqueEffectStages(item['8'] ?? item.realmEffects).filter(entry => {
+    const rank = techniqueRealmOrder(entry.realm);
+    return /^(?:入门|基础|通用)$/u.test(entry.realm) || (rank !== null && ownerRank !== null && rank <= ownerRank);
+  });
+  const speed = resolveTechniqueSpeed(item, active);
+  if (speed.source !== 'record' && !speed.tier) return null;
+  const base = resolveCultivationSpeedCell(columns?.['11']?.修炼速度, columns).max;
+  return speed.flat + speed.percent * base / 100;
+}
+
+export function techniqueUnavailable(item) {
+  const description = String(item?.['3'] ?? item?.description ?? '');
+  return /(?:不能|无法|不得|禁止|尚不能)(?:修习|修炼|修练|学习|转修|改修)|封印[^。；\n]{0,10}(?:未解|未破|不可读)|替[^。；\n]{0,8}保管|仅供转交/u.test(description);
+}
+
+function techniqueStoryDecision(item, columns, story, actorScoped) {
+  const name = String(item?.['1'] ?? item?.name ?? '').replace(/[《》]/gu, '');
+  if (!name || typeof story !== 'string' || !story) return null;
+  const owner = String(columns?.['1'] ?? columns?.name ?? '').split('|')[0].replace(/<[^>]*>/gu, '').trim();
+  const escape = value => value.replace(/[.*+?^\x24{}()|[\]\\]/gu, '\\$&');
+  const baseName = name.replace(/[（(](?:完整|全本)[）)]$/u, '');
+  const title = [name, baseName].map(escape).join('|');
+  const action = '(暂不(?:修习|修炼|修练|改修)|(?:没有|并未|尚未|未曾|未)(?:修习|修炼|修练|改修|转修)|停止(?:修习|修炼|修练)|放弃(?:修习|修炼|修练)?|(?:继续|仍旧?|开始|正式|已经)(?:在)?(?:修习|修炼|修练|主修)|改修|转修|主修)';
+  const re = new RegExp(action + '\\s*《?(?:' + title + ')(?:》|(?=[，。；、！？\\s]|$))', 'gu');
+  let decision = null;
+  let start = 0;
+  for (const line of story.split(/[。；！？\n]/u)) {
+    for (const match of line.matchAll(re)) {
+      const prefix = line.slice(0, match.index);
+      if (!actorScoped && (!owner || !prefix.includes(owner))) continue;
+      const before = prefix.slice(-16);
+      if (/(?:打算|准备|将来|考虑|想要|若要|若能|如果|是否|建议|劝|让|能否|计划)[^，、]{0,9}$/u.test(before)) continue;
+      decision = {index:start + match.index, use:!/^(?:暂不|没有|并未|尚未|未|停止|放弃)/u.test(match[1])};
+    }
+    start += line.length + 1;
+  }
+  return decision;
+}
+
+export function compareNpcEquipment(candidate,current,columns,{techniqueStory,actorScoped=false}={}){
+  if(classifyItem(candidate).slotKey!=='technique')return compareContainerEquipment(candidate,current,columns);
+  const wanted = techniqueStoryDecision(candidate, columns, techniqueStory, actorScoped);
+  const prior = techniqueStoryDecision(current, columns, techniqueStory, actorScoped);
+  if (wanted?.use === false) return -1;
+  if (wanted?.use && (!prior?.use || wanted.index >= prior.index)) return 1;
+  if (prior?.use || techniqueUnavailable(candidate)) return -1;
+  if(!current)return 1;
+  if (prior?.use === false) return 1;
+  const nextEdition=changchunEdition(candidate),oldEdition=changchunEdition(current);
+  if(nextEdition&&oldEdition&&nextEdition!==oldEdition)return nextEdition-oldEdition;
+  const next = techniqueComparableSpeed(candidate, columns), old = techniqueComparableSpeed(current, columns);
+  if (next !== null && old !== null && next !== old) return next - old;
+  const maxNext = techniqueRealmOrder(candidate['7'] ?? candidate.maxRealm, true);
+  const maxOld = techniqueRealmOrder(current['7'] ?? current.maxRealm, true);
+  if (maxNext !== null && maxOld !== null) return maxNext - maxOld;
+  return next !== null && old !== null ? 0 : null;
+}
+
+export function npcEquipmentUpgrade(item,equipment,columns,options){
   const {slotKey,indices}=classifyItem(item);
   if(!slotKey)return null;
   const equipped=equipment?.[slotKey]??[];
   const candidate=isTreasureSet(item)?item:{...item,5:'1'};
   const eligible=indices.filter(index=>equipmentEligibility(columns,slotKey,index,candidate).allowed);
-  const empty=eligible.find(index=>!equipped[index]&&
-    (slotKey==='technique'||compareNpcEquipment(item,null,columns)>0));
+  const empty=eligible.find(index=>!equipped[index]&&compareNpcEquipment(item,null,columns,options)>0);
   if(empty!==undefined)return {slotKey,index:empty};
-  const best=eligible.map(index=>({index,gain:compareNpcEquipment(item,equipped[index],columns)}))
+  const best=eligible.map(index=>({index,gain:compareNpcEquipment(item,equipped[index],columns,options)}))
     .filter(row=>equipped[row.index]&&row.gain>0).sort((a,b)=>b.gain-a.gain)[0];
   return best?{slotKey,index:best.index}:null;
 }
 
-export function planNpcLoadout(inventory,equipment,columns){
+export function planNpcLoadout(inventory,equipment,columns,options){
   if(!Array.isArray(inventory))return [];
   const slots=Object.fromEntries(Object.entries(equipment??{}).filter(([,items])=>Array.isArray(items))
     .map(([group,items])=>[group,[...items]]));
   const upgrades=new Map();
   for(const item of inventory){
     if(!item||!Number.isSafeInteger(Number(item['5']??item.quantity))||Number(item['5']??item.quantity)<1)continue;
-    const candidate=isTreasureSet(item)?item:{...item,5:'1'},upgrade=npcEquipmentUpgrade(candidate,slots,columns);
+    const candidate=isTreasureSet(item)?item:{...item,5:'1'},upgrade=npcEquipmentUpgrade(candidate,slots,columns,options);
     if(!upgrade)continue;
     const {slotKey,index}=upgrade;
     (slots[slotKey]??=[])[index]=candidate;

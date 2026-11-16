@@ -492,6 +492,20 @@
       };
     }
 
+    // 本机正文预设导出的条目包，保留顺序、角色和开关。
+    if (obj && Array.isArray(obj.entries)) {
+      var entries = obj.entries.filter(function (p) { return p && typeof p === 'object'; })
+        .map(function (p, i) {
+          return mkItem(p.name, p.content, {
+            role: ['system','user','assistant'].includes(p.role) ? p.role : 'system',
+            enabled: p.enabled !== false,
+            order: Number.isFinite(p.order) ? p.order : i
+          });
+        });
+      return {ok:true,kind:'entries-pack',name:String(obj.name||name),items:entries,
+        text:joinItems(entries),stats:{count:entries.length},reason:''};
+    }
+
     // ② 整包 { presets:[...] } → 逐条
     if (obj && Array.isArray(obj.presets)) {
       var items2 = obj.presets

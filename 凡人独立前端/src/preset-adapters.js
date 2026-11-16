@@ -17,6 +17,11 @@
     // 兼容旧数据：老格式 { id, name, text } 会自动迁移成「单条目预设」。
     // 发送时取 activePreset 里 enabled 的条目按 order 拼成一段（prose-api-settings 的 frProsePresetText）。
     var KEY = 'FR_PROSE_PRESETS_V1';
+    var ROUTE_KEY = 'FR_PROSE_ROUTE_PRESETS_V1';
+    var BUILTIN_ID = '@builtin';
+    var BUILTIN_NAME = 'gemini 万物有灵内置预设';
+    var LEGACY_BUILTIN_NAMES = ['正文预设', '哈吉米、鲸鱼通用预设（万物有灵）', BUILTIN_NAME];
+    var PLAYER_MACRO_MARKER = '__FR_PROSE_PLAYER_NAME__';
 
     function uid(p) { return (p || 'pe') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
 
@@ -29,6 +34,14 @@
       if (Array.isArray(p.entries)) {
         out.entries = p.entries.filter(function (e) { return e && typeof e === 'object'; }).map(function (e, k) {
           var rawContent = String(e.content == null ? '' : e.content);
+          var builtinFormat = window.__FR_BUILTIN_PRESET__?.prompts?.find(function (row) {
+            return row.identifier === e.id && ['prompt_1764837454104_zdms0so','c3aff14f-fcce-4e05-818c-8b1ed8da963b'].includes(row.identifier);
+          });
+          if (builtinFormat && rawContent.trim() === String(builtinFormat.content || '').trim()) return null;
+          var oldFormat = window.__FR_PROSE_RENDER_FORMAT__?.split('\n\n## 固定输出外层')[0];
+          if (oldFormat && rawContent.startsWith('## 灵动正文 · 万物有灵')) {
+            rawContent = rawContent.replace(/\r\n/g, '\n').replace('\n\n' + oldFormat, '');
+          }
           var c = window.FRWorldRules?.upgradeProseEntry(String(e.name || ''),rawContent);
           if (c === null) return null; // An untouched retired built-in no longer appears or sends.
           c = c ?? rawContent;
@@ -177,6 +190,84 @@
       var d = readAll();
       return d.presets.find(function (p) { return p.id === d.activePresetId; }) || d.presets[0] || null;
     }
+
+    function importBuiltin(playerName) {
+      if (!window.__FR_BUILTIN_PRESET__ || !window.FRStPresetImport) return null;
+      var data = window.FRStandaloneConfig?.load() || {};
+      return window.FRStPresetImport.importAny(JSON.stringify(window.__FR_BUILTIN_PRESET__), BUILTIN_NAME + '.json',
+        { playerName: playerName || data.playerName || '玩家', charName: data.charName || '主角' });
+    }
+
+    function builtinPresetTemplate() {
+      var parsed = importBuiltin(PLAYER_MACRO_MARKER);
+      return parsed?.ok ? normalizePreset({ id: BUILTIN_ID, name: BUILTIN_NAME, entries: parsed.items }, 0) : null;
+    }
+
+    function isBuiltinCopy(preset, builtin) {
+      if (!builtin || !LEGACY_BUILTIN_NAMES.includes(preset.name) || preset.entries.length !== builtin.entries.length) return false;
+      var importedPlayerName;
+      var entryFields = ['name', 'role', 'order', 'enabled', 'inOrder', 'macroOnly', 'hostSlot'];
+      return preset.entries.every(function (entry, index) {
+        var template = builtin.entries[index];
+        if (!entryFields.every(function (key) { return entry[key] === template[key]; })) return false;
+        var content = entry.content.trim();
+        var templateContent = template.content.trim();
+        if (content === templateContent) return true;
+        // This macro is expanded to a fresh cache-busting token at import time.
+        var cacheToken = /^Nonsense_Test_ID: (?:[a-z]\d+){5}[a-z]$/u;
+        if (entry.name === '🌀防429' && cacheToken.test(content) && cacheToken.test(templateContent)) return true;
+        var parts = templateContent.split(PLAYER_MACRO_MARKER);
+        if (parts.length === 1) return false;
+        // Old imports substituted the player name into these exact macro positions.
+        if (importedPlayerName === undefined) {
+          var escaped = parts.map(function (part) { return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+          var pattern = escaped[0] + '(?<playerName>.*?)' + escaped.slice(1).join('\\k<playerName>');
+          importedPlayerName = new RegExp('^' + pattern + '(?![\\s\\S])', 's').exec(content)?.groups.playerName;
+        }
+        return importedPlayerName !== undefined && parts.join(importedPlayerName) === content;
+      });
+    }
+
+    function requestPreset(id) {
+      if (id === BUILTIN_ID) {
+        var parsed = importBuiltin();
+        if (parsed?.ok) return {entries:parsed.items};
+      }
+      return id && readAll().presets.find(function (p) { return p.id === id; }) || activePreset();
+    }
+
+    function routeBindings() {
+      try { return JSON.parse(localStorage.getItem(ROUTE_KEY) || '{}') || {}; }
+      catch (_) { return {}; }
+    }
+
+    window.FRProseRoutePresets = {
+      options: function (routeId) {
+        var presets = readAll().presets;
+        var selected = window.FRProseRoutePresets.get(routeId);
+        var builtin = builtinPresetTemplate();
+        var builtinId = BUILTIN_ID;
+        var options = [];
+        presets.forEach(function (preset) {
+          if (isBuiltinCopy(preset, builtin)) {
+            // Keep an existing route on the original saved entries and ID.
+            if (preset.id === selected) builtinId = selected;
+          } else {
+            options.push({ id: preset.id, name: preset.name });
+          }
+        });
+        return [{ id: builtinId, name: BUILTIN_NAME }].concat(options);
+      },
+      get: function (routeId) {
+        var bindings = routeBindings();
+        return routeId && Object.hasOwn(bindings,routeId) ? bindings[routeId] : '';
+      },
+      set: function (routeId,id) {
+        var bindings = {...routeBindings(),[routeId]:id};
+        if (!id) delete bindings[routeId];
+        localStorage.setItem(ROUTE_KEY,JSON.stringify(bindings));
+      },
+    };
 
     function load() {
       var p = activePreset();
@@ -331,8 +422,8 @@
     });
 
     // 暴露给 prose-api-settings.js 的垫片取文本用
-    window.frProsePresetText2 = function () {
-      var p = activePreset();
+    window.frProsePresetText2 = function (presetId) {
+      var p = requestPreset(presetId);
       return presetText(p);
     };
     /* 暴露「按 role 拆分的消息序列」给垫片。
@@ -344,7 +435,7 @@
      * 🎨强化、⚡重置D0＆卡思维链 …）会作为**对应角色的消息**发出去，
      * 不是拼进 system。垫片 buildMessages 用这个函数拿到完整消息序列。
      */
-    window.frProsePresetMessages = function () {
+    window.frProsePresetMessages = function (presetId) {
       var CFG = window.FRStandaloneConfig;
       if (CFG) {
         try {
@@ -352,7 +443,7 @@
           if (c && c.prosePresetEnabled === false) return [];
         } catch (e) {}
       }
-      var p = activePreset();
+      var p = requestPreset(presetId);
       return presetMessages(p);
     };
     window.frProseActivePreset2 = activePreset;
@@ -463,7 +554,7 @@
 
         var cfg = (window.FRStandaloneConfig ? window.FRStandaloneConfig.load() : {}) || {};
         var res = window.FRStPresetImport.importAny(
-          JSON.stringify(builtin), '哈吉米、鲸鱼通用预设（万物有灵）.json',
+          JSON.stringify(builtin), BUILTIN_NAME + '.json',
           { playerName: cfg.playerName || '玩家', charName: cfg.charName || '主角' }
         );
         if (!res || !res.ok || !res.items || !res.items.length) return false;
@@ -498,11 +589,11 @@
         });
 
         if (!p) {
-          p = { id: uid('pset'), name: '哈吉米、鲸鱼通用预设（万物有灵）', entries: [] };
+          p = { id: uid('pset'), name: BUILTIN_NAME, entries: [] };
           d.presets.push(p);
           d.activePresetId = p.id;
         } else if (!p.name || /^预设 \d+$/.test(p.name)) {
-          p.name = '哈吉米、鲸鱼通用预设（万物有灵）';
+          p.name = BUILTIN_NAME;
         }
         p.entries = items;
         // 让 normalizePreset 补全 id / empty / reason 等字段
@@ -525,6 +616,21 @@
       var box = document.getElementById('prose-inline-entries');
       if (!box) return;
       var p = activePreset();
+      var deleteBtn = document.getElementById('delete-prose-inline-btn');
+      if (deleteBtn) deleteBtn.disabled = !p;
+      var picker = document.getElementById('fr-current-prose-preset');
+      if (picker) {
+        picker.replaceChildren();
+        var builtin = builtinPresetTemplate();
+        readAll().presets.forEach(function (preset) {
+          var opt = document.createElement('option');
+          opt.value = preset.id;
+          opt.textContent = isBuiltinCopy(preset, builtin) ? BUILTIN_NAME : preset.name;
+          picker.append(opt);
+        });
+        picker.disabled = !p;
+        picker.value = p?.id || '';
+      }
       var entries = p ? (p.entries || []).slice() : [];
       entries.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
 
@@ -695,6 +801,47 @@
       renderInline();
     }
 
+    function deleteActivePreset() {
+      var d = readAll();
+      var p = d.presets.find(function (preset) { return preset.id === d.activePresetId; });
+      if (!p) return;
+      var option = document.getElementById('fr-current-prose-preset')?.selectedOptions[0];
+      var name = option?.value === p.id ? option.textContent : p.name;
+      var bindings = routeBindings();
+      var affectedRoutes = Object.keys(bindings).filter(function (route) { return bindings[route] === p.id; });
+      var notice = affectedRoutes.length ? '\n\n绑定它的 ' + affectedRoutes.length + ' 个正文接口将改为「跟随当前正文预设」。' : '';
+      if (!window.confirm('确定删除整套正文预设「' + name + '」？' + notice)) return;
+
+      d.presets = d.presets.filter(function (preset) { return preset.id !== p.id; });
+      d.activePresetId = d.presets[0]?.id || null;
+      var status = document.getElementById('prose-preset-status');
+      try {
+        if (affectedRoutes.length) {
+          var remainingBindings = {...bindings};
+          affectedRoutes.forEach(function (route) { delete remainingBindings[route]; });
+          localStorage.setItem(ROUTE_KEY, JSON.stringify(remainingBindings));
+        }
+        if (!writeAll(d)) {
+          if (affectedRoutes.length) localStorage.setItem(ROUTE_KEY, JSON.stringify(bindings));
+          throw new Error('无法保存正文预设');
+        }
+      } catch (_) {
+        if (status) {
+          status.textContent = '删除失败，无法保存正文预设。';
+          status.style.color = '#ff9c9c';
+        }
+        return;
+      }
+      inlineQuery = '';
+      var search = document.getElementById('prose-inline-search');
+      if (search) search.value = '';
+      window.dispatchEvent(new CustomEvent('fr:prose-presets-changed'));
+      if (status) {
+        status.textContent = '已删除「' + name + '」。';
+        status.style.color = '#9fd08a';
+      }
+    }
+
     function openInlineEditor(id) {
       // 复用管理器的编辑器（它已经有完整的名称/内容/保存逻辑）
       if (window.FRPresetManager) {
@@ -770,7 +917,7 @@
         name: name || '导入预设',
         entries: entries
       };
-      d.presets = [preset];            // 导入即替换当前预设（和「导入预设」语义一致）
+      d.presets.push(preset);
       d.activePresetId = preset.id;
       writeAll(d);
       inlineQuery = '';
@@ -789,6 +936,16 @@
       // 开箱即有：首次进入且没有条目时，自动把内置预设展开成逐条目。
       // 必须在 renderInline 之前跑，否则玩家先看到一次空面板。
       autoSeedBuiltin();
+      var picker = document.getElementById('fr-current-prose-preset');
+      if (picker) picker.addEventListener('change',function () {
+        var d = readAll();
+        if (!d.presets.some(function(p) { return p.id === picker.value; })) return;
+        d.activePresetId = picker.value;
+        if (writeAll(d)) window.dispatchEvent(new CustomEvent('fr:prose-presets-changed'));
+      });
+      var protocol = document.getElementById('fr-prose-rendering-protocol');
+      if (protocol) protocol.textContent = window.frProseRenderingProtocol?.() || '';
+      document.getElementById('delete-prose-inline-btn')?.addEventListener('click', deleteActivePreset);
       var search = document.getElementById('prose-inline-search');
       if (search) {
         search.addEventListener('input', function () {
@@ -913,7 +1070,10 @@
       setTimeout(bindInline, 0);
     }
     // 管理器改了同一份数据时同步刷新
-    window.addEventListener('fr:prose-presets-changed', function () { try { renderInline(); } catch (e) {} });
+    window.addEventListener('fr:prose-presets-changed', function () {
+      renderInline();
+      window.__frRefreshApiEmbeds?.();
+    });
   })();
 
   // 其他脚本想刷新某一套时用

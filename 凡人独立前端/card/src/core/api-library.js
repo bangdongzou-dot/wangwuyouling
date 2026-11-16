@@ -109,23 +109,117 @@ export function modelEndpoint(apiUrl, operation) {
     url.pathname = pathname;
     return url.href;
   }
-  pathname = pathname.replace(/\/(?:chat\/completions|embeddings|rerank|images\/generations|models)$/i, '');
+  pathname = pathname.replace(/\/(?:chat\/completions|embeddings|rerank|images\/(?:generations|edits)|models)$/i, '');
   if (!/\/v\d+(?:beta\d*)?(?:\/openai)?$/i.test(pathname)) pathname += '/v1';
   url.pathname = pathname + '/' + operation;
   return url.href;
 }
 
-function probeKind(consumer, url, model) {
+export const imageSizes = ['1024x1024', '1536x1024', '1920x1280', '1024x1536', '2048x2048',
+  '2048x1152', '2560x1440', '1440x2560', '3840x2160', '2160x3840'];
+const imageAttempts = new Map();
+const requestKindLabels = {chat:'文本', embeddings:'向量', rerank:'重排序', image:'生图'};
+const positiveInteger = (raw, max = Number.MAX_SAFE_INTEGER) =>
+  Number.isSafeInteger(Number(raw)) && Number(raw) > 0 && Number(raw) <= max ? Number(raw) : undefined;
+
+export function normalizeImageRequestProfile(value = {}) {
+  const size = String(value?.size || '').trim().toLowerCase().replace(/\s*[x×]\s*/g, 'x');
+  const { quality, outputFormat } = value || {};
+  const timeoutSeconds = positiveInteger(value?.timeoutSeconds, 4294967);
+  const rpm = positiveInteger(value?.rpm);
+  return {
+    ...(/^(?:auto|[1-9]\d*x[1-9]\d*)$/.test(size) ? {size} : {}),
+    ...(['auto','low','medium','high','xhigh','max'].includes(quality) ? {quality} : {}),
+    ...(['png','jpeg','webp'].includes(outputFormat) ? {outputFormat} : {}),
+    ...(timeoutSeconds ? {timeoutSeconds} : {}),
+    ...(rpm ? {rpm} : {}),
+  };
+}
+
+function normalizeEmbeddingProfile(value) {
+  const dimensions = positiveInteger(value?.dimensions);
+  return dimensions ? {dimensions} : {};
+}
+
+function normalizeRerankProfile(value) {
+  const maxDocuments = positiveInteger(value?.maxDocuments);
+  return maxDocuments ? {maxDocuments} : {};
+}
+
+export function embeddingRequestBody(model, input, route) {
+  return {model, input, ...normalizeEmbeddingProfile(route?.embeddingProfile)};
+}
+
+export function rerankRequestBody(model, query, documents) {
+  return {model, query, documents, top_n:documents.length};
+}
+
+export function imageRouteConfig(fallback, route) {
+  return {
+    ...fallback,
+    apiUrl:route.apiUrl, apiKey:route.apiKey, apiModel:route.apiModel,
+    ...normalizeImageRequestProfile(route.imageRequestProfile),
+    imageRouteId:route.id || fallback.imageRouteId,
+  };
+}
+
+export function takeImageRouteSlot(config) {
+  if (!config.imageRouteId || !config.rpm) return;
+  const now = Date.now();
+  const recent = (imageAttempts.get(config.imageRouteId) || []).filter(time => now - time < 60000);
+  if (recent.length >= config.rpm) throw new Error('此生图线路已达每分钟请求上限');
+  recent.push(now);
+  imageAttempts.set(config.imageRouteId, recent);
+}
+
+export function imageRequestSignal(config, signal) {
+  if (!config.timeoutSeconds) return signal;
+  const timeout = AbortSignal.timeout(config.timeoutSeconds * 1000);
+  return signal ? AbortSignal.any([signal,timeout]) : timeout;
+}
+
+export function gptImageRequestBody(config, prompt) {
+  return {model:config.apiModel, prompt:prompt.trim(), size:config.size || '1024x1024',
+    quality:config.quality || 'high', background:config.background || 'auto', output_format:config.outputFormat || 'png'};
+}
+
+function consumerRequestKind(consumer) {
   const slot = consumer?.slotId || consumer?.idField || '';
   if (slot === 'embeddingApiPresetId') return 'embeddings';
   if (/rerank/i.test(slot)) return 'rerank';
   if (/^(providers|imageProviderConfigs)\./.test(slot)) return 'image';
-  const pathname = new URL(url).pathname.replace(/\/+$/, '');
-  if (/\/embeddings$/i.test(pathname) || /embedding/i.test(model)) return 'embeddings';
-  if (/\/rerank$/i.test(pathname) || /rerank/i.test(model)) return 'rerank';
-  if (/\/images\/generations$|:generateContent$/i.test(pathname) ||
-      /(?:gpt-image|dall-e|seedream|grok-imagine|nano-banana|gemini.*-image)/i.test(model)) return 'image';
   return 'chat';
+}
+
+function probeKind(consumer, url, model) {
+  if (consumer) return consumerRequestKind(consumer);
+  let pathname = '';
+  try { pathname = new URL(url).pathname.replace(/\/+$/, ''); } catch (_) {}
+  if (/\/rerank$/i.test(pathname) || /rerank/i.test(model)) return 'rerank';
+  if (/\/embeddings$/i.test(pathname) || /embedding|(?:^|[/-])bge-|(?:^|[/-])m3e-/i.test(model)) return 'embeddings';
+  if (/\/images\/(?:generations|edits)$/i.test(pathname) ||
+      /(?:gpt-image|chatgpt-image|dall-e|seedream|grok-imagine|nano-banana|gemini.*-image)/i.test(model)) return 'image';
+  return 'chat';
+}
+
+function presetRequestKind(preset, consumer) {
+  if (Object.hasOwn(requestKindLabels,preset?.requestKind)) return preset.requestKind;
+  if (consumer) return consumerRequestKind(consumer);
+  if (preset?.id) {
+    const kinds = new Set(listApiConsumers().filter(row => (savedApiChain(row) || []).includes(preset.id))
+      .map(consumerRequestKind));
+    if (kinds.size === 1) return [...kinds][0];
+  }
+  return probeKind(null,preset?.apiUrl,preset?.apiModel);
+}
+
+function normalizeTypedFields(value) {
+  return {
+    ...(Object.hasOwn(requestKindLabels,value?.requestKind)?{requestKind:value.requestKind}:{}),
+    ...(value?.imageRequestProfile?{imageRequestProfile:normalizeImageRequestProfile(value.imageRequestProfile)}:{}),
+    ...(value?.embeddingProfile?{embeddingProfile:normalizeEmbeddingProfile(value.embeddingProfile)}:{}),
+    ...(value?.rerankProfile?{rerankProfile:normalizeRerankProfile(value.rerankProfile)}:{})
+  };
 }
 
 /** 一条接口是否填完整（URL / Key / 模型 三项都要） */
@@ -191,6 +285,7 @@ export function loadApiLibrary() {
           apiModel: String(p.apiModel || '').trim(),
           apiModels: Array.isArray(p.apiModels) ? p.apiModels : [],
           ...(p.requestProfile?{requestProfile:normalizeChatRequestProfile(p.requestProfile)}:{}),
+          ...normalizeTypedFields(p),
           ...(p.enabled===false?{enabled:false}:{}),
           note: String(p.note || ''),
           updatedAt: Number(p.updatedAt) || 0,
@@ -258,6 +353,7 @@ export function addApiPreset(patch, editToken) {
     apiModel: String((patch && patch.apiModel) || '').trim(),
     apiModels: Array.isArray(patch && patch.apiModels) ? patch.apiModels : [],
     requestProfile: normalizeChatRequestProfile(patch?.requestProfile),
+    ...normalizeTypedFields(patch),
     enabled: patch?.enabled !== false,
     note: String((patch && patch.note) || ''),
     updatedAt: Date.now(),
@@ -277,6 +373,7 @@ export function updateApiPreset(id, patch) {
   merged.apiKey = String(merged.apiKey || '').trim();
   merged.apiModel = String(merged.apiModel || '').trim();
   merged.requestProfile = normalizeChatRequestProfile(merged.requestProfile);
+  Object.assign(merged,normalizeTypedFields(merged));
   lib.presets[idx] = merged;
   saveApiLibrary(lib);
   for (const consumer of listApiConsumers()) {
@@ -370,6 +467,12 @@ export const API_LIBRARY_CONSUMERS = [
     urlField: 'originalTimelineApiUrl', keyField: 'originalTimelineApiKey', modelField: 'originalTimelineApiModel',
   },
   {
+    label: '正文插图分镜',
+    key: 'FR_STORY_IMAGE_PLANNER_V1',
+    idField: 'apiPresetId',
+    ...DEFAULT_FIELDS,
+  },
+  {
     label: '正文优化（图片打标）',
     key: 'CULTIVATION_IMAGE_TAGGING_API_CONFIG_V1',
     idField: 'apiPresetId',
@@ -461,13 +564,13 @@ export const API_LIBRARY_CONSUMERS = [
     fallbackKey: 'CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1',
   },
   ...['doubao', 'openai', 'gemini', 'grok', 'custom_openai'].map(provider => ({
-    label: '肖像生图 · ' + provider,
+    label: '肖像生图 · ' + (provider === 'openai' ? 'GPT Image' : provider),
     key: 'CULTIVATION_PORTRAIT_GEN_CONFIG_V1',
     idField: 'apiPresetId', slotId: 'providers.' + provider,
     path: ['providers', provider], ...DEFAULT_FIELDS, group: '肖像生图（按供应商）',
   })),
-  ...['doubao', 'gemini', 'custom_openai'].map(provider => ({
-    label: '演化生图 · ' + provider,
+  ...['doubao', 'openai', 'gemini', 'custom_openai'].map(provider => ({
+    label: '正文插图 · ' + (provider === 'openai' ? 'GPT Image' : provider),
     key: 'CULTIVATION_CONCURRENT_EVOLUTION_CONFIG_V1',
     idField: 'apiPresetId', slotId: 'imageProviderConfigs.' + provider,
     path: ['imageProviderConfigs', provider], ...DEFAULT_FIELDS, group: '变量演化生图（按供应商）',
@@ -721,7 +824,7 @@ export function resolveConsumerConfig(key, config) {
   for (const consumer of listApiConsumers(key, raw)) {
     const chain = savedApiChain(consumer);
     if (chain) {
-      const primary = materializeChain(chain)[0];
+      const primary = materializeChain(chain, consumer)[0];
       raw = writeScope(raw, consumer, {
         [consumer.urlField]: primary?.apiUrl || '', [consumer.keyField]: primary?.apiKey || '',
         [consumer.modelField]: primary?.apiModel || '',
@@ -1227,8 +1330,12 @@ function savedApiChain(consumer) {
   const value = loadApiChains()[consumerChainId(consumer)];
   return Array.isArray(value) ? value : null;
 }
-function materializeChain(ids) {
-  return ids.map(getApiPreset).filter(preset => preset?.enabled!==false && preset?.apiUrl && preset.apiModel);
+function routeKindMatches(preset, consumer) {
+  return !preset.requestKind || preset.requestKind === consumerRequestKind(consumer);
+}
+function materializeChain(ids, consumer) {
+  return ids.map(getApiPreset).filter(preset => preset?.enabled!==false && preset?.apiUrl && preset.apiModel
+    && routeKindMatches(preset,consumer));
 }
 export function bindConsumerChain(key, ids, slot) {
   const consumer = findConsumer(key, slot);
@@ -1244,7 +1351,7 @@ export function consumerApiChain(key, slot) {
   const consumer = findConsumer(key, slot);
   if (!consumer) return null;
   const saved = savedApiChain(consumer);
-  if (saved?.length || saved && !consumer.fallbackKey) return materializeChain(saved);
+  if (saved?.length || saved && !consumer.fallbackKey) return materializeChain(saved,consumer);
   if (consumer.fallbackKey && (!saved || !saved.length)) return consumerApiChain(consumer.fallbackKey);
   return null;
 }
@@ -1275,9 +1382,13 @@ function drawConsumerChain(host, consumer, onChange) {
     select.append(empty);
     for (const preset of presets) {
       if (preset.id !== id && ids.includes(preset.id)) continue;
+      if (preset.id !== id && !routeKindMatches(preset,consumer)) continue;
       const option = document.createElement('option');
       option.value = preset.id;
-      option.textContent = preset.name + (preset.apiModel ? ' · ' + preset.apiModel : '（待填写模型）');
+      const matches = routeKindMatches(preset,consumer);
+      const size = consumerRequestKind(consumer)==='image' && preset.imageRequestProfile?.size;
+      option.textContent = preset.name + (preset.apiModel ? ' · ' + preset.apiModel : '（待填写模型）')
+        + (size ? ' · ' + size.replace('x',' × ') : '') + (matches ? '' : '（类型不匹配）');
       option.disabled = !preset.apiUrl || !preset.apiModel;
       select.append(option);
     }
@@ -1295,6 +1406,24 @@ function drawConsumerChain(host, consumer, onChange) {
     });
     label.append(select);
     row.append(label);
+    const prosePresets = consumer.key === 'FR_STANDALONE_CONFIG_V1' && id && window.FRProseRoutePresets;
+    if (prosePresets && presets.some(preset => preset.id === id)) {
+      const presetLabel = document.createElement('label');
+      presetLabel.textContent = '正文预设';
+      const picker = document.createElement('select');
+      picker.setAttribute('aria-label',caption.textContent+' · 正文预设');
+      for (const item of [{id:'',name:'跟随当前正文预设'},...prosePresets.options(id)]) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.name;
+        picker.append(option);
+      }
+      const selected = prosePresets.get(id);
+      if (Array.from(picker.options).some(option => option.value === selected)) picker.value = selected;
+      picker.addEventListener('change',() => prosePresets.set(id,picker.value));
+      presetLabel.append(picker);
+      row.append(presetLabel);
+    }
     if(id&&presets.some(preset=>preset.id===id)){
       const detail=document.createElement('button');
       detail.type='button';detail.textContent='详情';
@@ -1701,6 +1830,14 @@ body.theme-day #unified-api-settings-overlay{color-scheme:light}
     search.placeholder = '搜索名称、地址或推荐模型';
     search.setAttribute('aria-label', '搜索已保存接口（名称、地址或推荐模型）');
     tools.appendChild(search);
+    const typeFilter = doc.createElement('select');
+    typeFilter.id = 'api-library-type-filter';
+    typeFilter.setAttribute('aria-label','按模型类型筛选');
+    for (const [value,label] of [['','全部模型类型'],...Object.entries(requestKindLabels).map(([key,text])=>[key,text+'模型'])]) {
+      const option=doc.createElement('option');
+      option.value=value; option.textContent=label; typeFilter.append(option);
+    }
+    tools.append(typeFilter);
     const clear = doc.createElement('button'); clear.type = 'button';
     clear.id = 'api-library-search-clear'; clear.textContent = '清空搜索';
     clear.className = 'fr-api-lib-btn'; tools.appendChild(clear);
@@ -1733,6 +1870,45 @@ export function bindApiLibraryPanel(root, options) {
   const fNote = el(host, 'api-library-note');
   const fEnabled=el(host,'api-library-enabled');
   const fNonstream=el(host,'api-library-nonstream');
+  const fKind=el(host,'api-library-request-kind');
+  const imageSize=el(host,'api-library-image-size');
+  const customImageSize=el(host,'api-library-image-custom-size');
+  const customImageWrap=el(host,'api-library-image-custom-wrap');
+  const imageQuality=el(host,'api-library-image-quality');
+  const imageFormat=el(host,'api-library-image-format');
+  const imageTimeout=el(host,'api-library-image-timeout');
+  const imageRpm=el(host,'api-library-image-rpm');
+  const embeddingDimensions=el(host,'api-library-embedding-dimensions');
+  const rerankDocuments=el(host,'api-library-rerank-documents');
+  let kindEdited=false;
+  const updateRequestPane=() => {
+    for (const [kind,suffix] of Object.entries({chat:'chat',embeddings:'embedding',rerank:'rerank',image:'image'})) {
+      const pane=el(host,'api-library-'+suffix+'-request');
+      if (pane) { pane.hidden=fKind?.value !== kind; if (!pane.hidden) pane.open=true; }
+    }
+  };
+  const updateCustomImageSize=() => { if (customImageWrap) customImageWrap.hidden=imageSize.value!=='custom'; };
+  const readImageProfile=() => {
+    const profile=normalizeImageRequestProfile({size:imageSize?.value==='custom'?customImageSize?.value:imageSize?.value,
+      quality:imageQuality?.value,outputFormat:imageFormat?.value,timeoutSeconds:imageTimeout?.value,rpm:imageRpm?.value});
+    if (imageSize?.value==='custom' && (!profile.size || profile.size==='auto')) throw new Error('请输入有效的自定义尺寸，例如 1920x1280。');
+    if ((imageTimeout?.value && !profile.timeoutSeconds) || (imageRpm?.value && !profile.rpm)) throw new Error('图像超时和 RPM 需要填写有效的正整数。');
+    return profile;
+  };
+  const readTypedProfile=kind=>{
+    if (kind==='image' && imageSize) return {imageRequestProfile:readImageProfile()};
+    if (kind==='embeddings' && embeddingDimensions) {
+      const embeddingProfile=normalizeEmbeddingProfile({dimensions:embeddingDimensions.value});
+      if (embeddingDimensions.value && !embeddingProfile.dimensions) throw new Error('输出维度需填写正整数。');
+      return {embeddingProfile};
+    }
+    if (kind==='rerank' && rerankDocuments) {
+      const rerankProfile=normalizeRerankProfile({maxDocuments:rerankDocuments.value});
+      if (rerankDocuments.value && !rerankProfile.maxDocuments) throw new Error('每批文档数需填写正整数。');
+      return {rerankProfile};
+    }
+    return {};
+  };
   const requestFields = {
     reasoningEffort:'reasoning',noPrefill:'no-prefill',systemAsUser:'system-user',
     modelFamily:'model-family',jsonMode:'json-mode'
@@ -1770,7 +1946,7 @@ export function bindApiLibraryPanel(root, options) {
    *
    * 【修法】标记带版本号。版本一变，标记自动失效，重新完整绑定。
    * 以后每次改这个面板记得把 BIND_VERSION 加一。 */
-  const BIND_VERSION = 9;
+  const BIND_VERSION = 10;
   const boundFlag = host || document;
   if (boundFlag.__frApiLibraryBound && boundFlag.__frApiLibraryBound.version === BIND_VERSION) {
     const api = boundFlag.__frApiLibraryBound;
@@ -1791,6 +1967,26 @@ export function bindApiLibraryPanel(root, options) {
     const visibleStatus = el(host, 'api-library-save-status');
     if (visibleStatus) { visibleStatus.textContent = text || '修改即时应用，点击保存确认写入本地。'; visibleStatus.style.color = color || ''; }
   };
+  if (imageSize) {
+    imageSize.replaceChildren(...[['','沿用现有设置'],['auto','自动'],...imageSizes.map(size=>[size,size.replace('x',' × ')]),
+      ['custom','自定义…']].map(([value,label])=>{
+        const option=document.createElement('option');
+        option.value=value; option.textContent=label; return option;
+      }));
+    imageSize.addEventListener('change',updateCustomImageSize);
+  }
+  if (fKind) {
+    fKind.addEventListener('change',() => { kindEdited=true; updateRequestPane(); });
+    const inferDraftKind=() => {
+      if (kindEdited || fId.value) return;
+      fKind.value=probeKind(null,fUrl.value,fModel.value);
+      updateRequestPane();
+    };
+    for (const input of [fUrl,fModel]) {
+      input?.addEventListener('input',inferDraftKind);
+      input?.addEventListener('change',inferDraftKind);
+    }
+  }
 
   /** 当前这条接口探测到的模型列表（画下拉用） */
   let availableModels = [];
@@ -1908,7 +2104,7 @@ export function bindApiLibraryPanel(root, options) {
     // 卡片身份只由 ID 决定，同地址、同模型也允许按用途分别保存。
     fId.dataset.editToken = preset ? String(preset.editToken || '') : genId();
     editor.style.display = '';
-    const requestDetails=editor.querySelector('.fr-api-request');
+    const requestDetails=editor.querySelector('#api-library-chat-request') || editor.querySelector('.fr-api-request');
     if(requestDetails)requestDetails.open=false;
     editorTitle.textContent = preset ? ('编辑：' + preset.name) : '新增接口';
     fId.value = preset ? preset.id : '';
@@ -1917,6 +2113,21 @@ export function bindApiLibraryPanel(root, options) {
     fKey.value = preset ? preset.apiKey : '';
     fModel.value = preset ? preset.apiModel : '';
     fNote.value = preset ? preset.note : '';
+    kindEdited=false;
+    if (fKind) { fKind.value=presetRequestKind(preset,consumer); updateRequestPane(); }
+    if (imageSize) {
+      const profile=preset?.imageRequestProfile || {};
+      const custom=profile.size && profile.size!=='auto' && !imageSizes.includes(profile.size);
+      imageSize.value=custom?'custom':profile.size || '';
+      customImageSize.value=custom?profile.size:'';
+      imageQuality.value=profile.quality || '';
+      imageFormat.value=profile.outputFormat || '';
+      imageTimeout.value=profile.timeoutSeconds || '';
+      imageRpm.value=profile.rpm || '';
+      updateCustomImageSize();
+    }
+    if (embeddingDimensions) embeddingDimensions.value=preset?.embeddingProfile?.dimensions || '';
+    if (rerankDocuments) rerankDocuments.value=preset?.rerankProfile?.maxDocuments || '';
     if(fEnabled)fEnabled.checked=preset?.enabled!==false;
     if(fNonstream)fNonstream.checked=preset?.requestProfile?.stream===false;
     for(const [key,input] of Object.entries(requestInputs)){
@@ -1962,8 +2173,9 @@ export function bindApiLibraryPanel(root, options) {
   const renderList = () => {
     const lib = loadApiLibrary();
     const query = String(panelTools.querySelector('input').value || '').trim().toLocaleLowerCase();
-    const presets = lib.presets.filter(p => !query || [p.name, p.apiUrl, p.apiModel]
-      .some(value => String(value || '').toLocaleLowerCase().includes(query)));
+    const type=panelTools.querySelector('#api-library-type-filter')?.value;
+    const presets = lib.presets.filter(p => (!type || presetRequestKind(p)===type) && (!query || [p.name,p.apiUrl,p.apiModel]
+      .some(value=>String(value || '').toLocaleLowerCase().includes(query))));
     panelTools.querySelector('#api-library-result-count').textContent = '显示 ' + presets.length + ' / ' + lib.presets.length + ' 条接口';
     panelTools.querySelector('#api-library-search-clear').disabled = !query;
     listBox.innerHTML = '';
@@ -1994,7 +2206,7 @@ export function bindApiLibraryPanel(root, options) {
       title.className = apiPresetComplete(preset) ? 'fr-api-lib-title' : 'fr-api-lib-title is-incomplete';
       const detail = document.createElement('div');
       detail.textContent = (preset.apiUrl || '(无地址)')
-        + (preset.apiModel ? ' · ' + preset.apiModel : '')
+        + ' · ' + requestKindLabels[presetRequestKind(preset)] + (preset.apiModel ? ' · ' + preset.apiModel : '')
         + (preset.note ? '　· ' + preset.note : '');
       detail.className = 'fr-api-lib-detail';
       main.append(title, detail);
@@ -2034,7 +2246,11 @@ export function bindApiLibraryPanel(root, options) {
     const presets=new Map(loadApiLibrary().presets.map(card=>[card.id,card]));
     bindBox.replaceChildren();
     let lastGroup = null;
-    for (const consumer of listApiConsumers().filter(row => row.path?.[0] !== 'backupApiConfigs')) {
+    for (const consumer of listApiConsumers()) {
+      const path = consumer.path || [];
+      if (path[0] === 'backupApiConfigs') continue;
+      if (['providers', 'imageProviderConfigs'].includes(path[0]) && path[1] !== 'openai') continue;
+      if (consumer.key === 'CULTIVATION_PORTRAIT_GEN_CONFIG_V1' && consumer.idField === 'llmApiPresetId') continue;
       if (consumer.group && consumer.group !== lastGroup) {
         lastGroup = consumer.group;
         const group = document.createElement('div');
@@ -2081,6 +2297,7 @@ export function bindApiLibraryPanel(root, options) {
   librarySearch.addEventListener('input', renderList);
   const clearLibrarySearch = () => { librarySearch.value = ''; renderList(); librarySearch.focus(); };
   panelTools.querySelector('#api-library-search-clear').addEventListener('click', clearLibrarySearch);
+  panelTools.querySelector('#api-library-type-filter')?.addEventListener('change',renderList);
   librarySearch.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); clearLibrarySearch(); }
   });
@@ -2190,12 +2407,15 @@ export function bindApiLibraryPanel(root, options) {
       if (!name) return say('请填写名称，方便以后辨认。', '#e0a3a3');
       if (!url) return say('请填写 API URL。', '#e0a3a3');
       if (!/^https?:\/\//i.test(url)) return say('API URL 需要以 http:// 或 https:// 开头。', '#e0a3a3');
+      let typedProfile;
+      try { typedProfile=readTypedProfile(fKind?.value); } catch (error) { return say(error.message,'#e0a3a3'); }
       saveBtn.__frSaving = true;
       const done = () => { saveBtn.__frSaving = false; };
       try {
         const patch = { name, apiUrl: url, apiKey: key, apiModel: model, apiModels: modelsMatchEndpoint(url, key) ? availableModels.slice() : [], note: String(fNote.value || '').trim(),
-          enabled:fEnabled?.checked!==false,requestProfile:readRequestProfile() };
+          enabled:fEnabled?.checked!==false,requestProfile:readRequestProfile(), ...typedProfile };
         const editingId = String(fId.value || '').trim();
+        if (fKind && (!editingId || kindEdited || getApiPreset(editingId)?.requestKind)) patch.requestKind=fKind.value;
         if (editingId) {
           updateApiPreset(editingId, patch);
         } else {
@@ -2263,23 +2483,29 @@ export function bindApiLibraryPanel(root, options) {
       try {
         const consumer = editorConsumer || (fId.value && listApiConsumers().find(row =>
           (savedApiChain(row) || []).includes(fId.value) && probeKind(row, url, model) === 'image' && row.path));
-        const kind = probeKind(consumer, url, model);
+        const kind = fKind?.value || probeKind(consumer, url, model);
+        const typedProfile=readTypedProfile(kind);
         const sample = '接口连接测试';
         const imagePrompt = '一张简单的蓝色方块图';
         const profile = readRequestProfile();
-        const signal = AbortSignal.timeout((kind === 'image' ? 120 : 30) * 1000);
+        const imageConfig = kind==='image' && imageRouteConfig({}, {id:fId.value,apiUrl:url,apiKey:key,apiModel:model,...typedProfile});
+        const signal = kind==='image' ? imageRequestSignal(imageConfig) : AbortSignal.timeout(30000);
         if (kind === 'image' && api.probeImage) {
-          await api.probeImage(consumer, {apiUrl:url,apiKey:key,apiModel:model}, imagePrompt, signal);
+          const typedConsumer = !consumer || consumerRequestKind(consumer)==='image' ? consumer : undefined;
+          const route = {id:fId.value, apiUrl:url,apiKey:key,apiModel:model,...typedProfile};
+          await api.probeImage(typedConsumer, route, imagePrompt);
           return say('连接成功，这条接口已返回图片。');
         }
         const endpoint = kind === 'chat' ? chatCompletionsEndpoint(url) :
           modelEndpoint(url, kind === 'image' ? 'images/generations' : kind);
-        const body = kind === 'embeddings' ? {model,input:sample} :
-          kind === 'rerank' ? {model,query:sample,documents:[sample],top_n:1} :
-          kind === 'image' ? {model,prompt:imagePrompt} :
+        const body = kind === 'embeddings' ? embeddingRequestBody(model,sample,typedProfile) :
+          kind === 'rerank' ? rerankRequestBody(model,sample,[sample]) :
+          kind === 'image' ? (Object.keys(typedProfile.imageRequestProfile || {}).length || /gpt-image|chatgpt-image/i.test(model)
+            ? gptImageRequestBody(imageConfig,imagePrompt) : {model,prompt:imagePrompt}) :
           chatRequestBody({model,messages:[{role:'user',content:profile.jsonMode ?
             '请返回 JSON 对象 {"ok":true}。' : '请简短回复「连接成功」。'}],stream:false},
           {apiUrl:url,profile,purpose:'test'});
+        if (imageConfig) takeImageRouteSlot(imageConfig);
         const resp = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },

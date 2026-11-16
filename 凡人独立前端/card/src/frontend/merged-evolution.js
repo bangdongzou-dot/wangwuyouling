@@ -34,7 +34,7 @@ var FrMergedEvolution = (function () {
   }
   function call(text) {
     if (typeof text !== 'string') failure('commands 每项必须是原生命令字符串', { received: typeof text });
-    var source = text.trim(), match = source.match(/^([A-Za-z_$][\w$]*)\s*\(/);
+    var source = text.trim().replace(/^灵石变动(?=\s*\()/u,'transferSpiritStones'), match = source.match(/^([A-Za-z_$][\w$]*)\s*\(/);
     if (!match) failure('只接受原生函数调用，不接受短指令或状态路径', { got: preview(source) });
     var depth = 1, quoted = false, escaped = false, end = match[0].length;
     for (; end < source.length; end++) {

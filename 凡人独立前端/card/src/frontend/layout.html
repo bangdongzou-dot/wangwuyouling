@@ -332,46 +332,6 @@
     </div>
     <div id="achievement-toast-container">
     </div>
-    <div class="overlay" id="ai-image-gen-overlay">
-      <div class="modal" id="ai-image-gen-modal">
-        <button class="modal-close-btn">×</button>
-        <h4>AI 生图</h4>
-        <div class="modal-content">
-          <div class="settings-section">
-            <div class="context-control-item">
-              <input id="auto-image-gen-toggle" type="checkbox" />
-              <label for="auto-image-gen-toggle"> 开启自动生图 </label>
-            </div>
-          </div>
-          <div class="settings-section">
-            <h5>自定义生图正则</h5>
-            <label for="ai-gen-regex-input">
-              使用此正则从AI回复中提取提示词 (捕获组1)。如果匹配成功，将优先使用，否则回退到 &lt;pic&gt; 标签。
-            </label>
-            <input id="ai-gen-regex-input" placeholder="/你的正则/flags，例如：生图：(.*?)$/m" type="text" />
-          </div>
-          <div class="settings-section">
-            <label for="ai-gen-prompt"> 提示词: </label>
-            <textarea id="ai-gen-prompt" rows="4">1girl, solo, looking at viewer, masterpiece, best quality</textarea>
-          </div>
-          <div class="settings-section" style="display: flex; gap: 20px">
-            <div>
-              <label for="ai-gen-width"> 宽度: </label>
-              <input id="ai-gen-width" type="number" value="512" />
-            </div>
-            <div>
-              <label for="ai-gen-height"> 高度: </label>
-              <input id="ai-gen-height" type="number" value="768" />
-            </div>
-          </div>
-        </div>
-        <button class="major-action-button" id="ai-gen-start-btn">
-          <i class="fas fa-magic"> </i>
-          开始生成
-        </button>
-        <div id="ai-gen-status" style="text-align: center; margin-top: 15px"></div>
-      </div>
-    </div>
     <!-- 提示词编辑模态窗口 -->
     <div class="modal-overlay" id="prompt-edit-modal">
       <div class="modal-content">
@@ -1341,6 +1301,9 @@
               <i class="fas fa-cog"> </i>
               系统设置
             </button>
+            <button type="button" class="major-action-button" id="open-image-settings-stage-btn">
+              <i class="fas fa-image" aria-hidden="true"></i> 生图设置
+            </button>
             <button type="button" class="major-action-button" id="fr-diagnostic-log-button">
               <i class="fas fa-clipboard-list" aria-hidden="true"></i> 诊断日志
             </button>
@@ -1515,6 +1478,9 @@
                 <button class="major-action-button" id="open-unified-api-settings-btn">
                     <i class="fas fa-satellite-dish"></i> 统一 API 接口配置
                 </button>
+                <button type="button" class="major-action-button" id="open-image-settings-system-btn">
+                  <i class="fas fa-image" aria-hidden="true"></i> 生图设置
+                </button>
                 <button class="major-action-button" id="open-image-tagging-api-settings-btn">
                     <i class="fas fa-pen-fancy"></i> 正文优化API设置
                 </button>
@@ -1633,6 +1599,9 @@
             <label>接口名称
             <input id="api-library-name" placeholder="例如：主接口 · DeepSeek" type="text" />
             </label>
+            <label>模型类型
+              <select id="api-library-request-kind"><option value="chat">文本模型</option><option value="embeddings">向量模型</option><option value="rerank">重排序模型</option><option value="image">生图模型</option></select>
+            </label>
             <label>API Key
             <input id="api-library-key" placeholder="sk-..." type="password" />
             </label>
@@ -1663,7 +1632,51 @@
             <input id="api-library-note" placeholder="例如：额度用这个 / 只在生图时用" type="text" />
             </label>
             </div>
-            <details class="fr-api-request">
+            <details class="fr-api-request" id="api-library-embedding-request" hidden>
+              <summary>向量请求设置</summary>
+              <div class="fr-api-request-body">
+                <div class="fr-api-form-grid"><label>输出维度（可选）
+                  <input id="api-library-embedding-dimensions" type="number" min="1" step="1" placeholder="留空使用模型默认维度" />
+                </label></div>
+                <p class="hint">请求使用 /embeddings。改用不同的输出维度后，已有向量需要用相同配置重建。</p>
+              </div>
+            </details>
+            <details class="fr-api-request" id="api-library-rerank-request" hidden>
+              <summary>重排序请求设置</summary>
+              <div class="fr-api-request-body">
+                <div class="fr-api-form-grid"><label>每批最多文档数（可选）
+                  <input id="api-library-rerank-documents" type="number" min="1" step="1" placeholder="留空沿用当前分批规则" />
+                </label></div>
+                <p class="hint">请求使用 /rerank。文档过多时分批处理，仍保留全部候选。</p>
+              </div>
+            </details>
+            <details class="fr-api-request" id="api-library-image-request" hidden>
+              <summary>图像生成参数</summary>
+              <div class="fr-api-request-body">
+                <div class="fr-api-form-grid">
+                  <label>尺寸
+                    <select id="api-library-image-size"></select>
+                  </label>
+                  <label id="api-library-image-custom-wrap" hidden>自定义尺寸
+                    <input id="api-library-image-custom-size" type="text" placeholder="例如 1920x1280" />
+                  </label>
+                  <label>质量
+                    <select id="api-library-image-quality"><option value="">沿用现有设置</option><option value="auto">自动</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select>
+                  </label>
+                  <label>输出格式
+                    <select id="api-library-image-format"><option value="">沿用现有设置</option><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select>
+                  </label>
+                  <label>请求超时（秒）
+                    <input id="api-library-image-timeout" type="number" min="1" max="4294967" step="1" placeholder="留空不主动超时" />
+                  </label>
+                  <label>每分钟请求上限（RPM）
+                    <input id="api-library-image-rpm" type="number" min="1" step="1" placeholder="留空不限速" />
+                  </label>
+                </div>
+                <p class="hint">本线路供肖像和正文共同使用。设有上限时，达到上限后尝试备用线路。尺寸与质量以所选模型支持的参数为准。</p>
+              </div>
+            </details>
+            <details class="fr-api-request" id="api-library-chat-request">
               <summary>模型请求设置</summary>
               <div class="fr-api-request-body">
               <div class="fr-api-form-grid">
@@ -1934,11 +1947,19 @@
               </details>
             </div>
 
+            <div class="settings-section">
+              <details class="fr-prose-card-preview">
+                <summary>灵动正文固定渲染协议</summary>
+                <div id="fr-prose-rendering-protocol" class="fr-prose-card-preview-body" style="white-space: pre-wrap"></div>
+              </details>
+            </div>
             <div class="settings-section" id="prose-preset-section">
               <h5>
                 正文预设条目
               </h5>
               <div id="prose-preset-stats" class="fr-prose-stats"></div>
+              <label for="fr-current-prose-preset">当前正文预设</label>
+              <select id="fr-current-prose-preset"></select>
 
               <div class="fr-content-settings-actions">
                 <button class="major-action-button" id="new-prose-entry-btn">
@@ -1949,6 +1970,9 @@
                 </button>
                 <button class="major-action-button" id="export-prose-inline-btn">
                   导出预设
+                </button>
+                <button type="button" class="major-action-button" id="delete-prose-inline-btn" disabled>
+                  删除当前预设
                 </button>
                 <button class="major-action-button" id="restore-prose-inline-btn">
                   恢复默认内置
@@ -2131,10 +2155,10 @@
             <div>
               <h5 style="margin: 0; display: flex; align-items: center; gap: 8px;">
                 <i class="fas fa-brain" style="color: #64b5f6;"></i>
-                启用分段记忆
+                正文发送分段记忆
               </h5>
               <p style="font-size: 0.85em; color: #b0b0b0; margin: 5px 0 0 0;">
-                开启后将按规则分层发送上下文，覆盖默认层数限制
+                开启后把已保存的小总结和大总结按楼层附在正文上下文中，向量自动检索开启时同样生效。
               </p>
             </div>
             <label class="switch">
@@ -2464,13 +2488,6 @@
       <div class="characters-modal modal">
         <button class="modal-close-btn">×</button>
         <div class="characters-modal-header">
-          <div class="auto-gen-toggle-container">
-            <label class="switch-label" for="auto-gen-npc-image-toggle"> 自动生图 </label>
-            <label class="switch">
-              <input id="auto-gen-npc-image-toggle" type="checkbox" />
-              <span class="slider round"> </span>
-            </label>
-          </div>
           <h4>周围人物</h4>
           <button class="control-button" id="npc-display-settings-btn" title="显示设置">
             <i class="fas fa-cog"> </i>
@@ -2524,6 +2541,7 @@
         <i class="fas fa-redo fa-fw"> </i>
         重新发送
       </button>
+      <button id="ctx-image-btn" type="button"><i class="fas fa-image"></i> 生成正文插图</button>
       <button id="ctx-copy-btn">
         <i class="fas fa-copy fa-fw"> </i>
         复制消息
@@ -2698,247 +2716,62 @@
       </div>
     </div>
     <div class="overlay" id="portrait-gen-overlay">
-  <div class="modal settings-modal portrait-gen-modal">
-    <button type="button" class="modal-close-btn portrait-gen-close-btn">&times;</button>
-    <h4 class="portrait-gen-title"><i class="fas fa-palette"></i> 为 <span class="portrait-gen-char-name"></span> 生成AI肖像</h4>
-    <div class="pg-cost-warning" role="alert">
-      <div class="pg-cost-warning-title"><i class="fas fa-exclamation-triangle"></i> 费用风险提示</div>
-      <div class="pg-cost-warning-text">请先自行确认当前模型生图计费规则与单次费用，避免频繁生成或抽卡式重复生成，导致高额账单。</div>
-    </div>
-
-    <!-- 文生图API配置 -->
-    <details class="pg-section" id="pg-api-config-section" open>
-      <summary class="pg-section-title">文生图API配置</summary>
-      <div class="pg-section-body">
-        <div class="pg-form-row">
-          <label class="pg-label">提供商</label>
-          <select id="pg-provider" class="pg-select">
-            <option value="doubao">豆包生图</option>
-            <option value="openai">OpenAI 生图</option>
-            <option value="gemini">Gemini 生图</option>
-            <option value="grok">Grok 生图</option>
-            <option value="custom_openai">自定义（兼容OpenAI）</option>
-          </select>
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label">API URL</label>
-          <input type="text" id="pg-api-url" class="pg-input" placeholder="https://ark.cn-beijing.volces.com/api/v3/images/generations">
-        </div>
-        <div class="pg-form-row" id="pg-api-model-row">
-          <label class="pg-label">模型</label>
-          <input type="text" id="pg-api-model" class="pg-input" placeholder="doubao-seedream-4-5-251128">
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label" id="pg-api-key-label">API Key</label>
-          <input type="password" id="pg-api-key" class="pg-input" placeholder="输入 API Key">
-        </div>
-        <div id="pg-provider-params">
-          <div class="pg-provider-params" id="pg-provider-params-doubao" data-provider="doubao">
-            <div class="pg-form-row">
-              <label class="pg-label">分辨率</label>
-              <select id="pg-resolution" class="pg-select">
-                <option value="2K">2K</option>
-                <option value="4K">4K</option>
-              </select>
-            </div>
-            <div class="pg-form-row">
-              <label class="pg-label">图片比例</label>
-              <select id="pg-aspect-ratio" class="pg-select">
-                <option value="auto">智能</option>
-                <option value="1:1">1:1</option>
-                <option value="3:4">3:4</option>
-                <option value="4:3">4:3</option>
-                <option value="16:9">16:9</option>
-                <option value="9:16">9:16</option>
-                <option value="2:3">2:3</option>
-                <option value="3:2">3:2</option>
-                <option value="21:9">21:9</option>
-              </select>
-            </div>
+  <div class="modal fr-image-modal portrait-gen-modal" role="dialog" aria-modal="true" aria-labelledby="fr-portrait-title">
+    <header class="fr-image-header"><h3 id="fr-portrait-title" class="portrait-gen-char-name">人物肖像</h3><button type="button" class="modal-close-btn portrait-gen-close-btn" aria-label="关闭">&times;</button></header>
+    <div class="fr-image-body">
+      <div id="pg-character-workspace" hidden>
+        <section class="fr-image-card fr-portrait-asset">
+          <div class="fr-portrait-art"><img id="pg-main-portrait" alt="主肖像" hidden><span>暂无主肖像</span></div>
+          <div class="fr-portrait-tools">
+            <h4>主肖像</h4><p class="hint">用于人物详情。裁剪的小头像会用于正文对白和在场人物栏。</p>
+            <div class="fr-portrait-mini"><img id="pg-small-avatar" alt="小头像" hidden><span>小头像预览</span></div>
+            <div class="fr-portrait-actions"><button type="button" id="pg-start-portrait" class="primary-btn">AI 生成肖像</button><button type="button" id="pg-pick-portrait" class="small-btn">从生图记录选择</button><label class="small-btn fr-image-file">上传主肖像<input type="file" id="pg-upload-portrait" accept="image/png,image/jpeg,image/webp"></label><button type="button" id="pg-crop-avatar" class="small-btn">裁剪小头像</button><button type="button" id="pg-unbind-portrait" class="small-btn">解除主肖像绑定</button></div>
           </div>
-          <div class="pg-provider-params" id="pg-provider-params-openai" data-provider="openai">
-            <div class="pg-form-row">
-              <label class="pg-label">尺寸</label>
-              <select id="pg-openai-size" class="pg-select">
-                <option value="1024x1024">1024x1024</option>
-                <option value="1536x1024">1536x1024</option>
-                <option value="1024x1536">1024x1536</option>
-                <option value="auto">auto</option>
-              </select>
-            </div>
-            <div class="pg-form-row">
-              <label class="pg-label">质量</label>
-              <select id="pg-openai-quality" class="pg-select">
-                <option value="high">high</option>
-                <option value="medium">medium</option>
-                <option value="low">low</option>
-                <option value="auto">auto</option>
-              </select>
-            </div>
-            <div class="pg-form-row">
-              <label class="pg-label">背景</label>
-              <select id="pg-openai-background" class="pg-select">
-                <option value="auto">auto</option>
-                <option value="transparent">transparent</option>
-                <option value="opaque">opaque</option>
-              </select>
-            </div>
-            <div class="pg-form-row">
-              <label class="pg-label">输出格式</label>
-              <select id="pg-openai-output-format" class="pg-select">
-                <option value="png">png</option>
-                <option value="jpeg">jpeg</option>
-                <option value="webp">webp</option>
-              </select>
-            </div>
+        </section>
+        <section class="fr-image-card fr-portrait-asset">
+          <div class="fr-portrait-art"><img id="pg-character-design" alt="人物设定图" hidden><span>暂无人物设定图</span></div>
+          <div class="fr-portrait-tools">
+            <h4>人物设定图</h4><p class="hint">独立保存，可作为主肖像和正文插图的参考。</p>
+            <div class="fr-portrait-actions"><button type="button" id="pg-start-design" class="primary-btn">AI 生成设定图</button><button type="button" id="pg-pick-design" class="small-btn">从生图记录选择</button><label class="small-btn fr-image-file">上传设定图<input type="file" id="pg-upload-design" accept="image/png,image/jpeg,image/webp"></label><button type="button" id="pg-unbind-design" class="small-btn">解除设定图绑定</button></div>
           </div>
-          <div class="pg-provider-params" id="pg-provider-params-gemini" data-provider="gemini">
-            <div class="pg-form-row">
-              <label class="pg-label">图片比例</label>
-              <select id="pg-gemini-aspect-ratio" class="pg-select">
-                <option value="1:1">1:1</option>
-                <option value="2:3">2:3</option>
-                <option value="3:2">3:2</option>
-                <option value="3:4">3:4</option>
-                <option value="4:3">4:3</option>
-                <option value="4:5">4:5</option>
-                <option value="5:4">5:4</option>
-                <option value="16:9">16:9</option>
-                <option value="9:16">9:16</option>
-                <option value="21:9">21:9</option>
-              </select>
-            </div>
-            <div class="pg-form-row">
-              <label class="pg-label">分辨率档位</label>
-              <select id="pg-gemini-image-size" class="pg-select">
-                <option value="1K">1K</option>
-                <option value="2K">2K</option>
-                <option value="4K">4K</option>
-              </select>
-            </div>
-          </div>
-          <div class="pg-provider-params" id="pg-provider-params-grok" data-provider="grok">
-            <div class="pg-form-row">
-              <label class="pg-label">图片比例</label>
-              <select id="pg-grok-aspect-ratio" class="pg-select">
-                <option value="auto">auto</option>
-                <option value="1:1">1:1</option>
-                <option value="16:9">16:9</option>
-                <option value="9:16">9:16</option>
-                <option value="4:3">4:3</option>
-                <option value="3:4">3:4</option>
-                <option value="3:2">3:2</option>
-                <option value="2:3">2:3</option>
-                <option value="2:1">2:1</option>
-                <option value="1:2">1:2</option>
-                <option value="19.5:9">19.5:9</option>
-                <option value="9:19.5">9:19.5</option>
-                <option value="20:9">20:9</option>
-                <option value="9:20">9:20</option>
-              </select>
-            </div>
-          </div>
-          <div class="pg-provider-params" id="pg-provider-params-custom-openai" data-provider="custom_openai">
-            <div class="pg-form-row">
-              <label class="pg-label">说明</label>
-              <div style="font-size:12px;color:#b7b7b7;line-height:1.5;">
-                该模式按 OpenAI 兼容协议调用。请填写上方 API URL、模型与 API Key。支持 images 与 chat/completions 风格返回。
-              </div>
-            </div>
-            <div class="pg-form-row" id="pg-custom-openai-model-row">
-              <label class="pg-label">选择模型（请确保仅选择生图模型）</label>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <select id="pg-custom-openai-model-select" class="pg-select" style="flex:1;">
-                  <option value="">请先获取模型列表</option>
-                </select>
-                <button type="button" id="pg-custom-openai-fetch-models-btn" class="pg-btn pg-btn-small">获取模型列表</button>
-              </div>
-              <div style="font-size:11px;color:#f0c040;margin-top:4px;">注意：仅应选择文生图类模型，请勿选择文本/嵌入/语音等其他类型模型。</div>
-            </div>
-          </div>
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label">风格</label>
-          <div class="pg-radio-group">
-            <label class="pg-radio-label"><input type="radio" name="pg-style" id="pg-style-anime" value="anime" checked> 动漫/二次元</label>
-            <label class="pg-radio-label"><input type="radio" name="pg-style" id="pg-style-realistic" value="realistic"> 真人/写实</label>
-          </div>
-        </div>
-        <button type="button" id="pg-save-config-btn" class="pg-btn pg-btn-secondary">保存配置</button>
+        </section>
+        <section class="fr-image-card">
+          <div class="fr-image-form-heading"><label for="pg-character-appearance">角色画像提示词</label><label class="fr-image-check"><input id="pg-character-appearance-lock" type="checkbox"> 锁定生图外观</label></div>
+          <p class="hint">变量演化会同步角色当前的外观资料。锁定后，生图继续使用保存时的外观。</p>
+          <textarea id="pg-character-appearance" rows="3"></textarea>
+          <label for="pg-appearance-supplement">玩家自定义补充</label>
+          <textarea id="pg-appearance-supplement" rows="2" placeholder="例如惯用的发饰、服装细节"></textarea>
+          <p class="hint">补充会随画像发送，仅采用与角色当前外观相容的内容。</p>
+          <div class="fr-image-form-heading"><button type="button" id="pg-refresh-appearance" class="small-btn">按最新变量更新</button><button type="button" id="pg-save-appearance" class="primary-btn">保存画像提示词</button></div>
+        </section>
+        <section class="fr-image-card" id="pg-history-card"><h4>生图记录</h4><p id="pg-workspace-status" role="status"></p><div class="fr-portrait-history" id="pg-image-history"></div></section>
       </div>
-    </details>
-
-    <!-- 提示词生成 LLM -->
-    <details class="pg-section" id="pg-llm-section">
-      <summary class="pg-section-title">提示词生成 (LLM)</summary>
-      <div class="pg-section-body">
-        <div class="fr-api-embed" data-fr-api-consumer="CULTIVATION_PORTRAIT_GEN_CONFIG_V1" data-fr-api-slot="llmApiPresetId"></div>
-        <div class="pg-form-row">
-          <label class="pg-label">LLM API URL</label>
-          <input type="text" id="pg-llm-url" class="pg-input" placeholder="https://api.example.com/v1">
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label">LLM API Key</label>
-          <input type="password" id="pg-llm-key" class="pg-input" placeholder="输入 LLM API Key">
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label">LLM 模型</label>
-          <select id="pg-llm-model" class="pg-select">
-            <option value="">请先获取可用模型</option>
-          </select>
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-checkbox-label">
-            <input type="checkbox" id="pg-llm-enforce-adult-prompt" checked> 生图提示词禁止出现未成年人描写
-          </label>
-        </div>
-        <button type="button" id="pg-fetch-llm-models-btn" class="pg-btn pg-btn-small" style="margin-top:6px;">获取模型</button>
-        <button type="button" id="pg-save-llm-btn" class="pg-btn pg-btn-secondary">保存LLM配置</button>
-
-        <div class="pg-template-section">
-          <label class="pg-label">提示词模板</label>
-          <div id="pg-placeholder-tags" class="pg-placeholder-tags"></div>
-          <textarea id="pg-prompt-template" class="pg-textarea" rows="10"></textarea>
-          <div class="pg-template-actions">
-            <label class="pg-checkbox-label">
-              <input type="checkbox" id="pg-show-placeholder-preview"> 显示占位符替换结果
-            </label>
-            <div class="pg-template-btns">
-              <button type="button" id="pg-reset-template-btn" class="pg-btn pg-btn-small">恢复默认模板</button>
-              <button type="button" id="pg-save-template-btn" class="pg-btn pg-btn-small">保存模板</button>
-            </div>
-          </div>
-        </div>
-        <button type="button" id="pg-gen-prompt-btn" class="pg-btn pg-btn-primary">生成文生图提示词</button>
+      <div id="pg-character-editor" hidden>
+        <button type="button" id="pg-back-to-workspace" class="small-btn fr-portrait-back">返回肖像绘卷</button>
+        <section class="fr-image-card">
+          <div class="fr-image-columns"><div><label for="pg-image-kind">生成类型</label><select id="pg-image-kind"><option value="portrait">普通肖像</option><option value="photo">证件照</option><option value="design">人物设定图</option></select></div><div><label for="pg-route-choice">本次 GPT Image 线路</label><select id="pg-route-choice"></select><p id="pg-active-route" class="hint"></p></div></div>
+          <div class="fr-image-form-heading"><label for="pg-final-prompt">本次图片提示词</label><button type="button" id="pg-fill-builtin-image-prompt" class="small-btn">按模板重填</button></div>
+          <textarea id="pg-final-prompt" rows="10"></textarea>
+        </section>
+        <section class="fr-image-card" id="pg-reference-section"><h4>参考图</h4><p class="hint">内置示例图用于统一画风，已有设定图用于保持角色形象。两张都会随本次请求发送，额外参考图可单独启停。</p>
+          <div class="fr-portrait-actions"><label class="small-btn fr-image-file">上传本次参考图<input type="file" id="pg-reference-upload" multiple accept="image/png,image/jpeg,image/webp"></label><button type="button" id="pg-pick-reference" class="small-btn">从生图记录选择</button></div>
+          <div id="pg-reference-history" class="fr-portrait-history" hidden></div>
+          <div id="pg-request-references" class="fr-image-examples"></div><p id="pg-character-image-status" role="status"></p>
+        </section>
+        <div id="pg-preview-section" class="fr-image-card" hidden><h4>生成预览</h4><img id="pg-preview-img" class="pg-preview-img" alt="生成图片"><button type="button" id="pg-apply-btn" class="primary-btn">应用为肖像</button></div>
+        <div class="fr-image-action"><p id="pg-generation-status" role="status"></p><button type="button" id="pg-gen-image-btn" class="primary-btn">生成图片</button></div>
       </div>
-    </details>
-
-    <!-- 文生图提示词 -->
-    <details class="pg-section" id="pg-prompt-section" open>
-      <summary class="pg-section-title">文生图提示词</summary>
-      <div class="pg-section-body">
-        <div class="pg-form-row">
-          <label class="pg-label" for="pg-final-prompt">正向提示词</label>
-          <textarea id="pg-final-prompt" class="pg-textarea" rows="5" placeholder="在此输入或由LLM生成文生图提示词..."></textarea>
-        </div>
-        <div class="pg-form-row">
-          <label class="pg-label" for="pg-negative-prompt">负面提示词</label>
-          <textarea id="pg-negative-prompt" class="pg-textarea" rows="3" placeholder="负面提示词（由模板自动分离，仅用于查看）..."></textarea>
-        </div>
-        <button type="button" id="pg-gen-image-btn" class="pg-btn pg-btn-primary">生成图片</button>
-      </div>
-    </details>
-
-    <!-- 预览 -->
-    <div id="pg-preview-section" class="pg-section" style="display:none;">
-      <div class="pg-section-title">预览</div>
-      <div class="pg-preview-container">
-        <img id="pg-preview-img" class="pg-preview-img" alt="生成的肖像">
-      </div>
-      <div class="pg-preview-actions">
-        <button type="button" id="pg-apply-btn" class="pg-btn pg-btn-primary">应用为肖像</button>
-        <button type="button" id="pg-regen-btn" class="pg-btn pg-btn-secondary">重新生成</button>
-      </div>
+      <details class="fr-image-card" id="pg-api-config-section"><summary>肖像生图接口</summary><div id="pg-image-routes"></div><p class="hint">打开线路的「详情」可编辑尺寸、质量、格式、超时和 RPM。</p><button type="button" id="pg-open-image-api-library" class="small-btn">打开接口与模型</button></details>
+      <details class="fr-image-card" id="pg-template-settings"><summary>肖像提示词模板</summary><div class="fr-image-template-stack">
+        <label for="pg-portrait-template">普通肖像</label><textarea id="pg-portrait-template" rows="7"></textarea>
+        <label for="pg-photo-template">证件照构图</label><textarea id="pg-photo-template" rows="4"></textarea>
+        <label for="pg-design-template">人物设定图构图</label><textarea id="pg-design-template" rows="5"></textarea>
+        <label for="pg-reference-guide">参考图规则</label><textarea id="pg-reference-guide" rows="4"></textarea>
+        <label class="fr-image-check"><input id="pg-auto-enabled" type="checkbox"> 为没有头像的在场人物自动生成肖像</label>
+        <label class="fr-image-check"><input id="pg-auto-character-references" type="checkbox"> 自动肖像使用角色参考图</label>
+        <div class="fr-image-form-heading"><button type="button" id="pg-reset-image-templates" class="small-btn">恢复内置模板</button><button type="button" id="pg-save-reference-templates" class="primary-btn">保存模板</button></div>
+      </div></details>
+      <details class="fr-image-card"><summary>肖像、证件照与设定图示例</summary><div class="fr-image-examples" id="pg-image-examples"></div></details>
     </div>
   </div>
 </div>
@@ -2988,31 +2821,6 @@
   </div>
 </div>
 
-<div class="overlay" id="npc-image-gen-overlay">
-      <div class="modal" id="npc-image-gen-modal">
-        <button class="modal-close-btn">×</button>
-        <h4 id="npc-image-gen-title">为 [人物名] 生成形象</h4>
-        <div class="settings-section">
-          <label for="npc-gen-prompt"> 提示词 (Prompt): </label>
-          <textarea id="npc-gen-prompt" rows="5"></textarea>
-        </div>
-        <div class="settings-section" style="display: flex; gap: 20px">
-          <div>
-            <label for="npc-gen-width"> 宽度: </label>
-            <input id="npc-gen-width" type="number" value="512" />
-          </div>
-          <div>
-            <label for="npc-gen-height"> 高度: </label>
-            <input id="npc-gen-height" type="number" value="768" />
-          </div>
-        </div>
-        <button class="major-action-button" id="npc-gen-start-btn">
-          <i class="fas fa-magic"> </i>
-          开始生成
-        </button>
-        <div id="npc-gen-status" style="text-align: center; margin-top: 15px"></div>
-      </div>
-    </div>
     <div class="overlay" id="npc-avatar-fullscreen-overlay">
       <div
         class="modal"
@@ -3372,7 +3180,6 @@
         </div>
       </div>
     </div>
-    <div class="overlay" id="npc-image-gen-overlay">...</div>
     <!-- 主窗口 -->
     <div id="ai-theater-window">
       <div class="ai-theater-header">
@@ -4724,24 +4531,7 @@
         </label>
       </div>
 
-      <!-- 生图演化 -->
-      <div class="settings-section">
-        <h4>生图演化</h4>
-        <label class="toggle-label" style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="concurrent-evo-enable-image-evolution">
-          <span>正文生图提示词生成</span>
-          <select id="concurrent-evo-image-count" style="width:70px;padding:2px 4px;margin-left:8px" title="分镜数量（仅支持4或9）">
-            <option value="4">4</option>
-            <option value="9">9</option>
-          </select>
-          <small style="color:#888">张</small>
-        </label>
-        <p class="hint">仅支持4/9分镜。系统会先生成4/9个正文锚点与分镜提示词，再一次性生成1张2x2或3x3大图，裁切后按锚点回注正文。</p>
-        <div class="preset-buttons" style="margin-top:8px">
-          <button id="concurrent-evo-image-prompt-settings-btn" class="small-btn">生图提示词设置</button>
-        </div>
-      </div>
-
+      <div class="settings-section"><button id="concurrent-evo-image-prompt-settings-btn" class="small-btn" type="button">打开生图设置</button></div>
       <!-- 测试功能 -->
       <div class="settings-section">
         <h4>测试功能</h4>
@@ -4772,41 +4562,50 @@
 
 <!-- === 并发角色演化 生图提示词设置 === -->
 <div class="overlay hidden" id="concurrent-evo-image-prompt-overlay">
-  <div class="concurrent-evolution-image-prompt-modal">
-    <div class="modal-header">
-      <h3>生图提示词设置</h3>
-      <button class="modal-close-btn" id="concurrent-evo-image-prompt-close">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="settings-section">
-        <div class="input-group">
-          <label>生图方式</label>
-          <div class="ce-image-provider-group">
-            <label class="ce-image-provider-option">
-              <input type="radio" name="concurrent-evo-image-generator" value="tavern_plugin">
-              <span>酒馆插件生图</span>
-            </label>
-            <label class="ce-image-provider-option">
-              <input type="radio" name="concurrent-evo-image-generator" value="commercial_model">
-              <span>商用模型生图</span>
-            </label>
-          </div>
-          <p class="hint warning-hint" id="concurrent-evo-commercial-mode-warning">建议提示词模式使用自然语言描述。</p>
-        </div>
+  <div class="fr-image-modal concurrent-evolution-image-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="fr-image-settings-title">
+    <header class="fr-image-header"><h3 id="fr-image-settings-title">生图设置</h3><button type="button" class="modal-close-btn" id="concurrent-evo-image-prompt-close" aria-label="关闭">&times;</button></header>
+    <nav class="fr-image-tabs" aria-label="生图设置"><button type="button" data-image-tab="display">生成与展示</button><button type="button" data-image-tab="routes">生图与模型</button><button type="button" data-image-tab="templates">画风与提示词</button><button type="button" id="ce-image-open-portrait-btn">人物肖像</button></nav>
+    <div class="fr-image-body">
+      <div data-image-pane="display"><section class="fr-image-card">
+        <div class="fr-image-columns"><div><label for="ce-story-image-size">正文插图尺寸</label><select id="ce-story-image-size"></select></div><div id="ce-story-size-custom-wrap" hidden><label for="ce-story-size-custom">自定义尺寸</label><input id="ce-story-size-custom" type="text" placeholder="例如 1920x1280"></div></div>
+        <p class="hint">默认跟随实际使用的生图线路。选择尺寸可仅覆盖正文插图。</p>
+      </section><section class="fr-image-card"><h4>生成与展示</h4>
+        <label class="fr-image-toggle"><span>自动正文生图<small>本轮正文保存后立即规划分镜。也可右键指定回合手动生成。</small></span><input type="checkbox" id="ce-image-enable-story"></label>
+        <fieldset class="fr-image-methods"><legend>出图方式</legend>
+          <label><input name="ce-story-image-mode" id="ce-story-mode-grid" value="grid" type="radio"><span>单图网格<small>用一次图片请求生成分镜网格，再按格切开插入。</small></span></label>
+          <label><input name="ce-story-image-mode" id="ce-story-mode-sequential" value="sequential" type="radio"><span>独立顺序<small>依次生成，上一张成功的图可供下一张参考。</small></span></label>
+          <label><input name="ce-story-image-mode" id="ce-story-mode-parallel" value="parallel" type="radio"><span>独立并发<small>每张图同时请求，分别遵循对应分镜。</small></span></label>
+        </fieldset>
+        <div class="fr-image-count"><label for="ce-story-independent-count">每轮插图张数</label><input id="ce-story-independent-count" type="number" min="1" max="9" step="1"></div>
+      </section><section class="fr-image-card fr-story-context"><h4>画面事实与参考图</h4>
+        <label class="fr-image-toggle"><span>附带画面事实<small>向生图模型提供时间、地点与分镜锚点原文。</small></span><input type="checkbox" data-story-image-option="imageSceneFacts"></label>
+        <label class="fr-image-toggle"><span>额外发送正文全文<small>发送本回合可见正文。出镜角色锁定外观时，仅发送对应分镜内容。</small></span><input type="checkbox" data-story-image-option="imageSendFullStory"></label>
+        <label class="fr-image-toggle"><span>发送额外参考图<small>适用于额外角色和场景素材。内置画风示例和出镜角色已有设定图始终发送。</small></span><input type="checkbox" data-story-image-option="imageSendReferences" data-default-on></label>
+        <label class="fr-image-toggle"><span>出镜人物与灵兽参考图</span><input type="checkbox" id="ce-image-reference-characters" data-story-image-option="imageReferenceCharacters" data-default-on></label>
+        <label class="fr-image-toggle"><span>同时发送设定图和主肖像<small>关闭时优先设定图，缺失时使用主肖像。</small></span><input type="checkbox" data-story-image-option="imageReferenceBothPortraits"></label>
+        <label class="fr-image-toggle"><span>角色参考图优先<small>有参考图时，分镜仅读取人物身份、动作和位置等必要资料。</small></span><input type="checkbox" data-story-image-option="imageReferenceVisualPriority"></label>
+        <label class="fr-image-toggle"><span>上一个有插图的回合<small>附上一组先前插图供场景延续。</small></span><input type="checkbox" data-story-image-option="imageReferencePreviousFloor"></label>
+      </section><details class="fr-image-card"><summary>查看正文插图示例</summary><div class="fr-image-examples" id="ce-story-image-example"></div></details></div>
+      <div data-image-pane="routes" hidden>
+        <section class="fr-image-card"><h4>分镜规划模型</h4><div id="ce-image-planning-routes"></div></section>
+        <section class="fr-image-card"><h4>GPT Image · 正文插图</h4><div id="ce-image-routes"></div><button type="button" class="small-btn" id="ce-open-image-api-library">打开接口与模型</button>
+          <p class="hint">打开线路的「详情」可编辑尺寸、质量、格式、超时和 RPM。</p>
+          <div class="fr-image-form-heading"><button type="button" id="ce-image-test-btn" class="small-btn">测试出图</button><span id="ce-image-test-status" role="status"></span></div><img id="ce-image-test-preview" hidden alt="正文插图测试预览" class="pg-preview-img">
+        </section>
       </div>
-
-      <div class="settings-section">
-        <label class="toggle-label">
-          <span style="min-width:80px">提示词模式</span>
-          <select id="concurrent-evo-image-prompt-mode" style="max-width:220px">
-            <option value="sd_keywords">Stable Diffusion关键词</option>
-            <option value="natural_language">自然语言描述</option>
-          </select>
-        </label>
-        <p class="hint">酒馆插件模式会把提示词写入正文；商用模型模式会基于4/9分镜一次生成1张grid大图并裁切后按锚点回注正文。</p>
-      </div>
-
-      <div class="settings-section">
+      <div data-image-pane="templates" hidden>
+        <section class="fr-image-card fr-image-template-stack">
+          <div class="fr-image-form-heading"><h4><label for="ce-story-independent-template">正文生图提示词模板</label></h4><span class="hint" id="ce-story-template-source" aria-live="polite"></span></div>
+          <p class="hint">用于分镜模型选择正文锚点并编写每张图的提示词。发送前自动填入本轮正文、角色、所选画风与参考图规则。</p>
+          <textarea id="ce-story-independent-template" rows="13" spellcheck="false"></textarea>
+          <button id="ce-story-independent-reset" class="small-btn" type="button">恢复内置模板</button>
+        </section>
+        <section class="fr-image-card fr-image-template-stack">
+          <h4><label for="ce-image-reference-guide">正文参考图规则</label></h4>
+          <textarea id="ce-image-reference-guide" rows="4"></textarea>
+          <button id="ce-story-reference-reset" class="small-btn" type="button">恢复内置参考图规则</button>
+        </section>
+        <div class="fr-image-card">
         <div class="input-group">
           <label>画风</label>
           <div class="ce-image-style-select-row">
@@ -4816,116 +4615,29 @@
             <input type="text" id="concurrent-evo-image-style-name-input" placeholder="输入自定义画风名，例如：赛博霓虹">
             <button id="concurrent-evo-image-style-add-btn" class="small-btn" type="button">添加画风</button>
           </div>
-          <p class="hint">内置：真人电影感 / 动漫二次元 / 水墨风。你可以添加自定义画风。</p>
+          <p class="hint">可使用内置画风，也可添加自定义画风。</p>
         </div>
         <div class="input-group">
-          <label>当前画风描述词（将注入生图提示词模板）</label>
+          <label for="concurrent-evo-image-style-description">画风描述</label>
+          <p class="hint"><code>${image_style_description}</code></p>
           <textarea id="concurrent-evo-image-style-description" rows="5" placeholder="当前画风描述词"></textarea>
+          <label for="concurrent-evo-image-style-guide">画风执行说明</label>
+          <p class="hint"><code>${image_style_prompt_guide}</code></p>
+          <textarea id="concurrent-evo-image-style-guide" rows="5" placeholder="留空时沿用当前画风描述"></textarea>
           <div class="preset-buttons">
-            <button id="concurrent-evo-image-style-restore-btn" class="small-btn" type="button">恢复当前画风默认描述词</button>
+            <button id="concurrent-evo-image-style-restore-btn" class="small-btn" type="button">恢复画风默认内容</button>
           </div>
         </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="input-group">
-          <label>生图提示词模板（为空时使用预设中的默认 image_evolution 规则）</label>
-          <textarea id="concurrent-evo-image-prompt-template" rows="12" placeholder="可直接编辑完整模板。支持 ${story_text} 等占位符。"></textarea>
         </div>
-        <div class="preset-buttons">
-          <button id="concurrent-evo-image-prompt-restore-btn" class="small-btn">恢复默认提示词</button>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h4>生图 API 配置（自然语言模式）</h4>
-        <div class="input-group">
-          <label>提供商</label>
-          <select id="concurrent-evo-image-api-provider">
-            <option value="doubao">豆包</option>
-            <option value="gemini">Gemini</option>
-            <option value="custom_openai">自定义（兼容 OpenAI）</option>
-          </select>
-        </div>
-        <div class="input-group">
-          <label>API URL</label>
-          <input type="text" id="concurrent-evo-image-api-url" placeholder="https://ark.cn-beijing.volces.com/api/v3/images/generations">
-        </div>
-        <div class="input-group">
-          <label>API Key</label>
-          <input type="password" id="concurrent-evo-image-api-key" placeholder="输入 API Key">
-        </div>
-        <div id="ce-image-model-select-wrap" class="input-group">
-          <label>模型（商用模型生图调用前请仔细确认调用金额）</label>
-          <select id="concurrent-evo-image-api-model">
-            <option value="doubao-seedream-5-0-260128">doubao-seedream-5-0-260128</option>
-            <option value="doubao-seedream-4-5-251128">doubao-seedream-4-5-251128</option>
-          </select>
-        </div>
-        <div id="ce-image-model-gemini-wrap" class="input-group" style="display:none">
-          <label>模型</label>
-          <input type="text" id="concurrent-evo-image-api-model-text" placeholder="如：gemini-3.1-flash-image-preview">
-        </div>
-        <div id="ce-image-gemini-aspect-ratio-wrap" class="input-group" style="display:none">
-          <label>图片比例</label>
-          <select id="concurrent-evo-image-gemini-aspect-ratio">
-            <option value="1:1">1:1</option>
-            <option value="2:3">2:3</option>
-            <option value="3:2">3:2</option>
-            <option value="3:4">3:4</option>
-            <option value="4:3">4:3</option>
-            <option value="4:5">4:5</option>
-            <option value="5:4">5:4</option>
-            <option value="16:9">16:9</option>
-            <option value="9:16">9:16</option>
-            <option value="21:9">21:9</option>
-          </select>
-        </div>
-        <div id="ce-image-gemini-size-wrap" class="input-group" style="display:none">
-          <label>分辨率档位</label>
-          <select id="concurrent-evo-image-gemini-image-size">
-            <option value="1K">1K</option>
-            <option value="2K">2K</option>
-            <option value="4K">4K</option>
-          </select>
-        </div>
-        <div id="ce-image-model-custom-wrap" class="input-group" style="display:none">
-          <label>模型（请确保仅选择生图模型）</label>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <select id="concurrent-evo-image-api-model-custom-select" style="flex:1;">
-              <option value="">请先获取模型列表</option>
-            </select>
-            <button type="button" id="ce-image-fetch-custom-models-btn" class="small-btn">获取模型列表</button>
-          </div>
-          <div style="font-size:11px;color:#f0c040;margin-top:4px;">注意：仅应选择文生图类模型，请勿选择文本/嵌入/语音等其他类型模型。</div>
-        </div>
-        <div id="ce-image-resolution-wrap" class="input-group">
-          <label>分辨率</label>
-          <select id="concurrent-evo-image-api-resolution">
-            <option value="2K">2K</option>
-            <option value="4K">4K</option>
-          </select>
-        </div>
-        <div id="ce-image-aspect-ratio-wrap" class="input-group">
-          <label>图片比例</label>
-          <select id="concurrent-evo-image-api-aspect-ratio">
-            <option value="auto">智能</option>
-            <option value="1:1">1:1</option>
-            <option value="3:4">3:4</option>
-            <option value="4:3">4:3</option>
-            <option value="16:9">16:9</option>
-            <option value="9:16">9:16</option>
-            <option value="2:3">2:3</option>
-            <option value="3:2">3:2</option>
-            <option value="21:9">21:9</option>
-          </select>
-        </div>
+        <details class="fr-image-card" id="ce-story-assembled-preview">
+          <summary>组装后的分镜请求预览</summary>
+          <p class="hint">使用当前设置和存档的最新正文，仅在本机组装。</p>
+          <textarea id="ce-story-assembled-text" rows="12" aria-label="组装后的分镜请求" readonly spellcheck="false"></textarea>
+          <button id="ce-story-refresh-preview" class="small-btn" type="button">刷新预览</button>
+        </details>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="small-btn" id="concurrent-evo-image-prompt-cancel-btn">取消</button>
-      <button class="primary-btn" id="concurrent-evo-image-prompt-save-btn">保存</button>
-    </div>
+    <footer class="fr-image-footer"><button type="button" id="concurrent-evo-image-prompt-cancel-btn" class="small-btn">取消</button><button type="button" id="concurrent-evo-image-prompt-save-btn" class="primary-btn">保存</button></footer>
   </div>
 </div>
 

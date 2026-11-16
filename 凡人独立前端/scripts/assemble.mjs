@@ -100,7 +100,12 @@ async function readBuiltinAssets() {
   const dir = path.join(OUT_ROOT, 'src', 'builtin');
   const preset = JSON.parse(await fs.readFile(path.join(dir, 'preset.json'), 'utf8'));
   const regex = JSON.parse(await fs.readFile(path.join(dir, 'regex.json'), 'utf8'));
-  return { preset, regex };
+  const imageDir = path.join(dir, 'image-materials');
+  const imagePrompts = JSON.parse(await fs.readFile(path.join(imageDir, 'prompts.json'), 'utf8'));
+  const imageExamples = Object.fromEntries(await Promise.all(['photo', 'design', 'portrait', 'story'].map(async name => [
+    name, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(imageDir, name + '.jpg'))).toString('base64')
+  ])));
+  return { preset, regex, imageMaterials: { ...imagePrompts, examples: imageExamples } };
 }
 
 // 保持编码声明在脚本之前，浏览器读取单文件时可以尽早识别 UTF-8。
@@ -272,7 +277,9 @@ async function main() {
   }
   const wbCode = [
     'window.__FR_BUILTIN_PRESET__ = ' + safeJson(builtin.preset) + ';',
+    'window.__FR_PROSE_RENDER_FORMAT__ = ' + safeJson((await readOwn('builtin/prose-rendering-protocol.md')).trim()) + ';',
     'window.__FR_BUILTIN_REGEX__ = ' + safeJson(builtin.regex) + ';',
+    'window.__FR_IMAGE_MATERIALS__ = ' + safeJson(builtin.imageMaterials) + ';',
     'window.__FR_CARD__ = ' + safeJson(frCard) + ';',
     'window.__FR_CARD_BOOK__ = ' + safeJson(frCardBook) + ';'
   ].join('\n');

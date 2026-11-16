@@ -51,7 +51,7 @@
   }
 
   /** 垫片用：启用且有正文 → 用玩家的；否则返回空串，垫片退回内置预设 */
-  window.frProsePresetText = function () {
+  window.frProsePresetText = function (presetId) {
     var CFG = window.FRStandaloneConfig;
     if (CFG) {
       var c = CFG.load();
@@ -60,7 +60,7 @@
     // 2026-10-31 起正文预设是「分条目 + 每条开关」，
     // 真正拼文本的逻辑在 preset-adapters.js 里（按 order 拼接启用条目）。
     if (typeof window.frProsePresetText2 === 'function') {
-      return String(window.frProsePresetText2() || '').trim();
+      return String(window.frProsePresetText2(presetId) || '').trim();
     }
     var p = activePreset();
     return p && typeof p.text === 'string' ? p.text.trim() : '';

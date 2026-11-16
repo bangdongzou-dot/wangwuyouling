@@ -2,7 +2,7 @@
  * 凡人卡独立前端 · 内置预设与正则（builtin-preset.js）
  *
  * 内置三样，玩家不用自己找、自己导：
- *   ① 正文预设：哈吉米、鲸鱼通用预设（万物有灵）
+ *   ① 正文预设：gemini 万物有灵内置预设
  *   ② 正文正则：万物有灵适配正文正则（199 条常规 + 1 条思维链）
  *   ③ 世界书：万物有灵世界书 1.4（凡人定制版）
  *
@@ -140,6 +140,7 @@
 
     var vars = {}, blocks = [];
     picked.forEach(function (p) {
+      if (['prompt_1764837454104_zdms0so','c3aff14f-fcce-4e05-818c-8b1ed8da963b'].includes(p.identifier)) return;
       var raw = String(p.content || '');
       if (!raw.trim()) return;
       // 只取 system 角色的；user/assistant 示例塞进系统提示会让模型把示例当对话，容易跑偏
@@ -249,7 +250,7 @@
     var arr = (BUILTIN_PRESET && Array.isArray(BUILTIN_PRESET.prompts)) ? BUILTIN_PRESET.prompts : [];
     var enabled = arr.filter(function (p) { return p && p.enabled === true; }).length;
     return {
-      sourceName: '哈吉米、鲸鱼通用预设（万物有灵）',
+      sourceName: 'gemini 万物有灵内置预设',
       promptCount: arr.length,
       enabledCount: enabled,
       textLength: t.length,

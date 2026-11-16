@@ -298,19 +298,23 @@ async function frCanonSetTurnPending(logId,status,reason,storyTurn){
     await db.archives.put(archive);
   });
 }
+async function frCanonTurnNeedsContinuation(log, archiveName) {
+  if (!log?.canonPending || log.canonTurnCommit) return false;
+  const boundary = typeof frCanonBoundaryLoad === 'function' && await frCanonBoundaryLoad(archiveName, log.id, 'canon');
+  const tier = boundary?.turnPlan?.turnAdvanceTier || boundary?.storyAnalysis?.turnAdvanceTier;
+  const outsideWithoutWork = boundary?.ok === true && tier === 'outsideRange'
+    && !boundary.turnPlan?.canonJobs?.length && !boundary.turnPlan?.deferredRefs?.length
+    && !boundary.storyAnalysis?.worldEvents?.length;
+  return !outsideWithoutWork;
+}
+
 async function frCanonRequireCompletedTurn(){
-  // 资料补取也属于当前回合，不能与下一条正文同时读取或写入。
-  if(typeof frCanonMaterialBusy!=='undefined' && frCanonMaterialBusy)return false;
-  var config=await ceBridgeLoadConfig();if(config.enabled===false)return true;
-  var archive=await db.archives.get(currentArchiveName),log=frReplayLatestLog(archive);
-  if(typeof frCanonMaterialBusy!=='undefined' && frCanonMaterialBusy)return false;
-  if(!log?.canonPending)return true;
-  // 兜底：账本已经落库（canonTurnCommit 存在）说明本轮实际已经结算完，
-  // 残留的 pending 只是标记没清干净（历史版本成功路径不清标记留下的）。
-  // 这种情况按「已完成」处理，不能因为一个脏标记把玩家永久卡住。
-  // 玩家 2026-11-01：「账本都记账了，为什么显示未完成，不允许我推进回合？」
-  if(log.canonTurnCommit)return true;
-  return false;
+  const archiveName = currentArchiveName;
+  const config = await ceBridgeLoadConfig();
+  if (config.enabled === false) return true;
+  const archive = await db.archives.get(archiveName);
+  const pending = await frCanonTurnNeedsContinuation(frReplayLatestLog(archive), archiveName);
+  return currentArchiveName !== archiveName || !pending;
 }
 async function frCanonContinueTurn(defaults){
   defaults=defaults||{};
@@ -328,7 +332,7 @@ async function frCanonContinueTurn(defaults){
    *
    * 职责单一之后，原来那句「没有待继续事项就抛错」是正确且必要的：
    * 这里本来就不该被当成通用的失败重跑去点。 */
-  if(!log?.canonPending)throw new Error('本轮没有待继续事项；需要自动补跑失败的项，请用「智能重跑」。');
+  if(!await frCanonTurnNeedsContinuation(log,currentArchiveName))throw new Error('本轮没有待继续事项；需要自动补跑失败的项，请用「智能重跑」。');
   var own=await ceBridgeLoadConfig();if(own.enabled===false)throw new Error('原著补演已关闭，请先启用后继续本轮。');
   // 继续与主动重跑分开选取。缺记录或版本变化一律由边界校验拒绝，不能退回整轮重算。
   return frReplayRunDirect('canon',Object.assign({},defaults,{mode:'continue'}));
@@ -618,7 +622,7 @@ function frCanonCompletionTools() {
       +'【逐人核对材料】\n'+JSON.stringify(material)+'\n'
       +'原<upstore>指令协议保持；其后附一个独立<canon_completion>JSON</canon_completion>，用于核对，不能放入upstore。格式：{"actors":[{"id":"本批真实ID","facts":[{"index":0,"status":"done","refs":["对应原物品或技能ID"],"reason":"说明"}],"baseline":{"checked":true,"reason":"原规则补全或明确不适用理由"}}]}。index为review.facts的原数组序号。只核对此阶段负责的事实：人物负责skill/cultivation，物品负责inventory/equipment/practice；持有/装备/修习必须引用真实原ID，已在库也要引用，不再获得一遍。以当前实际归属为准：已消耗、送出、传授后交付的实体书可标absent并说明；借用、场景设施、他人所有或不属于实体物品可not_applicable并说明。前序事实的分类不是强制库存清单，不得为了满足它把已送出的物品重新塞回送出者背包。普通工具、信物随身携带按原装备规则留在inventory即可，不能因为“佩戴/随身”就强塞装备槽；真正可装备且实际装备的物品仍落实原槽位。不能把实际缺失冒称不适用。基础配置核对要逐人列checked与具体理由，未完成标missing。境界和层内百分比必须按review.cultivation与当前实际情况写原第2列，合法0可保留，技能熟练度和事件时间比例不是境界进度。走廊壁是上限，不是立即达到的目标；只有越过明确上限才需要已确认外力。';
     promptText=promptText.replace('人物负责skill/cultivation','人物负责skill/cultivation/state');
-    promptText+="\n【NPC秘籍获得与学习核对】逐本扫描已确认散文和review里的本人获得、持有、传授、学习秘籍事实，即使被归为inventory或practice也要触发对应人物学习核对，不等待额外一句“已学会”。长期功法移入同一真实实例的technique对应槽main/0、body/1、spirit/2、craft/3；已有主修冲突按真实修习/改修情节，无改修依据保留原主修并说明原因，不无脑覆盖，不重发或复制库存。眨眼剑法等武技、术法、神通用原生0–9完整技能对象及addSkill增量写本人skills，匹配并复用既有技能ID，不清空旧技能；仅获得时记录基础初学，不编造高阶修成。明确不能学、条件不足、替人保管或已失去未习得时保留具体原因。技能秘籍载体仍在则保留，不因学会误删；无实体传授不造书。人物阶段处理技能、物品阶段处理功法槽与载体，人物在前时也须从取得事实先处理技能，不等物品结果；合并阶段同时核对，后续阶段复用真实ID，不重复执行。回执必须说明每本落实或例外，不能以物品已入库代替技能落地；原阶段命令白名单不变。长春功、象甲功原境界约束照留，获得/试练不等于炼气突破。";
+    promptText+="\n【NPC秘籍获得与学习核对】逐本扫描已确认散文和review里的本人获得、持有、传授、学习秘籍事实，即使被归为inventory或practice也要触发对应人物学习核对，不等待额外一句“已学会”。长期功法移入同一真实实例的technique对应槽main/0、body/1、spirit/2、craft/3；原文明确修习、继续原功、改修、暂缓或不能修习时照实落实；未明确时对本人已获且可修的同类功法按师承用途、当前实际收益和最高修炼上限择优，合理推断注明依据，无法判优时保留原功。换入同一实例，旧功退回储物袋，沿用境界进度，不重发或复制库存。眨眼剑法等武技、术法、神通用原生0–9完整技能对象及addSkill增量写本人skills，匹配并复用既有技能ID，不清空旧技能；仅获得时记录基础初学，不编造高阶修成。明确不能学、条件不足、替人保管或已失去未习得时保留具体原因。技能秘籍载体仍在则保留，不因学会误删；无实体传授不造书。人物阶段处理技能、物品阶段处理功法槽与载体，人物在前时也须从取得事实先处理技能，不等物品结果；合并阶段同时核对，后续阶段复用真实ID，不重复执行。回执必须说明每本落实或例外，不能以物品已入库代替技能落地；原阶段命令白名单不变。长春功、象甲功原境界约束照留，获得/试练不等于炼气突破。";
     promptText+="\n【仅年表补演的已有配置】先核对来源用途与玩家影响：进入canon-runtime或出现年表/预制标签不等于纯原著历史。以下合理还原仅用于明确未受玩家改变、且当前节点已经确定的原著历史NPC范围；不适用于普通游戏正文变量链，也不授权为玩家或普通正文中的NPC推测发放资产和能力。当前存档、已确认玩家变异/前台交汇和普通演化实际回执优先，受影响部分按新因果发展；玩家夺走、已消耗、已失去、已交付或未取得的资产不得借补演恢复，来源或影响范围不明默认实时因果边界。当期设定明确此人已会某手段/神通/功法，或本节点年表、已确认补演剧情实际由本人施展，即可认定已有掌握，不要求从头复述获取/学会过程；这是档案镜像补记，不授权安排额外机缘、能力增长或既定原著结局。文学省略不是缺证据，未写何时购得、受教不构成拒绝落地理由。本段当期已会/已用事实就是补演阶段有效的技能与配置依据，不受旧句“只有本轮新学习或获赠才写入”的闸门限制；没有新的学习动作不等于没有既有能力。首次出现可依据当时身份、职业、修为、职责与已经使用的动作，合理补齐其已有技能、背包及实际装备，作为当期既有终态，不伪造本轮受赠、购买、额外数量或新学习经过。已有实物和技能先匹配原ID，不重复发放；未具名的职业基础配置可保守完善，不凭职业套发高阶珍宝、独门绝学或超出当期修为的能力。持续修习体系仍是功法，进入真实对应槽；可施展的具体武技/术法/神通才写原生技能，不把所有功法一股脑转技能。只使用当前节点时间以前已成立且属于本人的事实；未来成就、计划承诺、尚未掌握、仅见别人施展、借用或替人保管均不能当成本人已会/已拥有，明确条件不足与封禁等例外须保留。仅补当前明确事实或合理既有配置与档案之间的缺口；已经完整落地且无变化就沿用，不因回顾历史重发奖励或覆盖无关原值。";
     if(phase!=='items')promptText+='\n【人物修为落档】已确认本人引气入体或能持续循经运转修仙灵气时，凡人应落实到炼气一层。长春功第N层已成才落实到炼气对应层，初察气感、收经卷、试练、将要破层或象甲功等凡俗炼体不足以改变炼气境界。人物用 add 更新原第2列为「炼气一层(5%)|原身份」一类格式，只改境界与层内进度，保留未变化的身份。新小境界已确立且无具体进度时取旧突破重置范围5–15%的下限5%，已有同层合法进度则沿用。不要只写第9列、功法槽或完成回执。旧凡人状态不能覆盖当轮已证实的新境界，未来资料不提前兑现。';
     promptText+='\n伤势、康复、中毒等临时state事实落第4列；明确身份与职务（identity）核对第2列；已有往来、从属或联络（relationship）核对第13列。兼容旧回执：即使事实写作state，接引弟子等身份仍进第2列，与某人或势力的暗中往来仍进第13列。不得把猜测写成既有关系。「战斗状态」只核对第31列布尔开关。动作地点在第16列，推断的动机和目标在27–29。对应completion.facts须附实际写入或复用的完整列值fields和reason；未落地标missing。技能、气运、功法有依据才补；确无内容在回执说明核对结果，不为填满捏造条目。物品阶段只写物品、穿戴与明确的灵石事务，不返回人物终态；灵石余额看第26列，确认没有是0，不创建灵石物品ID。';
@@ -705,13 +709,22 @@ function frCanonCompletionTools() {
       var stoneNumber=Number(stoneText);
       var stoneOk=/^\d+$/.test(stoneText)&&Number.isSafeInteger(stoneNumber);
       var proposedCredit=ops.some(op=>op.type==='transferSpiritStones'&&String(op.to)===String(target.id)&&Number(op.amount)>0);
-      if (stoneOk&&stoneNumber>0||proposedCredit) {
+      const wallet = typeof frReadSpiritStoneWallet==='function' ? frReadSpiritStoneWallet(target?.data) : {下品:stoneOk?stoneNumber:0};
+      if (Object.values(wallet).some(amount=>amount>0)||proposedCredit) {
         var oldCount=hardMissing.length;
-        var keep=function(note,i){return !(note.indexOf('未找到对应原变量ID')>=0&&isCurrencyName(facts[missingFactIndexes[i]]?.name));};
+        var keep=function(note,i){
+          const name = facts[missingFactIndexes[i]]?.name;
+          if (!note.includes('未找到对应原变量ID') || !isCurrencyName(name)) return true;
+          const namedGrade=String(name).match(/(下品|中品|上品|极品|低阶|中阶|高阶|超阶)灵(?:石|币)/u)?.[1];
+          const normalize=typeof frSpiritStoneGrade==='function'?frSpiritStoneGrade:(value=>value||'下品');
+          const grade=normalize(namedGrade);
+          return !(wallet[grade]>0||ops.some(op=>op.type==='transferSpiritStones'&&String(op.to)===String(target.id)&&
+            normalize(op.toGrade??op.grade??op.品级)===grade&&Number(op.receivedAmount??op.amount)>0));
+        };
         var keepFlags=hardMissing.map(keep);
         missingFactIndexes=missingFactIndexes.filter((_,i)=>keepFlags[i]);
         hardMissing=hardMissing.filter((_,i)=>keepFlags[i]);
-        if (hardMissing.length<oldCount) softNotes.push('灵石按第26列货币记录核对，不计入物品ID校验');
+        if (hardMissing.length<oldCount) softNotes.push('灵石按对应品级的钱包余额核对，不计入物品ID校验');
       }
     }
     if(input.baseline?.applicable===true && (!(report?.baseline?.checked===true||report?.baseline?.checked==='true')||!String(report.baseline.reason||'').trim()))softNotes.push('未附基础配置核对说明；沿用原变量规则及实际执行结果');
@@ -1495,7 +1508,8 @@ async function frApplyCanonOrdinaryEventSteps(steps, targetMap, boundary) {
     }
     var changes=await ceApplyCharacterDeltaWithStateSync(step.characterDelta,{targetMap:stepTargets,syncState:false,ensureArchiveEntries:true});
     if(!changes||changes.error)throw new Error('逐事件人物落地失败：'+step.key+' '+String(changes?.error||''));
-    var items=await executeItemOperations(step.itemOperations,{npcLoadoutIds:step.actors.map(actor=>actor.id)});
+    var items=await executeItemOperations(step.itemOperations,{npcLoadoutIds:step.actors.map(actor=>actor.id),
+      techniqueStory:Object.fromEntries(step.actors.map(actor=>[actor.id,actor.prose]))});
     if(!Array.isArray(items)||items.length!==step.itemOperations.length||items.some(row=>!row?.success))throw new Error('逐事件物品落地失败：'+step.key);
     itemReceipts.push(...items);
     for(var actor of step.actors)if(actor.biography.length)await frAppendCanonBiography(boundary.archiveName,targetMap.get(actor.id),actor.biography.join('\n'));
@@ -2930,7 +2944,8 @@ async function frCommitCanonProposal(input, proposal) {
       // 这里已经写进数据库、回读验证过了，缺了就是真写坏，必须严格。
   frAssertCanonNpcProfiles(savedProfiles, { allowSoft: false });
       frAssertCanonCommit();
-      var items = await executeItemOperations(proposal.itemOperations || [],{npcLoadoutIds:targets.filter(target=>target.type==='npc').map(target=>target.id)});
+      var items = await executeItemOperations(proposal.itemOperations || [],{npcLoadoutIds:targets.filter(target=>target.type==='npc').map(target=>target.id),
+        preserveTechnique:!!proposal.prebuiltReadback,techniqueStory:src.storyText||''});
       if (!Array.isArray(items) || items.some(function(op) { return !op || op.success !== true; })) throw new Error('物品操作未完整成功');
       if (proposal.prebuiltReadback && (proposal.itemOperations || []).length) {
         if (items.length !== proposal.itemOperations.length) throw new Error('预制物品落地回执不完整');
