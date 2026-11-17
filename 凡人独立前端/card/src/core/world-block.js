@@ -9,7 +9,7 @@
 
 import { parseCharacterTags } from './vector-input.js';
 import { resolvePrompt, fillTemplate } from './prompt-registry.js';
-import { WORLD_EVENT_CLOSURE_RULE, WORLD_EVENT_OPPORTUNITY_RULE } from './world-events.js';
+import { WORLD_EVENT_CLOSURE_RULE, WORLD_EVENT_OPPORTUNITY_RULE, WORLD_EVENT_GRANULARITY_RULE } from './world-events.js';
 
 const WORLD_MACRO_RULES = [
     '提取宏观事件：逐条阅读候选的实际材料，包括具名人物事件正文内的战争、宗门政策、势力消长、秩序与商路、公共资源及群体处境；标题和人物标签不能代替内容判断。按本轮截止时点与变异因果辨别原定、进行中、已成立和未发生，不因原著写过就全部兑现。',
@@ -248,7 +248,7 @@ export function buildWorldBlockPrompt(input = {}) {
   return [body, '', '---', '', '【本轮实际时间区间】', timeText, '', ...evidence, '', '【已保存世界局势、世界规则与本轮设定，仅供依据核对；设定和未来参考不等于既成事实】', String(input.background || '').trim() || '（未取得额外世界背景，以本次实际材料继续，不补造设定）', '',
     '【统一世界判据与结果协议】',
     ...WORLD_MACRO_RULES,
-    WORLD_EVENT_CLOSURE_RULE,
+    WORLD_EVENT_GRANULARITY_RULE, WORLD_EVENT_CLOSURE_RULE,
     WORLD_EVENT_OPPORTUNITY_RULE,
     '由你按实际因果判断势力、地域、公共秩序、群体处境、公共资源或共同消息是否已经改变；具体人物可参与世界变化，单纯个人经历归本人。候选不是必成目标，不重演已成立事实，不新增来源以外的因果。',
     '有变化输出含完整骨架行的世界正文；骨架严格是“事件号|世界|状态”，中间必须逐字写“世界”，地区写在正文。多个事件号用英文逗号逐个列出，禁止E-001～E-003范围写法；只列确实支撑本次宏观变化的候选编号，不要求把全部候选写进世界新闻。无变化只输出 {"noChange":true,"reason":"明确判断理由"}。不得把缺字段、解析失败或调用失败当成无变化。',

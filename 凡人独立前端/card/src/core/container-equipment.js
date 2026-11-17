@@ -1,6 +1,6 @@
 import { resolveCultivationSpeedCell, resolveTechniqueSpeed, splitTechniqueEffectStages, techniqueImmortalRealmRank } from './cultivation-speed.js';
 import { classifyItem, equipmentEligibility, equipmentRealmName, isTreasureSet } from './equipment-layout.js';
-import { NUMERIC_REALM_ROWS, resolveNumericRealm } from './numeric-realms.js';
+import { NUMERIC_REALM_ROWS, NUMERIC_IMMORTAL_REALM_ROWS, resolveNumericRealm } from './numeric-realms.js';
 import { numericSetting } from './numeric-settings.js';
 // Pure, single-item container contract. No character totals, storage, or migration.
 const ATTRIBUTES = new Set([
@@ -50,7 +50,13 @@ const REALM_CAPS = {
   炼虚: [150000, 130000, 90000], 合体: [550000, 470000, 320000],
   大乘: [1800000, 1500000, 1000000], 渡劫: [3000000, 2500000, 1800000],
 };
-/** Approved 10 realms × 13 attributes. Each cell caps one item's addition. */
+// 1.1.6 暂定仙界硬锁：以各大境界白值下界相对渡劫100万同比扩展。
+// 原十档与独立气运/魅力/修速上限保持，不迁移存档或扩大超脱者边界。
+for (const family of ['真仙','金仙','太乙','大罗','道祖']) {
+  const anchor = NUMERIC_IMMORTAL_REALM_ROWS.find(row => row.realm.startsWith(family)).min;
+  REALM_CAPS[family] = REALM_CAPS.渡劫.map(value => value * anchor / 1000000);
+}
+/** Fifteen realms × thirteen attributes. Each cell caps one item's addition. */
 export const CONTAINER_HARD_CAPS = Object.freeze(Object.fromEntries(Object.entries(REALM_CAPS).map(([realm, [attack, defense, mind]]) => [
   realm, Object.freeze({
     血量: attack * 25, 法力: attack * 4, 神识: mind,
@@ -216,6 +222,8 @@ function realmGroup(value) {
   if (qi) return !qi[1] || (smallChineseNumber(qi[1]) >= 1 && smallChineseNumber(qi[1]) <= 13) ? '炼气' : null;
   const human = realm.match(/^(筑基|结丹|元婴|化神|炼虚|合体|大乘|渡劫)(?:期)?(?:初期|中期|后期|大圆满|圆满|巅峰)?(?:妖修|妖兽|妖族|灵兽)?$/);
   if (human) return human[1];
+  const immortal = realm.match(/^(真仙|金仙|太乙(?:玉仙)?|大罗(?:金仙)?|道祖)(?:期|境)?(?:下位|中位|上位|初期|中期|后期|圆满|大圆满|巅峰)?(?:妖修|妖族)?$/u);
+  if (immortal) return immortal[1].slice(0,2);
   const beast = realm.match(/^(?:妖兽|妖族|灵兽)?(\d{1,3}|[一二两三四五六七八九十]{1,2})(?:级|阶)(?:妖兽|妖族|灵兽)?$/);
   if (!beast) return null;
   const level = smallChineseNumber(beast[1]);

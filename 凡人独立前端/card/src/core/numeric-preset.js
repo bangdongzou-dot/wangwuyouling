@@ -1,4 +1,4 @@
-import { numericRulesText } from './numeric-realms.js';
+import { numericRulesText, legacyMortalNumericRulesText } from './numeric-realms.js';
 function numericRuleSha256(text) {
   var str = String(text == null ? '' : text);
   /* 先按 UTF-8 转字节 */
@@ -647,7 +647,7 @@ export function adaptCompressedNumericPreset(preset) {
   const groups=[...['sharedRules','entrySharedRules','itemSharedRules'].map(scope=>[scope,preset[scope]]),...Object.entries(preset.prompts||{}).map(([scope,g])=>[scope,g?.rules])];
   const contracts=groups.flatMap(([,rules])=>(rules||[]).filter(r=>r?.id==='fr-compressed-numeric-v1'));
   const contract=numericRulesText();
-  const previous=[numericRulesText({includeTechniqueSpeed:'previous'}),numericRulesText({includeTechniqueSpeed:false})];
+  const previous=[legacyMortalNumericRulesText(),legacyMortalNumericRulesText({includeTechniqueSpeed:'previous'}),legacyMortalNumericRulesText({includeTechniqueSpeed:false}),numericRulesText({includeTechniqueSpeed:'previous'}),numericRulesText({includeTechniqueSpeed:false})];
   const matches=(text,body)=>text===body||text?.startsWith(body+'\n');
   if(contracts.some(r=>r.enabled===false||!(matches(r.content,contract)||previous.some(body=>matches(r.content,body)))))return preset;
   for(const r of contracts)if(!matches(r.content,contract)){

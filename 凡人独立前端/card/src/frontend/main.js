@@ -794,73 +794,6 @@
       let playerDisplaySettings = {};
       let isTheaterGenerating = false; // 【【【新增这行代码】】】
       let isMainApiGenerating = false;
-      // 生成任务直到 finally 收尾后才摘除；取消不能提前释放写入中的任务。
-      const frGenerationTasks = new Set();
-      const frGenerationDrainWaiters = new Set();
-      function frWaitForGenerationStop() {
-        if (!frGenerationTasks.size) return Promise.resolve();
-        return new Promise(resolve => frGenerationDrainWaiters.add(resolve));
-      }
-      let frGenerationEpoch = 0;
-      let frGenerationBranchEpoch = 0;
-      function frGenerationGuard(signal, archiveName = currentArchiveName) {
-        const epoch = frGenerationEpoch;
-        const active = () => !signal?.aborted && epoch === frGenerationEpoch && archiveName === currentArchiveName;
-        const check = () => {
-          signal?.throwIfAborted();
-          if (!active()) throw Object.assign(new Error('旧生成任务已停止或切换存档'), {name:'AbortError'});
-        };
-        check.active = active;
-        return check;
-      }
-      function frTrackGeneration(controller, parentSignal) {
-        const forward = () => controller.abort(parentSignal.reason);
-        if (parentSignal) {
-          if (parentSignal.aborted) forward();
-          else parentSignal.addEventListener('abort', forward, {once:true});
-        }
-        frGenerationTasks.add(controller);
-        frRefreshGenerationButton();
-        return () => {
-          parentSignal?.removeEventListener('abort', forward);
-          frGenerationTasks.delete(controller);
-          if (!frGenerationTasks.size) {
-            for (const resolve of frGenerationDrainWaiters) resolve();
-            frGenerationDrainWaiters.clear();
-          }
-          frRefreshGenerationButton();
-        };
-      }
-      function frRefreshGenerationButton() {
-        if (typeof sendMessageButton === 'undefined' || !sendMessageButton) return;
-        const busy = isMainApiGenerating || frGenerationTasks.size > 0;
-        sendMessageButton.disabled = false;
-        sendMessageButton.innerHTML = busy ? '<i class="fas fa-stop-circle"></i>' : '<i class="fas fa-paper-plane"></i>';
-        sendMessageButton.title = busy ? '停止当前所有生成流程' : '发送';
-        sendMessageButton.onclick = event => {
-          event?.preventDefault(); event?.stopPropagation();
-          if (isMainApiGenerating || frGenerationTasks.size) frStopCurrentGeneration();
-          else void sendMessage();
-        };
-      }
-      function frStopCurrentGeneration() {
-        frGenerationEpoch++;
-        if (typeof _commercialAutoPortraitSweepSeq !== 'undefined') _commercialAutoPortraitSweepSeq++;
-        const reason = Object.assign(new Error('玩家已停止当前生成流程'), {name:'AbortError',code:'FR_USER_STOP'});
-        const abort = controller => { try { if (controller && !controller.signal.aborted) controller.abort(reason); } catch (_) {} };
-        for (const controller of frGenerationTasks) abort(controller);
-        if (typeof frCanonStopAll === 'function') frCanonStopAll('all');
-        if (typeof cancelConcurrentEvolution === 'function') cancelConcurrentEvolution({silent:true});
-        if (typeof theaterApiController !== 'undefined') abort(theaterApiController);
-        if (typeof imageTaggingApiController !== 'undefined') abort(imageTaggingApiController);
-        if (typeof knowledgeSearchApiController !== 'undefined') abort(knowledgeSearchApiController);
-        if (typeof _commercialAutoPortraitSweepTimer !== 'undefined' && _commercialAutoPortraitSweepTimer) {
-          clearTimeout(_commercialAutoPortraitSweepTimer); _commercialAutoPortraitSweepTimer = null;
-        }
-        if (typeof abortAllCommercialAutoPortraitTasks === 'function') abortAllCommercialAutoPortraitTasks('玩家停止生成');
-        window.parent?.TavernHelper?.stopAllGeneration?.();
-        frRefreshGenerationButton();
-      }
       const activeImageGenDanmaku = new Map();
       let aiNotificationQueue = [];
       let bondMapChart = null;
@@ -2248,6 +2181,75 @@ unequipItem("B1", "treasure", {"index": 1})
 
       document.addEventListener('DOMContentLoaded', () => {
         window.frReportStartupPhase('主脚本初始化中');
+        // 生成管理器必须与存档、按钮及阶段控制器共享宿主词法作用域。
+      // 生成任务直到 finally 收尾后才摘除；取消不能提前释放写入中的任务。
+      const frGenerationTasks = new Set();
+      const frGenerationDrainWaiters = new Set();
+      function frWaitForGenerationStop() {
+        if (!frGenerationTasks.size) return Promise.resolve();
+        return new Promise(resolve => frGenerationDrainWaiters.add(resolve));
+      }
+      let frGenerationEpoch = 0;
+      let frGenerationBranchEpoch = 0;
+      function frGenerationGuard(signal, archiveName = currentArchiveName) {
+        const epoch = frGenerationEpoch;
+        const active = () => !signal?.aborted && epoch === frGenerationEpoch && archiveName === currentArchiveName;
+        const check = () => {
+          signal?.throwIfAborted();
+          if (!active()) throw Object.assign(new Error('旧生成任务已停止或切换存档'), {name:'AbortError'});
+        };
+        check.active = active;
+        return check;
+      }
+      function frTrackGeneration(controller, parentSignal) {
+        const forward = () => controller.abort(parentSignal.reason);
+        if (parentSignal) {
+          if (parentSignal.aborted) forward();
+          else parentSignal.addEventListener('abort', forward, {once:true});
+        }
+        frGenerationTasks.add(controller);
+        frRefreshGenerationButton();
+        return () => {
+          parentSignal?.removeEventListener('abort', forward);
+          frGenerationTasks.delete(controller);
+          if (!frGenerationTasks.size) {
+            for (const resolve of frGenerationDrainWaiters) resolve();
+            frGenerationDrainWaiters.clear();
+          }
+          frRefreshGenerationButton();
+        };
+      }
+      function frRefreshGenerationButton() {
+        if (typeof sendMessageButton === 'undefined' || !sendMessageButton) return;
+        const busy = isMainApiGenerating || frGenerationTasks.size > 0;
+        sendMessageButton.disabled = false;
+        sendMessageButton.innerHTML = busy ? '<i class="fas fa-stop-circle"></i>' : '<i class="fas fa-paper-plane"></i>';
+        sendMessageButton.title = busy ? '停止当前所有生成流程' : '发送';
+        sendMessageButton.onclick = event => {
+          event?.preventDefault(); event?.stopPropagation();
+          if (isMainApiGenerating || frGenerationTasks.size) frStopCurrentGeneration();
+          else void sendMessage();
+        };
+      }
+      function frStopCurrentGeneration() {
+        frGenerationEpoch++;
+        if (typeof _commercialAutoPortraitSweepSeq !== 'undefined') _commercialAutoPortraitSweepSeq++;
+        const reason = Object.assign(new Error('玩家已停止当前生成流程'), {name:'AbortError',code:'FR_USER_STOP'});
+        const abort = controller => { try { if (controller && !controller.signal.aborted) controller.abort(reason); } catch (_) {} };
+        for (const controller of frGenerationTasks) abort(controller);
+        if (typeof frCanonStopAll === 'function') frCanonStopAll('all');
+        if (typeof cancelConcurrentEvolution === 'function') cancelConcurrentEvolution({silent:true});
+        if (typeof theaterApiController !== 'undefined') abort(theaterApiController);
+        if (typeof imageTaggingApiController !== 'undefined') abort(imageTaggingApiController);
+        if (typeof knowledgeSearchApiController !== 'undefined') abort(knowledgeSearchApiController);
+        if (typeof _commercialAutoPortraitSweepTimer !== 'undefined' && _commercialAutoPortraitSweepTimer) {
+          clearTimeout(_commercialAutoPortraitSweepTimer); _commercialAutoPortraitSweepTimer = null;
+        }
+        if (typeof abortAllCommercialAutoPortraitTasks === 'function') abortAllCommercialAutoPortraitTasks('玩家停止生成');
+        window.parent?.TavernHelper?.stopAllGeneration?.();
+        frRefreshGenerationButton();
+      }
+
         const TABLE_DEFINITIONS = {
           0: {
             0: 'ID',
@@ -56911,7 +56913,7 @@ async function buildMiscEvolutionPrompt(context) {
   const lifecycle=ceBridgeCore()?.['world-events'];
   if(lifecycle){
     const ongoing=lifecycle.formatActiveWorldEvents(currentState?.['5'],context.currentTime||ceBridgeReadWorldTime());
-    prompt+='\n'+lifecycle.WORLD_EVENT_CLOSURE_RULE+'\n'+lifecycle.WORLD_EVENT_OPPORTUNITY_RULE+
+    prompt+='\n'+lifecycle.WORLD_EVENT_GRANULARITY_RULE+'\n'+lifecycle.WORLD_EVENT_CLOSURE_RULE+'\n'+lifecycle.WORLD_EVENT_OPPORTUNITY_RULE+
       '\n结案用 updateWorldEvent(已有事件编号,{endedAt:"可确认时点","2":"依据已发生结果的简报"})，保留原起始时间。';
     if(ongoing)prompt+='\n【需核对的进行中事件】\n'+ongoing;
   }
@@ -57026,7 +57028,7 @@ async function buildMiscEvolutionPrompt(context) {
       ? '3. 不要补写任何玩家任务、当前地点/场景、地图结构，避免与普通杂项流程重复。'
       : '3. 若无变化，输出空标签 <upstore></upstore>。',
     isOriginalTimelineMiscReuse
-      ? '4. 势力/地点/世界事件等任何世界变量只取最终态：同一势力或地点在当前事件包内即使经历“建立→扩张→易主→衰亡”等多节点变化，也只落地它截至当前时点已成立的最终状态，禁止为中间每个节点重复生成；其中间过程不要拆成多条世界变化指令。'
+      ? '4. 同一连续世界事件在本次事件包内只结算一次截至当前已成立的状态，描述保留理解结果所需的关键经过、独立转折与可消费后果，不为每个动作重复生成。事件身份按因果与作用对象判断，不能把同一势力或地点的不同独立大事合成一件；不提前兑现未来，不把历史关键事实压掉。'
       : null,
     isOriginalTimelineMiscReuse
       ? '5. 若无可写入的世界影响，输出空标签 <upstore></upstore>。'
@@ -65716,6 +65718,10 @@ async function buildMergedEvolutionPrompt(options = {}) {
   }
   if (!options.canonVariables && !options.sharedOnly) template += '\n【新登场人物补全】本次负责的新NPC必须给全姓名、境界与身份、第9列年龄/寿元/isBonded，以及第11列13种基础白值（血量、法力、物攻、物防、法攻、法防、神识、物理穿透、法术穿透、气运、魅力、脚力、修炼速度；每项current/max）。依据身份与正文补齐给定骨架，或与本次 entry 的 set 骨架配合。不编造未获得的物品或变化。已有且完整的角色无变化可返回空命令。';
   if (!options.canonVariables && !options.characterBatch) template += '\n【合并杂项的世界大事尺度】仅记录地区、国家、主要势力层面的重大局势：战争联盟、广域灾变、区域资源与贸易变化、影响多方的重大修仙盛会或秘境。每事60–120字新闻简报，概述事实、范围、影响；不写个人心理对话和行动流水账，不把拜师收徒、普通招生、村落小摩擦当世界大事。E年表编号不证明尺度；无符合事实则不输出世界事件，不为凑数捏造。';
+  if (!options.canonVariables && !options.characterBatch && options.enabledPhases?.misc !== false) {
+    const worldRules = CE_CORE['world-events'];
+    if (worldRules) template += '\n' + worldRules.WORLD_EVENT_GRANULARITY_RULE + '\n' + worldRules.WORLD_EVENT_CLOSURE_RULE + '\n' + worldRules.WORLD_EVENT_OPPORTUNITY_RULE;
+  }
   if(options.canonVariables){
     template+='\n\n【本请求为原著补演变量转换，不重新写故事】只依据已验收的本人散文和逐人材料：保持人物、物品ID与归属；先核对已持有/消耗/送出与基础配置，再生成必要变化。不得兑现未来剧情，不推进玩家、登退场、世界、时间地点、任务或地图。资料补全只按各自canonProfileInstruction，不得互借身份、功法或天赋。物品与人物一次返回，原白值容器和硬锁不变，已有物品不重复创建。';
     if(typeof frCanonCharacterOwnershipRules==='function')template+='\n'+frCanonCharacterOwnershipRules();
@@ -110112,6 +110118,7 @@ snapshotEditorOverlay.classList.add('visible');
             selectedGender: null,
             avatarAppearance: 'auto',
             selectedPronoun: '第二人称',
+            initialRealm: '凡人',
             customAvatar: null,
             initialAge: 16,
             selectedRace: null,
@@ -110477,6 +110484,23 @@ snapshotEditorOverlay.classList.add('visible');
           });
         }
 
+        function frInitialRealmCore() {
+          return CE_CORE['initial-realm'];
+        }
+        function frInitialRealmDescription(option) {
+          const life=typeof option.lifespan==='number'?'参考寿元上限约'+option.lifespan+'年':'寿元'+option.lifespan;
+          return '<strong>'+option.realm+'</strong><p style="margin:8px 0">'+option.description+'</p><small>'+life+'；实际延寿、折寿与特殊设定仍按后续事实处理。</small>';
+        }
+        function frInitialRealmMarkup() {
+          const core=frInitialRealmCore(),selected=core.getInitialRealmOption(creationState.initialRealm);
+          return '<div class="creation-options-group" style="align-items:flex-start;flex-direction:column;gap:10px">'+
+            '<label for="creation-initial-realm"><i class="fas fa-mountain"></i> 初始境界:</label>'+
+            '<select id="creation-initial-realm" style="box-sizing:border-box;width:100%;max-width:100%;padding:10px;border:1px solid #8b7349;border-radius:8px;background:#17150f;color:#e5d2a4;font:inherit">'+
+            core.INITIAL_REALM_OPTIONS.map(option=>'<option value="'+option.realm+'"'+(option.realm===selected.realm?' selected':'')+'>'+option.realm+'</option>').join('')+
+            '</select><div id="creation-initial-realm-summary" aria-live="polite" style="box-sizing:border-box;width:100%;padding:12px;border:1px solid #5a4e3c;border-radius:8px;line-height:1.7;color:#d9c9a3">'+frInitialRealmDescription(selected)+'</div>'+
+            '<small style="color:#9c927b">自由选择，不消耗点数。最高道祖；超脱者为红宝专属，不可作为玩家初始境界。</small></div>';
+        }
+
         function renderStep3_GenderAndRace(contentEl, navEl) {
           const remainingPoints = calculateRemainingPoints();
           contentEl.innerHTML = `
@@ -110545,6 +110569,7 @@ snapshotEditorOverlay.classList.add('visible');
                   }> 第三人称 ({{user}})</label>
                 </div>
               </div>
+              ${frInitialRealmMarkup()}
               <button id="upload-custom-avatar-btn" class="major-action-button" style="margin-top: 15px; width: 100%;">
                 <i class="fas fa-image"></i> 上传自定义形象
               </button>
@@ -110669,6 +110694,12 @@ snapshotEditorOverlay.classList.add('visible');
             radio.addEventListener('change', e => {
               creationState.selectedPronoun = e.target.value;
             });
+          });
+
+          document.getElementById('creation-initial-realm').addEventListener('change', e => {
+            const option=frInitialRealmCore().getInitialRealmOption(e.target.value);
+            creationState.initialRealm=option.realm;
+            document.getElementById('creation-initial-realm-summary').innerHTML=frInitialRealmDescription(option);
           });
 
           // 【玩家姓名】边输边存；存两处：配置 playerName（垫片预设宏用）与 localStorage
@@ -111574,6 +111605,7 @@ snapshotEditorOverlay.classList.add('visible');
 </div>
 
 <div class="finalize-summary-grid">
+  <div class="finalize-summary-card"><div class="summary-header"><i class="fas fa-mountain"></i><h4>初始境界</h4></div><div class="summary-content">${frInitialRealmDescription(frInitialRealmCore().getInitialRealmOption(creationState.initialRealm))}</div></div>
   <div class="finalize-summary-card ${birthLocationClass}">
     <div class="summary-header">
       <i class="fas fa-map-marker-alt"></i>
@@ -111764,6 +111796,7 @@ snapshotEditorOverlay.classList.add('visible');
           startButton.disabled = true;
           startButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在创建存档...';
           try {
+            const initialRealm = frInitialRealmCore().getInitialRealmOption(creationState.initialRealm);
             const archiveName = await showCustomPrompt('为你的新人生命名:', '我的修仙路');
             if (!archiveName) {
               console.log('用户取消了创建。');
@@ -111806,6 +111839,8 @@ snapshotEditorOverlay.classList.add('visible');
                 ...(speed.rootBase ? { rootBase: speed.rootBase } : {}),
               };
             }
+
+            Object.assign(finalAttributes, frInitialRealmCore().initializeRealmAttributes(finalAttributes, initialRealm.realm, creationState.selectedLinggen));
 
             let birthName, birthDesc, birthBonus;
             if (creationState.selectedBirth === '自定义') {
@@ -111893,6 +111928,7 @@ ${worldFactorsHtml}
 <p>${pronoun}以 <strong>${birthName}</strong> 的身份出身。${birthDesc}</p>
 <p>${pronoun}的种族为 <strong>${raceName}</strong>。${raceDesc}</p>
 <p>${pronoun}的灵根为: <strong>${creationState.selectedLinggen}</strong></p>
+<p>${pronoun}的初始境界为 <strong>${initialRealm.realm}</strong>，由玩家自行选择；这不是本轮临时突破，不据此虚构往昔经历。</p>
 <details><summary><strong>${pronoun}的气运特质</strong></summary><ul>${
               sanitizedTraits
                 .map(trait => `<li><strong>[${trait.rarity}] ${trait.name}:</strong> ${trait.desc}</li>`)
@@ -111916,7 +111952,7 @@ ${
             const rootDescription = CREATION_CONFIG.LINGGEN[creationState.selectedLinggen]?.desc || '';
             const playerRemarks = `灵根:${creationState.selectedLinggen}|灵根说明:${rootDescription}|年龄:${
               creationState.initialAge
-            }|寿元:100|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
+            }|寿元:${initialRealm.lifespan}|初始境界:${initialRealm.realm}|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
               creationState.avatarAppearance
             }|isExtreme:${creationState.isExtreme}|warehouse:[]|deathCount:0`;
 
@@ -111945,7 +111981,7 @@ ${
             const playerRow = {
               0: 'B1',
               1: `${finalPlayerName}|${creationState.selectedGender}`,
-              2: `凡人|${birthName}`,
+              2: `${initialRealm.realm}|${birthName}`,
               3: personaForRow,   // 原来写死 '待定'，见上方注释
               4: '一切正常',
               5: '待定',

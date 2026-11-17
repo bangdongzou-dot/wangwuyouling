@@ -1,4 +1,4 @@
-import { numericRulesText, NUMERIC_ATTRIBUTE_FACTORS, NUMERIC_SCALAR_RANGES } from './numeric-realms.js';
+import { numericRulesText, legacyMortalNumericRulesText, NUMERIC_IMMORTAL_REALM_ROWS, NUMERIC_ATTRIBUTE_FACTORS, NUMERIC_SCALAR_RANGES } from './numeric-realms.js';
 import { techniqueSpeedContract, buildCultivationSpeedRules, CULTIVATION_ROOT_BASES, CULTIVATION_BASE_YEARS,
   CULTIVATION_DAYS_PER_YEAR, TECHNIQUE_SPEED_BY_GRADE, CULTIVATION_ROOT_LABELS, CULTIVATION_ROOT_TRAITS } from './cultivation-speed.js';
 import { CONTAINER_LIMITS, CONTAINER_HARD_CAPS } from './container-equipment.js';
@@ -60,6 +60,7 @@ export function numericRuleDefaults() {
       ['大境界',...Object.keys(CONTAINER_HARD_CAPS.凡人)].join(' | '),
       ...Object.entries(CONTAINER_HARD_CAPS).map(([realm,values])=>[realm,...Object.values(values)].join(' | ')),
       '单件只提供一项加成。混沌之宝按传导倍率放大本表上限。',
+      '仙界单件硬锁为1.1.6暂定扩展，按各大境界白值下界相对渡劫同比增长；原十档与独立气运/魅力/修速上限不变。',
     ].join('\n') },
   ];
 }
@@ -100,7 +101,7 @@ function parseCell(cell) {
 }
 
 export function configureNumericRules(rules) {
-  const configured=new Map(), edits=new Map(rules.map(row=>[row.id,row.content]));
+  const configured=new Map(), edits=new Map(rules.map(upgradeNumericRule).map(row=>[row.id,row.content]));
   for(const rule of numericRuleDefaults()){
     const edit=edits.get(rule.id);
     if(!edit||edit===rule.content)continue;
@@ -136,6 +137,29 @@ export function configureNumericRules(rules) {
 
 export function upgradeNumericRule(rule) {
   const defaults=numericRuleDefaults().find(row=>row.id===rule.id);
+  if(rule.id==='attribute-baseline'){
+    const rows=tableRows(rule.content);
+    if(rows.has('渡劫')&&!NUMERIC_IMMORTAL_REALM_ROWS.some(row=>rows.has(row.realm))){
+      const last=Number(rows.get('渡劫')[1]);
+      if(Number.isFinite(last)&&last>0){
+        const scale=last/1500000;
+        const extra=NUMERIC_IMMORTAL_REALM_ROWS.map(row=>row.realm+' | '+Number((row.min*scale).toFixed(6))+' | '+Number((row.max*scale).toFixed(6))).join('\n');
+        return {...rule,content:rule.content.replace(/^(渡劫\s*\|[^\n]+)$/mu,'$1\n'+extra)
+          .replace('最后渡劫上界1500000可取','最后道祖上界可取').replace('不含，渡劫末端含','不含，道祖末端含').replace('超出渡劫上界均','超出道祖上界均')+'\n仙界扩表为1.1.6暂定设计；保留既有区间，按渡劫末端同比衔接，仅新建和只读标签使用，不重算旧人物。'};
+      }
+    }
+  }
+  if(rule.id==='equipment-hard-caps'){
+    const rows=tableRows(rule.content),families=['真仙','金仙','太乙','大罗','道祖'];
+    const old=rows.get('渡劫');
+    if(old&&old.length===13&&old.every(cell=>Number.isFinite(Number(cell))&&Number(cell)>=0)&&!families.some(name=>rows.has(name))){
+      const extra=families.map(name=>{
+        const scale=NUMERIC_IMMORTAL_REALM_ROWS.find(row=>row.realm.startsWith(name)).min/1000000;
+        return name+' | '+old.map((value,index)=>index<10?Number((Number(value)*scale).toFixed(6)):value).join(' | ');
+      }).join('\n');
+      return {...rule,content:rule.content.replace(/^(渡劫\s*\|[^\n]+)$/mu,'$1\n'+extra)+'\n仙界单件硬锁为1.1.6暂定扩展，按仙界白值大境界下界相对渡劫同比衔接；原档与独立气运/魅力/修速硬锁不变。'};
+    }
+  }
   if(rule.id==='root-speed'&&/^1\s+灵根\s*\|/mu.test(rule.content)){
     const old=tableRows(rule.content);
     const content=defaults.content.split('\n').map(line=>{
@@ -157,6 +181,7 @@ export function linkNumericRuleReferences(template, project = text => text) {
   if (typeof template !== 'string') return template;
   const defaultContract = project(numericRulesText());
   return template.replaceAll(defaultContract, NUMERIC_BASELINE_REFERENCES)
+    .replaceAll(project(legacyMortalNumericRulesText()), NUMERIC_BASELINE_REFERENCES)
     .replaceAll(project(techniqueSpeedContract()), '${numeric_rule:technique-speed}')
     .replace(/### 传导率表（6器类 × 4品质）[^]*?(?=\*\*区间内取哪个值|### 神识门槛表)/gu,
       '### 装备传导与神识门槛\n${numeric_rule:equipment-transmission}\n\n')

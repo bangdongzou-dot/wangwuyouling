@@ -21,9 +21,19 @@ const anchors = [['凡人',10], ...qiNames.map((n,i)=>['炼气'+n+'层',40+i*5])
   ['大乘初期',300000],['大乘中期',450000],['大乘后期',600000],['渡劫',1000000]];
 // Anchors are the LOWER boundaries. Each full interval is split into equal thirds.
 // Last finite interval is explicit: do not silently invent immortals or flatten overflow.
-export const NUMERIC_REALM_ROWS = Object.freeze(anchors.map(([realm,min],i)=>Object.freeze({
+export const NUMERIC_MORTAL_REALM_ROWS = Object.freeze(anchors.map(([realm,min],i)=>Object.freeze({
   realm,min,max:anchors[i+1]?.[1] ?? 1500000,upperInclusive:i===anchors.length-1,
 })));
+// 1.1.6 暂定仙界压缩白值：连续承接渡劫，不迁移任何既有角色。
+export const NUMERIC_IMMORTAL_REALM_ROWS = Object.freeze([
+  ['真仙下位',1500000],['真仙中位',2250000],['真仙上位',3000000],
+  ['金仙下位',5000000],['金仙中位',7500000],['金仙上位',10000000],
+  ['太乙下位',18000000],['太乙中位',26000000],['太乙上位',36000000],
+  ['大罗下位',60000000],['大罗中位',90000000],['大罗上位',120000000],['道祖',200000000],
+].map(([realm,min],i,rows)=>Object.freeze({realm,min,max:rows[i+1]?.[1]??300000000,upperInclusive:i===rows.length-1})));
+export const NUMERIC_REALM_ROWS = Object.freeze([
+  ...NUMERIC_MORTAL_REALM_ROWS.map(row=>Object.freeze({...row,upperInclusive:false})),...NUMERIC_IMMORTAL_REALM_ROWS,
+]);
 const resources = new Set(['血量','法力']);
 const own = (o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const finite = v => (typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
@@ -41,6 +51,8 @@ export function resolveNumericRealm(raw) {
   let realm=String(raw??'').split('|')[0].trim().replace(/\s+/g,'').replace(/[（(]\d+(?:\.\d+)?%[）)]$/u,'').replace(/^练气/u,'炼气');
   realm=realm.replace(/(?:妖修|妖族|妖兽|灵兽)$/u,'');
   if(NUMERIC_REALM_ROWS.some(row=>row.realm===realm))return realm;
+  const immortal=realm.match(/^(真仙|金仙|太乙(?:玉仙)?|大罗(?:金仙)?|道祖)(?:期|境)?(下位|中位|上位|初期|中期|后期|圆满|大圆满|巅峰)?$/u);
+  if(immortal){const family=immortal[1].slice(0,2),phase={初期:'下位',中期:'中位',后期:'上位',圆满:'上位',大圆满:'上位',巅峰:'上位'};return family==='道祖'?'道祖':immortal[2]?family+(phase[immortal[2]]||immortal[2]):null;}
   const qi=realm.match(/^炼气(?:期)?([一二两三四五六七八九十\d]+)层$/u);
   const chinese=n=>/^\d+$/u.test(n)?Number(n):qiNames.indexOf(n==='两'?'二':n)+1;
   if(qi){const n=chinese(qi[1]);return n>=1&&n<=13?'炼气'+qiNames[n-1]+'层':null;}
@@ -82,7 +94,7 @@ export function classifyNumericAttribute(attribute,raw) {
   const rows=NUMERIC_REALM_ROWS.map(realmRow),first=rows[0],last=rows.at(-1);
   
   if(value<round(first.min*factor))return {...basic,status:'below',label:'低于凡人常规下限'};
-  if(value>round(last.max*factor))return {...basic,status:'above',label:'超出渡劫标尺（待扩表）'};
+  if(value>round(last.max*factor))return {...basic,status:'above',label:'超出道祖标尺（待扩表）'};
   const row=rows.find(r=>value>=round(r.min*factor)&&(value<round(r.max*factor)||(r.upperInclusive&&value<=round(r.max*factor))));
   if(!row)return basic;
   const tier=tierAt(numericInterval(row.realm,attribute),value);
@@ -171,7 +183,7 @@ export function carryAdjustedWhiteValues(person, previous, adjusted) {
     ?{...row,value:replacements[row.subject].current}:row);
   return {...person,columns:{...person.columns,11:{...next,...replacements}},...(terminal?{terminal}:{})};
 }
-export function numericRulesText(options) {
+export function legacyMortalNumericRulesText(options) {
   const lines=[
     '【压缩白值与等效实力规则表 '+NUMERIC_RULE_VERSION+'】',
     '这是本轮容器体系的可调整规则，不是旧存档迁移指令。数值用于单项比较与叙事，不自动判胜负，不存在综合战力求和。',
@@ -179,7 +191,7 @@ export function numericRulesText(options) {
     '表内基准是区间下界，区间左闭右开，最后渡劫上界1500000可取。相邻区间共边、无空档无重叠。每个属性区间等长分三份：下1/3偏弱，中1/3正常，上1/3超常；恰在分界归更高一档。',
     '基准区间乘下列系数得到各属性白值区间：'+Object.entries(NUMERIC_ATTRIBUTE_FACTORS).map(([k,v])=>k+'×'+v).join('，')+'。穿透是独立绝对值标尺，不是伤害百分比。',
     '境界 | 基准下界 | 基准上界（不含，渡劫末端含）',
-    ...NUMERIC_REALM_ROWS.map(r=>r.realm+' | '+r.min+' | '+r.max),
+    ...NUMERIC_MORTAL_REALM_ROWS.map(r=>r.realm+' | '+r.min+' | '+r.max),
     '气运、魅力单独用[0,100]三等分；修炼速度以[0,200]作为常规效率参考三等分，不是上限；白值按灵根合同初始化，未知100，200为双倍效率，混沌灵根2000为天灵根十倍。三者不是战斗境界，超过常规上界保留实际值并标超范围。',
     '新建人物或确有依据补齐缺失白值时，先确定真实小境界，再逐属性选偏弱/正常/超常，未明确偏科默认正常段中点；不得把一项强弱复制到全属性，不额外随机刷强度。凡人没有修仙法力/法攻/神识/法穿时为0，不为凑表生造。',
     '血量/法力保存current与max：无损耗current=max，已有损耗或恢复遵守事实。当前为0不当成缺失，不自动补满；缺字段写未知，负数/非法数据待核对。沿用当前与上限同加常驻增益的伤势差额模型，例如0/160加法力40得到40/200，不是恢复至满值；临时Buff仅改当前。修为改变不自动重置资源。',
@@ -190,4 +202,12 @@ export function numericRulesText(options) {
     buildCultivationSpeedRules(options)
   ];
   return lines.join('\n');
+}
+
+export function numericRulesText(options) {
+  return legacyMortalNumericRulesText(options)
+    .replace('最后渡劫上界1500000可取','最后道祖上界300000000可取')
+    .replace('不含，渡劫末端含','不含，道祖末端含')
+    .replace('渡劫 | 1000000 | 1500000','渡劫 | 1000000 | 1500000\n'+NUMERIC_IMMORTAL_REALM_ROWS.map(r=>r.realm+' | '+r.min+' | '+r.max).join('\n')+'\n仙界扩表为1.1.6暂定设计，承接原压缩增长与容器系数，可在数值规则中调整；不是原著定量结论。只用于新建/有依据成长及只读等效标签，旧档白值不重算。超脱者不在可选或有限数值表内。')
+    .replace('超出渡劫上界均','超出道祖上界均');
 }

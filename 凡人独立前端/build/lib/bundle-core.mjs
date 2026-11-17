@@ -72,6 +72,7 @@ export const CORE_MODULE_FILES = [
   'container-equipment.js',
   'numeric-settings.js',
   'numeric-realms.js',
+  'initial-realm.js',
   'numeric-preset.js',
   'numeric-rule-library.js',
   'cultivation-speed.js',
