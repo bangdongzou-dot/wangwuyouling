@@ -2480,6 +2480,7 @@ async function frReplayExecute(context,selection,cache){
      * 现在只清自己那一份，并且逐个比对：全局指针只在自己仍是它时才清。 */
     if(frReplaySessionsBySystem[recoverySystem]===self)frReplaySessionsBySystem[recoverySystem]=null;
     if(frReplaySession===self)frReplaySession=null;
+    frReplayReleaseCompletedTraceSession(self);
     frReplaySetBusy(recoverySystem,false);
     if(succeeded&& typeof cloudStorageConfig==='object'&& cloudStorageConfig&& cloudStorageConfig.enabled&& cloudStorageConfig.autoSync&& typeof uploadArchiveToCloud==='function')uploadArchiveToCloud(name,true).catch(function(e){console.warn('[局部重跑] 已保存，云同步失败:',e);});
   }
@@ -2488,6 +2489,19 @@ async function frReplayExecute(context,selection,cache){
     if(releaseArchive)releaseArchive();
     if(parentSignal)parentSignal.removeEventListener('abort',forwardQueuedStop);
     releaseQueuedStop();
+  }
+}
+// Trace history outlives execution. Keep its display marker, not rollback archives/cache.
+// Called only after commit/rollback and pending writes finish; active sessions stay intact.
+function frReplayReleaseCompletedTraceSession(session){
+  if(!session)return;
+  var marker={archiveName:session.archiveName,system:session.system,completed:true,
+    selection:{replay:{actorReplacement:session.selection?.replay?.actorReplacement===true}}};
+  var runs=new Set(frCanonTraceHistory);
+  if(typeof frCanonTraceActive==='object'&&frCanonTraceActive)runs.add(frCanonTraceActive);
+  for(var run of runs){
+    if(run._replay!==session)continue;
+    Object.defineProperty(run,'_replay',{value:marker,enumerable:false,configurable:true});
   }
 }
 async function frReplayRestoreBackup(backup){await frReplayRestore(backup.archive,backup.memory,backup.archiveName);if(backup.traceVisibility && typeof frCanonTraceRestoreVisibility==='function')await frCanonTraceRestoreVisibility(backup.traceVisibility);if(backup.bases)for(var system of ['ce','canon'])await dbSet('FR_REPLAY_BASE_V1:'+backup.archiveName+':'+system,backup.bases[system]||null);if(backup.artifactKey&&typeof frCanonTurnArtifactsKey==='function'&&backup.artifactKey===frCanonTurnArtifactsKey(backup.archiveName,backup.artifactLogId,backup.system))await dbSet(backup.artifactKey,backup.artifact||null);}

@@ -35,6 +35,7 @@ import path from 'node:path';
 /** 参与打包的模块（顺序无关，依赖由 import 决定；这里只列清单防漏） */
 export const CORE_MODULE_FILES = [
   'host-adapter.js',
+  'story-image-assets.js',
   'host-material.js',
   'interval.js',
   'inventory-stock.js',

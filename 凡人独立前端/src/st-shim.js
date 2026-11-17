@@ -453,6 +453,9 @@
     var body = buildBody(cfg, prompt, connection ? {...options,model:connection.apiModel,requestProfile:profile,
       prosePresetId:options.proseRequest ? window.FRProseRoutePresets?.get(connection.id) : undefined} : options);
 
+    const imageTextFilter=window.FR_CHAT_REQUEST_CORE?.['story-image-assets'];
+    if(imageTextFilter)body.messages=imageTextFilter.sanitizeStoryImageMessages(body.messages);
+
     recordMainPrompt(options.promptIdentity, body);
 
     var headers = { 'Content-Type': 'application/json' };

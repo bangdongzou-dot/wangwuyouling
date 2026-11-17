@@ -3802,9 +3802,133 @@ function frAdaptCharacterStatusRules(preset) {
   return preset;
 }
 
+/* 全域变量推理总则：只为精确已知阶段追加独立规则，不改用户原文或开关。 */
+var FR_VARIABLE_INFERENCE_RULE = {
+  "id": "fr-variable-inference-v1",
+  "name": "变量事实优先与合理推理总则",
+  "enabled": true,
+  "role": "system",
+  "content": "【全域变量判断顺序：明示事实 → 完整上下文合理推理 → 罕见兜底】\n本总则适用于人物、物品、技能、装备、关系、数值、任务、世界大事、地图与总结等本阶段有权处理的内容。不要把“未逐字写明”误当成“禁止推理”；也不要把“可合理推理”误当成“允许凭空发放”。\n1. 明确内容优先：先核对当前正文已发生事实、实际回执、当前存档、人物档案及本轮提供的设定资料。明确选择、属性、结果和既有例外优先于模板、默认值与自动择优。冲突时辨明来源、时态与作用对象，不以常识覆盖明确事实；传闻、计划、假设与未来情节不当作已发生。\n2. 未明说先主动推理：综合本轮可访问的完整设定、相关上下文、已有状态、角色能力、物品用途和前后因果，推导当前真实状态或已发生行为的合理后果。不要求文学作品逐项汇报所有中间过程；例如已经实际使用某能力，可以据此判断其当时具备相应能力，但不能顺势发放无关技能、资产或境界。推理应最小充分、前后一致，复用既有ID；不可声称读过未提供资料。\n3. 仅在认真推理仍无法合理确定时才兜底：优先保留已有可信值；确需新增时遵循字段协议选用有依据的保守默认，或允许的未知、未明、无、空集合、暂不更新。未知表示无法确定，无表示确实不存在或不适用，不能把二者混同，也不能把无当作生成失败而强造内容。不得为了填满字段虚构精确数值、出生年、亲属、装备、能力或事件；协议不接受未知字符串的枚举/数值字段应省略该可选更新，不强塞非法值。\n4. 原著与玩家双轨：编辑器/原著补演对当前节点已成立的原著设定可作合理设定补全，补记应有且当前仍成立的基础事实；不能提前消费未来事实，不能越过玩家造成的增减删改。游戏玩家正文则从当前真实状态承接已发生行动与结果作因果递进，允许有依据的推理，不凭原著模板补发未获得、已交付、已消耗或被夺走的物品，不把计划当执行，不替玩家作选择。\n5. 本总则解释旧条目中“未明/未知/默认”“只据明确事实”“不得猜测”的适用边界：先尽力合理推理再保守收口，不是看到缺字就直接放弃或机械兜底。明确来源、协议、权限、时间权威、数值由本地计算、玩家自主性及真实转移守恒等硬边界仍有效。内部推理用于生成合法最小变更，不输出推理过程或额外无消费者字段。无变化时按阶段合法空结果返回，不为凑应用条数制造变量。"
+};
+var FR_VARIABLE_INFERENCE_ANCHORS = [
+  {
+    "scope": "sharedRules",
+    "id": "c-rule-shared",
+    "length": 9094,
+    "hash": "67861e19db61ed610577722f75e83a00d5906559d6f74d5b45a25da1e636ab70"
+  },
+  {
+    "scope": "itemSharedRules",
+    "id": "c-rule-item",
+    "length": 9094,
+    "hash": "67861e19db61ed610577722f75e83a00d5906559d6f74d5b45a25da1e636ab70"
+  },
+  {
+    "scope": "entrySharedRules",
+    "id": "standalone-entry-command-contract",
+    "length": 782,
+    "hash": "363516b192e514c9d52910a97198299f3fe0382142ed2209c9db7b2cbb72a3df"
+  },
+  {
+    "scope": "player",
+    "id": "player-identity",
+    "length": 88,
+    "hash": "089735e7f5335c3a4725ac8f04d653399ba5451d6753a488aa93882144249d70"
+  },
+  {
+    "scope": "npc",
+    "id": "npc-identity",
+    "length": 1554,
+    "hash": "6f07181b76b6519aae50508faec0377532fea74a03e0836cb43acf7115701b52"
+  },
+  {
+    "scope": "entry_all_focus",
+    "id": "entry-identity-all-focus",
+    "length": 49,
+    "hash": "6f6973923d38b196e4795bddc1b1fad7ddf49924a0b2068ef546778dd5c1d126"
+  },
+  {
+    "scope": "beast",
+    "id": "beast-identity",
+    "length": 515,
+    "hash": "cd65d3defde889009dfc63a54c7d1e7f38ef58900211ed801df0fc0239ed664f"
+  },
+  {
+    "scope": "humanoid_beast",
+    "id": "humanoid-beast-identity",
+    "length": 386,
+    "hash": "fba3061b16697adf33421f40c4344f417eaca05e3490c1a784852dcba7e6a38b"
+  },
+  {
+    "scope": "item_management",
+    "id": "im-inventory-stock",
+    "length": 336,
+    "hash": "9db8c7e78d3a8e9f78a094014d7b8a3fcd915d75dd24a0620b9c1be264ce2c4d"
+  },
+  {
+    "scope": "misc_management",
+    "id": "misc-identity-v2",
+    "length": 426,
+    "hash": "a9753a5e475e0217bac59e52cb4ad5632ba026a1345300f74a717c97b0cb919e"
+  },
+  {
+    "scope": "misc_without_map",
+    "id": "misc-without-map-identity-v1",
+    "length": 353,
+    "hash": "99af4c0bd781eac483bb47ec0fc0e9ada5b29198de2e1a71b4cd1c01e0dc9b63"
+  },
+  {
+    "scope": "map_management",
+    "id": "map-identity-v1",
+    "length": 321,
+    "hash": "14debb6212ff9d4923813e12be146b6d52ffeec6cb1f034767207aa0ef66ae95"
+  },
+  {
+    "scope": "item_management",
+    "id": "im-0",
+    "length": 472,
+    "hash": "cb45d89498ebfdf33d7357a5ad670bf7dc63c87c24c4221390241359b78d0bf7"
+  },
+  {
+    "scope": "merged_variables",
+    "id": "mv-inventory-stock",
+    "length": 148,
+    "hash": "617326f7611c73a8d3f02992798a19cbef1c9b859026ccfbd9afb5b12864afef"
+  },
+  {
+    "scope": "merged_variables",
+    "id": "mv-0",
+    "length": 2155,
+    "hash": "6610e8ee907ad31c4c9066c7afac72cb00890515eecc41e3027e9ab942fddb1f"
+  },
+  {
+    "scope": "merged_variables",
+    "id": "mv-0",
+    "length": 910,
+    "hash": "47ef1a33cc888c095a1273f44e4cd7a8ee19eca27bcd5133c777f5425e956bd3"
+  }
+];
+function frAdaptVariableInferenceRules(preset) {
+  var meta=frPresetCompatMeta(preset);
+  var scopes=["sharedRules","itemSharedRules","entrySharedRules","player","npc","entry_all_focus","beast","item_management","misc_management","merged_variables"];
+  scopes.forEach(function(scope){
+    var rules=scope.endsWith('Rules')?preset[scope]:preset.prompts&&preset.prompts[scope]&&preset.prompts[scope].rules;
+    if(!Array.isArray(rules))return;
+    if(rules.some(function(r){return r&&r.id===FR_VARIABLE_INFERENCE_RULE.id;}))return;
+    var candidates=FR_VARIABLE_INFERENCE_ANCHORS.filter(function(a){return a.scope===scope;});
+    var anchor=candidates.find(function(a){var matches=rules.filter(function(r){return r&&r.id===a.id;});return matches.length===1&&typeof matches[0].content==='string'&&matches[0].content.length>=a.length&&frCompatSha256Hex(matches[0].content.slice(0,a.length))===a.hash;});
+    if(!anchor)return;
+    var original=rules.find(function(r){return r.id===anchor.id;}),addition=frPresetCompatCopy(FR_VARIABLE_INFERENCE_RULE);
+    addition.enabled=original.enabled!==false;rules.push(addition);
+  });
+  meta.variableInferenceVersion=1;
+  return preset;
+}
+
 function frAdaptEvolutionPreset(preset, referencePreset) {
   var copy = frPresetCompatCopy(preset && typeof preset === 'object' && !Array.isArray(preset) ? preset : {});
   frRetirePublishedInactiveGroups(copy);
+  frAdaptVariableInferenceRules(copy);
   frAdaptBackgroundIntroductionRules(copy);
   if(typeof frAdaptEquipmentLayoutRules==='function'&&typeof window!=='undefined'&&window.FrEquipmentRuntime)copy=frAdaptEquipmentLayoutRules(copy,window.FrEquipmentRuntime.core());
   var reference = referencePreset && typeof referencePreset === 'object' ? referencePreset : {};

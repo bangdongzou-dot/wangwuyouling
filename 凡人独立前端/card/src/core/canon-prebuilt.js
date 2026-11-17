@@ -1679,7 +1679,7 @@ export async function repairPrebuiltTurn(plan, host, context = {}) {
       .map(({id,person})=>({id,name:person.name,prose:person.prose}));
     const groupContext=worldGroups.length>1?{...context,groupIds:nodes.map(row=>row.id)}:context;
     return runPrebuiltTask(host,groupContext,world,'',{...shared,nodes,outcomes},
-    '只修改本组节点的世界大事。按每个节点的dependsOn人物、已核验正文及当前世界局势核对实际影响。只输出 JSON {nodes:[{id,world:[{nodeId,title,scope,prose,action,previousId,effect,estimatedEnd,endCondition,endsAt,endedAt}]}]}。已有大事确有进展填 update，确认结束填 resolve，并引用现有编号 previousId。同一场冲突的夺哨、约战、胜负和撤离沿用原编号，撤离等结案补充保留已确认的胜负。独立发生的新局势或玩家确实可参与的重要主线、限时机缘填 add；开放条件与实际关闭时点有据即记录。未变化不给记录。只有明确按时结束的影响才填 endsAt，预计日期用 estimatedEnd；当场结束的单次消息填 endedAt。'+WORLD_EVENT_CLOSURE_RULE+"\n"+WORLD_EVENT_OPPORTUNITY_RULE,
+    '只修改本组节点的世界大事。按每个节点的dependsOn人物、已核验正文及当前世界局势核对实际影响。只输出 JSON {nodes:[{id,world:[{nodeId,title,scope,prose,action,previousId,effect,estimatedEnd,endCondition,endsAt,endedAt,eventCategory,extensionEvidence,extendedAt,extensionUntil}]}]}。已有大事确有进展填 update，确认结束填 resolve，并引用现有编号 previousId。同一场冲突的夺哨、约战、胜负和撤离沿用原编号，撤离等结案补充保留已确认的胜负。独立发生的新局势或玩家确实可参与的重要主线、限时机缘填 add；开放条件与实际关闭时点有据即记录。未变化不给记录。只有明确按时结束的影响才填 endsAt，预计日期用 estimatedEnd；当场结束的单次消息填 endedAt。'+WORLD_EVENT_CLOSURE_RULE+"\n"+WORLD_EVENT_OPPORTUNITY_RULE,
     value=>{
       if (!Array.isArray(value?.nodes) || value.nodes.length!==nodes.length) return null;
       const results=new Map(value.nodes.map(row=>[row?.id,row?.world]));

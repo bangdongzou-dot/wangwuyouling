@@ -16811,13 +16811,14 @@ const textToSearch = storyText + (userInput || '');
         }
 
         function frRenderStoryHtml(element, html, avatarOptions = {}) {
-          const normalized = frNormalizeProseEnvelope(html);
+          const normalized = frNormalizeProseEnvelope(typeof frStoryImagePrepareHtml === 'function' ? frStoryImagePrepareHtml(html) : html);
           const withStatus = normalized.replace(/<ui_sys>([\s\S]*?)<\/ui_sys>/gi, (_, source) => {
             const fields = { ti:'time', li:'place', sect_stat:'mood', ei:'mood', env:'env', warn:'note' };
             return '<div class="fr-story-status">' + source.replace(/<(ti|li|sect_stat|ei|env|warn)>([^<]*)<\/\1>/gi,
               (_, tag, value) => '<span class="fr-story-status-' + fields[tag.toLowerCase()] + '">' + value + '</span>') + '</div>';
           });
           element.innerHTML = sanitizeHTML(processTextWithRules(withStatus, PLACEMENT_MAP.AI_OUTPUT, 'story-display'));
+          if (typeof frStoryImageHydrate === 'function') frStoryImageHydrate(element);
           const body = element.querySelector('content') || element;
           if (body !== element) body.classList.add('fr-story-reading');
           const ruleEnabled = id => regexConfig.rules?.some(rule => rule.id === id && !rule.disabled && rule.placement?.includes(PLACEMENT_MAP.AI_OUTPUT));
@@ -28327,7 +28328,10 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
       if (log.type !== 'ai' || log.isGhost || log.isDeepSummary || log.isSnapshot) continue;
       holder.innerHTML = log.content || '';
       for (const image of holder.content.querySelectorAll('figure[data-ce-generated-image] img')) {
-        const src = image.getAttribute('src');
+        let src = image.getAttribute('src');
+        if (typeof frStoryAssetsCore === 'function' && frStoryAssetsCore()?.isStoryImageRef(src)) {
+          try { src = await frStoryImageReadDataUrl(src); } catch (_) { continue; }
+        }
         if (_portraitIsReferenceData(src)) earlierFigures.push({src,name:'上一个有插图的回合',type:'场景延续'});
       }
       if (earlierFigures.length) break;
@@ -28410,6 +28414,7 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
 
 async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedContent, signal) {
   signal?.throwIfAborted();
+  if (typeof frStoryImageLocalizeResults === 'function') results = await frStoryImageLocalizeResults(results,signal);
   let updatedLog, insertedCount = 0;
   await db.archives.where('name').equals(archiveName).modify(archive => {
     signal?.throwIfAborted();
@@ -31278,7 +31283,11 @@ async function ceResolveOffscreenActiveRoster(options = {}) {
     : String(typeof ceResolveUserInput === 'function' ? ceResolveUserInput('') : '');
 
   const loadedArchive = await db.archives.get(currentArchiveName);
-  const archive = readOnly && loadedArchive ? structuredClone(loadedArchive) : loadedArchive;
+  // Preview mutates only offscreen bookkeeping; history/images/worldbook stay read-only.
+  const archive = readOnly && loadedArchive?.data?.state ? { ...loadedArchive, data: { ...loadedArchive.data,
+    state: { ...loadedArchive.data?.state,
+      concurrentEvolutionOffscreenState: structuredClone(loadedArchive.data?.state?.concurrentEvolutionOffscreenState || {}) }
+  } } : loadedArchive;
   if (!archive?.data?.state) {
     return { activeIds: [], protectedIds: [], hardFrozenIds: [], softFrozenIds: [], candidates: [], activeReasonMap: {} };
   }
@@ -31295,7 +31304,7 @@ async function ceResolveOffscreenActiveRoster(options = {}) {
   }
 
   const resolvedState = ceEnsureOffscreenArchiveState(archive);
-  const state = readOnly ? structuredClone(resolvedState) : resolvedState;
+  const state = resolvedState;
   const beforeState = JSON.stringify(state);
   state.manualFrozenIds = ceNormalizeStringIdList(config.manualFrozenCharacterIds);
   const deletedIdSet = ceGetDeletedWorldBookIdSet() || new Set();
@@ -43419,7 +43428,10 @@ function ceNormalizeWorldBookEntryForFrontend(entry) {
 }
 
 function ceNormalizeWorldBookEntriesForFrontend(entries) {
-  return (Array.isArray(entries) ? entries : []).map(function(entry) {
+  return (Array.isArray(entries) ? entries : []).filter(function(entry) {
+    // Snapshot control records are not worldbook entities and must never acquire random IDs.
+    return entry && typeof entry === 'object' && !entry._isFullSnapshot;
+  }).map(function(entry) {
     return ceNormalizeWorldBookEntryForFrontend(entry);
   }).filter(function(entry) {
     return !!(entry && typeof entry === 'object');
@@ -43837,6 +43849,15 @@ function syncConcurrentEvolutionWorldbookCache(targetId, charData, serialized) {
 
 // [简化] ceGetWorldBookOverrideMap, ceRegisterWorldBookOverride, ceApplyWorldBookOverrides 已移除
 // 系统现在依赖原版的日志快照机制
+
+// Decode log control records before promoting a biography snapshot into archive state.
+function ceResolveBiographySnapshotDataEntries(logs, logIndex, snapshot) {
+  const priorLogs = (Array.isArray(logs) ? logs.slice(0, Math.max(0, logIndex)) : []).map(log => ({
+    biographySnapshot: JSON.parse(JSON.stringify(Array.isArray(log?.biographySnapshot) ? log.biographySnapshot : []))
+  }));
+  priorLogs.push({ biographySnapshot: JSON.parse(JSON.stringify(Array.isArray(snapshot) ? snapshot : [])) });
+  return ceNormalizeWorldBookEntriesForFrontend(ceAccumulateBiographyFromLogs(priorLogs, priorLogs.length - 1));
+}
 
 function ceAccumulateBiographyFromLogs(logs, endIndex) {
   if (!Array.isArray(logs) || logs.length === 0) return [];
@@ -48304,11 +48325,12 @@ function patchConcurrentEvolutionSnapshotDebug() {
               const latestBioSnapshot = Array.isArray(latestLog.biographySnapshot)
                 ? latestLog.biographySnapshot
                 : [];
-              let repairedBiographySnapshot = Array.isArray(logEntry?.biographySnapshot) && logEntry.biographySnapshot.length > 0
-                ? JSON.parse(JSON.stringify(logEntry.biographySnapshot))
+              const hasLogEntryBiographySnapshot = Array.isArray(logEntry?.biographySnapshot) && logEntry.biographySnapshot.length > 0;
+              let repairedBiographySnapshot = hasLogEntryBiographySnapshot
+                ? ceResolveBiographySnapshotDataEntries(finalArchive.data.logs, finalLogIndex, logEntry.biographySnapshot)
                 : [];
 
-              if (repairedBiographySnapshot.length === 0) {
+              if (!hasLogEntryBiographySnapshot) {
                 const authoritativeSnapshot = ceBuildAuthoritativeWorldBookSnapshot(finalArchive, {
                   allowLatestLogFallback: true,
                   respectDeleted: true
@@ -48320,9 +48342,9 @@ function patchConcurrentEvolutionSnapshotDebug() {
               }
 
               if (ceShouldPromoteRecoveredWorldBookEntries(latestBioSnapshot, repairedBiographySnapshot)) {
-                latestLog.biographySnapshot = JSON.parse(JSON.stringify(repairedBiographySnapshot));
+                latestLog.biographySnapshot = [{ _isFullSnapshot: true }, ...JSON.parse(JSON.stringify(repairedBiographySnapshot))];
                 if (logEntry && typeof logEntry === 'object') {
-                  logEntry.biographySnapshot = JSON.parse(JSON.stringify(repairedBiographySnapshot));
+                  logEntry.biographySnapshot = [{ _isFullSnapshot: true }, ...JSON.parse(JSON.stringify(repairedBiographySnapshot))];
                 }
                 needsSave = true;
               }
@@ -56909,13 +56931,13 @@ async function buildMiscEvolutionPrompt(context) {
   } else {
     prompt += '\n\n【补演世界转换】本轮独立世界正文已经完成世界范围判断，当前只把其中已成立的变化转换成 addWorldEvent / updateWorldEvent / deleteWorldEvent，不重新判定公共影响，不补造事实。新增提供时间、地点、描述，修订提供现有事件编号与列0/1/2，删除引用现有编号；事件描述以60–120字新闻简报概括独立世界正文已确认的地区、国家或主要势力重大局势变化，保留真实主体、否定、时间、地点与因果；不复制个人传记、动作细节或候选年表，不新增未经推演的变化。不生成M数字编号、任务、地图、时间行、人物、物品或大小总结；无可写入变化可输出空标签。';
   }
-  prompt += '\n【世界大事的持续影响】新增持续局势用 addWorldEvent(时间,地点,描述,{effect,estimatedEnd,endCondition,endsAt,endedAt})，第四参数各项均为可选字符串。重要主线或限时机缘有玩家可获知、可实际参与的入口时也可登记。effect 写具体影响、参与方式与条件。estimatedEnd 是预计时间，endCondition 是实际结束条件，只有确定到时停止才填 endsAt。同一场冲突的胜负、撤离与实际后果用 updateWorldEvent(编号,对象) 承接原条目，保留起始时间以及已确认的结案事实。明确结束时更新 endedAt 和描述，历史留在大事记。无变化不提交；不要按预计时间认定结局。';
+  prompt += '\n【世界大事的持续影响】新增持续局势用 addWorldEvent(时间,地点,描述,{effect,estimatedEnd,endCondition,endsAt,endedAt,eventCategory,extensionEvidence,extendedAt,extensionUntil})，第四参数各项均为可选字符串。重要主线或限时机缘有玩家可获知、可实际参与的入口时也可登记。effect 写具体影响、参与方式与条件。estimatedEnd 是预计时间，endCondition 是实际结束条件，只有确定到时停止才填 endsAt。同一场冲突的胜负、撤离与实际后果用 updateWorldEvent(编号,对象) 承接原条目，保留起始时间以及已确认的结案事实。明确结束时更新 endedAt 和描述，历史留在大事记。无变化不提交；不要按预计时间认定结局。';
   const lifecycle=ceBridgeCore()?.['world-events'];
   if(lifecycle){
     const ongoing=lifecycle.formatActiveWorldEvents(currentState?.['5'],context.currentTime||ceBridgeReadWorldTime());
     prompt+='\n'+lifecycle.WORLD_EVENT_GRANULARITY_RULE+'\n'+lifecycle.WORLD_EVENT_CLOSURE_RULE+'\n'+lifecycle.WORLD_EVENT_OPPORTUNITY_RULE+
       '\n结案用 updateWorldEvent(已有事件编号,{endedAt:"可确认时点","2":"依据已发生结果的简报"})，保留原起始时间。';
-    if(ongoing)prompt+='\n【需核对的进行中事件】\n'+ongoing;
+    if(ongoing)prompt+='\n【需核对的当前事件与待分类历史】\n'+ongoing;
   }
   if (!(context.sharedContext && context.sharedContext.originalTimelinePhaseReuseEnabled === true) && !context.canonProseOnly) {
     var timeOwner=context.timeLocationUpdateOwner || (context.sharedContext && context.sharedContext.timeLocationUpdateOwner) || 'entry';
@@ -58500,6 +58522,33 @@ function ceExtractUpstoreEnvelope(responseText) {
   };
 }
 
+// Read-only structural gate shared by parse and apply. Never turn invalid input into an old-map no-op.
+function ceValidateMiscSceneMapPayloads(delta = []) {
+  for (let index = 0; index < delta.length; index++) {
+    const op = delta[index];
+    if (!op || (op.command !== 'set' && op.command !== 'add')) continue;
+    const id = op.command === 'set' ? op.data && op.data['0'] : op.id;
+    if (id !== 'SCENE_MAP') continue;
+    let config = op.data && op.data['1'];
+    let reason = '';
+    if (typeof config === 'string') {
+      try { config = JSON.parse(config); } catch (_) { reason = '第1列不是完整JSON'; }
+    }
+    if (!reason && (!config || typeof config !== 'object' || Array.isArray(config) || Object.keys(config).length === 0)) {
+      reason = '第1列必须是非空地图对象，不能缺失、为空或使用数组';
+    }
+    if (reason) return {ok:false,index,error:'第' + (index + 1) + '条SCENE_MAP原始载荷无效：' + reason + '；请使用add("SCENE_MAP",{"1":{...}})，对象内容遵循本轮原生v3地图合同'};
+  }
+  return {ok:true};
+}
+
+function ceMiscParseRepairInstruction(error) {
+  // Parser text is diagnostic data, never a new authority or an instruction copied from the model.
+  const detail = JSON.stringify(String(error || '输出格式无效').slice(0, 800));
+  return '\n\n# 上次输出校验未通过，请修正后重新完整输出\n程序诊断（仅作为待修数据）：' + detail +
+    '\n沿用本次接口要求的最终输出格式，只修正协议错误并保留有依据的本轮完整操作；不要通过删掉地图、总结或其他有效操作伪装成功，不虚构变化，不扩大权限。SCENE_MAP仍使用add("SCENE_MAP",{"1":非空v3对象})；地图没有变化才省略该命令。';
+}
+
 function ceParseMiscCommandsBlock(commandsString, options = {}) {
   const opts = options || {};
   if (!commandsString || typeof commandsString !== 'string' || !commandsString.trim()) {
@@ -58594,6 +58643,14 @@ function ceParseMiscCommandsBlock(commandsString, options = {}) {
   const failedOps = opts.canonProseOnly === true ? blockedOps.filter(op => !normalSkips.has(op.blockedReason)) : blockedOps;
   if (blockedOps.length > 0 && opts.logBlocked !== false) {
     console.warn('[杂项演化] 已过滤超范围指令:', blockedOps);
+  }
+
+  if (failedOps.length === 0) {
+    const sceneCheck = ceValidateMiscSceneMapPayloads(delta);
+    if (!sceneCheck.ok) return {
+      delta: [], smallSummary: null, largeSummary: null, blockedOps,
+      noOperations: false, commandsString, errorType: 'parse', error: sceneCheck.error
+    };
   }
 
   const smallSummary = parsed.smallSummary ?? null;
@@ -60115,10 +60172,12 @@ async function requestMiscEvolutionPhase(options = {}) {
   try {
     let apiRetryCount = 0;
     let parseRetryCount = 0;
+    let lastParseError = '';
     while (true) {
       const _mCurCfg = _miscApiConfigs[_miscApiIdx];
       const hasNextRoute=_miscApiIdx<_miscApiConfigs.length-1;
       try {
+        ceThrowIfConcurrentEvolutionAborted(signal);
         const preset = await ceResolveEvolutionRoutePreset(_mCurCfg, fallbackPreset, resolvedConfig);
         let prompt = await buildRoutePrompt(preset);
         if (!prompt) throw new Error('接口绑定预设未提供世界演化规则');
@@ -60131,6 +60190,7 @@ async function requestMiscEvolutionPhase(options = {}) {
           && sharedContext.originalTimelinePhaseReuseEnabled === true
           && sharedContext.originalTimelineThinkingEnabled !== false
         );
+        if (lastParseError) prompt += ceMiscParseRepairInstruction(lastParseError);
         const messages = shouldUseThinkingPrefill
           ? [
               { role: 'user', content: prompt },
@@ -60182,6 +60242,7 @@ async function requestMiscEvolutionPhase(options = {}) {
           if (parsed.errorType === 'scope') {
             return { skipped:false, noOperations:false, error:parsed.error, errorType:'scope', delta:parsed.delta || [], blockedOps:parsed.blockedOps || [], thinking:parsed.thinking || '', commandsString:parsed.commandsString || '' };
           }
+          lastParseError = parsed.error;
           if (parseRetryCount < maxParseRetry) {
             parseRetryCount++;
             const retryMsg = `[杂项演化] 解析失败，重试 (${parseRetryCount}/${maxParseRetry})`;
@@ -60670,17 +60731,8 @@ async function applyMiscEvolutionResult(result) {
 
   const delta = Array.isArray(result.delta) ? result.delta : [];
   // 必须先看原载荷，防止小地图归一化把无效输入变成旧图而误报幂等成功。
-  var invalidSceneMap = delta.some(function(op) {
-    if (!op || (op.command !== 'set' && op.command !== 'add')) return false;
-    var id = op.command === 'set' ? op.data && op.data['0'] : op.id;
-    if (id !== 'SCENE_MAP') return false;
-    var config = op.data && op.data['1'];
-    if (typeof config === 'string') {
-      try { config = JSON.parse(config); } catch (sceneError) { return true; }
-    }
-    return !config || typeof config !== 'object' || Array.isArray(config) || Object.keys(config).length === 0;
-  });
-  if (invalidSceneMap) return {appliedCount:0,rejectedCount:delta.length,noOperations:false,skipped:false,error:'小地图原始载荷无效，整批未应用',errorType:'apply'};
+  const scenePayloadCheck = ceValidateMiscSceneMapPayloads(delta);
+  if (!scenePayloadCheck.ok) return {appliedCount:0,rejectedCount:delta.length,noOperations:false,skipped:false,error:'小地图原始载荷无效，整批未应用；' + scenePayloadCheck.error,errorType:'apply'};
   console.log('[并发演化][总结诊断] applyMiscEvolutionResult 进入', {
     source,
     currentSummaryWriterMode: typeof window !== 'undefined' ? String(window._ceCurrentSummaryWriterMode || '').trim() || null : null,
@@ -65742,7 +65794,7 @@ async function buildMergedEvolutionPrompt(options = {}) {
     +(options.newEntryIds?.length?'\n以下是本轮刚创建的 NPC，按已给骨架补齐缺失档案与白值：'+options.newEntryIds.join('、')+'。':'')
     +(options.sharedItemResponse && options.sharedItemResponse !== '<upstore></upstore>'?'\n【已规划物品操作，只读】\n'+options.sharedItemResponse:'');
   if (!options.characterBatch) template += '\n【合并指令执行顺序】游戏按物品、各人物、杂项依次执行，保留每组命令内部的顺序。把同一笔操作的前后步骤按因果顺序排列，各写一次。TIME_LOCATION_ROW 只写在本轮指定负责它的位置。';
-  return FrMergedEvolution.buildPrompt(template, values);
+  return FrMergedEvolution.buildPrompt(frExpandNumericSystemMessages(template), values);
 }
 
 function frValidateMergedNewEntryProfiles(pack, targets) {
@@ -74916,7 +74968,8 @@ async function rerollConcurrentEvolution(replayOptions) {
       throw new Error('数据库未就绪。');
     }
 
-    const archive = structuredClone(replaySession.backup.archive);
+    // 本段只读取日志定位和正文；备份由外层重跑事务持有，不能为只读视图再复制全部图片与历史。
+    const archive = replaySession.backup.archive;
     if (!archive || !archive.data?.logs) {
       throw new Error('无法加载存档日志。');
     }
@@ -79837,7 +79890,14 @@ try {
           }
         }
 
-        async function genericApiCallStream(apiUrl, apiKey, model, messages, signal, useGeminiBuild, streamElement, route, hasNextRoute) {
+        function frExpandNumericSystemMessages(messages) {
+  const expand=text=>typeof window!=='undefined'&&window.FrNumericRules?window.FrNumericRules.expand(text):text;
+  if(typeof messages==='string')return expand(messages);
+  return Array.isArray(messages)?messages.map(message=>message?.role==='system'&&typeof message.content==='string'?{...message,content:expand(message.content)}:message):messages;
+}
+
+async function genericApiCallStream(apiUrl, apiKey, model, messages, signal, useGeminiBuild, streamElement, route, hasNextRoute) {
+          messages=frExpandNumericSystemMessages(messages);
           const requestProfile=route?.requestProfile;
           const performStreamRequest=async(requestSignal=signal)=>{
           if (streamElement) {
@@ -80068,6 +80128,7 @@ try {
 
         // 不改预设与历史，只为不接受模型结尾的接口补上用户完成指令。
         function frNormalizeModelTail(messages,model,force) {
+          if (typeof frStoryImagePrompt === 'function') messages = frStoryImagePrompt(messages);
           if(!Array.isArray(messages)||!messages.length||!['assistant','model'].includes(messages.at(-1)?.role))return messages;
           /* 2026-11-03 玩家：「你别把这个当作默认设置了，只能当作一个高级设置开关」。
            * 原来这里 `!force && !/gemini|3[._-]?8f/i.test(model)` 就 return ——
@@ -80090,6 +80151,7 @@ try {
           return null;
         }
         function frMainGenerationGuard(prompt,force) {
+          if (typeof frStoryImagePrompt === 'function') prompt = frStoryImagePrompt(prompt);
           var host=null;try{host=window.parent?.SillyTavern?.getContext?.();}catch(_){}
           var source=host?.eventSource,event=host?.eventTypes?.CHAT_COMPLETION_SETTINGS_READY;
           if(!source||!event||typeof source.removeListener!=='function'||typeof source.makeLast!=='function'&&typeof source.on!=='function')return {prompt:prompt,supported:false,cleanup:function(){}};
@@ -83728,10 +83790,9 @@ checkTurn();
             return;
           }
 
-          const lastLogWithBio = [...logs.slice(0, targetLogIndex)].reverse().find(log => log.biographySnapshot);
-          const previousBiographies = lastLogWithBio ? lastLogWithBio.biographySnapshot : [];
-
-          const biographyMasterMap = new Map(previousBiographies.map(e => [e.key, { ...e }]));
+          // biographySnapshot 是带 full/delete 控制指令的日志格式，不是可直接写入 state 的条目数组。
+          const previousBiographies = ceResolveBiographySnapshotDataEntries(logs, targetLogIndex, []);
+          const biographyMasterMap = new Map(previousBiographies.map(e => [e.key || e.id || e.characterId || e.charId, { ...e }]));
 
           const finalNpcIds = new Set(
             Object.keys(finalState['0'] || {}).filter(id => id.startsWith('C') || id.startsWith('G')),
@@ -84484,7 +84545,7 @@ checkTurn();
           showPersistentStatus('正在请求正文优化API进行正文润色...');
 
           try {
-            const finalPrompt = promptTemplate.replace(/\${story_text}/g, storyText);
+            const finalPrompt = promptTemplate.replace(/\${story_text}/g, typeof frStoryImagePrompt === 'function' ? frStoryImagePrompt(storyText) : storyText);
 
             const response = await fetch(`${apiUrl}/chat/completions`, {
               method: 'POST',
@@ -84961,6 +85022,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
         }
 
         async function fetchEmbeddingOnce(inputData, config, signal) {
+          if (typeof frStoryImagePrompt === 'function') inputData = frStoryImagePrompt(inputData);
           signal?.throwIfAborted();
           const provider = config.provider || 'api';
           if (provider === 'local') {
@@ -85656,8 +85718,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
             parentOptionsHtml += `<option value="${f}" ${isSelected ? 'selected' : ''}>📂 ${f}</option>`;
           });
 
-          const allArchives = await db.archives.toArray();
-          const archiveNames = allArchives.map(a => a.name).sort();
+          const archiveNames = (await db.archives.toCollection().primaryKeys()).sort();
 
           const isGlobalSelected = currentScope === 'global';
           const isCurrentArchiveSelected =
@@ -86009,8 +86070,7 @@ ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`,
               if (newBoundArchive === currentArchiveName) {
                 newArchiveId = currentArchiveId;
               } else {
-                const allArchivesForUpdate = await db.archives.toArray();
-                const targetArc = allArchivesForUpdate.find(a => a.name === newBoundArchive);
+                const targetArc = await db.archives.get(newBoundArchive);
                 newArchiveId = targetArc?.data?.state?.archiveId || newBoundArchive;
               }
             }
@@ -93165,6 +93225,8 @@ listEl.appendChild(fragment);
         }
 
         async function genericApiCall(apiUrl, apiKey, model, prompt, signal = null, options = {}) {
+          prompt=frExpandNumericSystemMessages(prompt);
+          if (typeof frStoryImagePrompt === 'function') prompt = frStoryImagePrompt(prompt);
           const canonTraceRequest = typeof frCanonTraceRequest==='function' ? frCanonTraceRequest(signal,{model:model,messages:prompt,secret:apiKey,endpoint:apiUrl,options:options}) : null;
           if (!apiUrl || !model || !prompt) {
             throw new Error('通用 API 调用缺少必需的参数：URL、模型或提示词。');
@@ -97217,7 +97279,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             }
 
             // === 根据配置决定是否上传向量库 ===
-            let dataToUpload = localArchive.data;
+            let dataToUpload = typeof frStoryPortableDocument === 'function' ? await frStoryPortableDocument(localArchive.data) : localArchive.data;
             dataToUpload._internalName = archiveName;
 
             // 检查配置，如果是 false，则剔除 vectors 字段
@@ -97323,6 +97385,22 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
               actionsDiv.appendChild(uploadBtn);
             }
 
+            const inlineImagesBtn = document.createElement('button');
+            inlineImagesBtn.className = 'action-btn';
+            inlineImagesBtn.title = '还原内联图片（旧版本兼容）';
+            inlineImagesBtn.innerHTML = '<i class="fas fa-file-image"></i>';
+            inlineImagesBtn.onclick = async e => {
+              e.stopPropagation();
+              if (!(await showCustomConfirm('将此存档的本地插图还原为内联图片，供旧版本读取。存档体积会增大；在新版再次读档会重新优化。也可使用导出存档获得自带图片的兼容备份。是否继续？'))) return;
+              inlineImagesBtn.disabled = true;
+              try {
+                await frRestoreInlineStoryImages(archive.name);
+                await showCustomAlert('图片已还原为旧版兼容格式。本地图片副本仍保留，其他历史和分支不受影响。');
+              } catch (error) { await showCustomAlert('图片还原未完成：' + error.message); }
+              finally { inlineImagesBtn.disabled = false; }
+            };
+            actionsDiv.appendChild(inlineImagesBtn);
+
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'action-btn delete';
             deleteBtn.title = '删除此存档';
@@ -97418,6 +97496,7 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             loadedFromCloud = false;
           }
 
+          if (loadedFromCloud && typeof frStoryImportDocument === 'function') archiveData = await frStoryImportDocument(archiveData);
           const needsArchiveId = !archiveData.archiveId;
           if (needsArchiveId) archiveData.archiveId = crypto.randomUUID();
           try {
@@ -97438,6 +97517,10 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             try { frCanonDropTurnDerivedState('切换存档'); } catch (_) {}
           }
 
+          if (typeof frMigrateStoryArchive === 'function') {
+            try { archiveData = await frMigrateStoryArchive(finalArchiveName,archiveData); }
+            catch (_) { console.warn('[正文图片] 本次迁移未完成，继续保留原始存档图片。'); }
+          }
           currentArchiveName = finalArchiveName;
           await dbSet(ACTIVE_ARCHIVE_KEY, currentArchiveName);
 
@@ -99121,11 +99204,13 @@ console.log('【调试】renderInventory 被调用');
         }
 
         async function openCacheManager() {
-          const archivesData = await db.archives.toArray();
-          const archivesDataSize = archivesData.reduce(
-            (acc, archive) => acc + new Blob([JSON.stringify(archive)]).size,
-            0,
-          );
+          // Measure the same full JSON bytes, one archive at a time, not all histories at once.
+          const archiveKeys = await db.archives.toCollection().primaryKeys();
+          let archivesDataSize = 0;
+          for (const key of archiveKeys) {
+            const archive = await db.archives.get(key);
+            if (archive) archivesDataSize += new Blob([JSON.stringify(archive)]).size;
+          }
           document.getElementById('archives-data-size').textContent = `${(archivesDataSize / 1024).toFixed(2)} KB`;
 
           const summarySettings = await dbGet(SUMMARY_CONFIG_KEY);
@@ -105640,6 +105725,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
           exportArchiveOverlay.classList.add('visible');
         }
         async function exportSingleArchive(archiveName) {
+          try {
           const archiveData = await db.archives.get(archiveName);
           if (!archiveData) {
             await showCustomAlert('错误：找不到要导出的存档。');
@@ -105656,7 +105742,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
             data: archiveData.data,
           };
 
-          const dataStr = JSON.stringify(exportObject, null, 2);
+          const dataStr = JSON.stringify(typeof frStoryPortableDocument === 'function' ? await frStoryPortableDocument(exportObject) : exportObject, null, 2);
           const dataBlob = new Blob([dataStr], { type: 'application/json' });
           const url = URL.createObjectURL(dataBlob);
           const a = document.createElement('a');
@@ -105670,6 +105756,9 @@ newConfirmBtn.addEventListener('click', handleConfirm);
 
           if (typeof exportArchiveOverlay !== 'undefined') {
             exportArchiveOverlay.classList.remove('visible');
+          }
+          } catch (error) {
+            await showCustomAlert('导出失败，未生成不完整备份：' + error.message);
           }
         }
 
@@ -105740,7 +105829,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
               latestStoryContent: latestStoryContent,
             };
 
-            const dataStr = JSON.stringify(exportObject, null, 2);
+            const dataStr = JSON.stringify(typeof frStoryPortableDocument === 'function' ? await frStoryPortableDocument(exportObject) : exportObject, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
             const a = document.createElement('a');
@@ -105852,6 +105941,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
                   },
                 };
 
+                if (typeof frStoryImportDocument === 'function') newArchive.data = await frStoryImportDocument(newArchive.data);
                 await db.archives.add(newArchive);
                 await showCustomAlert(`新世界 “${newArchiveName}” 已成功创建！即将载入...`);
 
@@ -105898,7 +105988,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
                 }
               }
 
-              await db.archives.put({ name: archiveName, data: data });
+              await db.archives.put({ name: archiveName, data: typeof frStoryImportDocument === 'function' ? await frStoryImportDocument(data) : data });
               await showCustomAlert(`存档 "${archiveName}" 已成功导入！`);
 
               if (splashScreen.classList.contains('hidden')) {
@@ -107268,9 +107358,9 @@ if (!isReadOnly) {
               const li = document.createElement('li');
               li.className = 'world-event-item';
               li.innerHTML = '<div style="flex-grow:1"><span class="event-time"></span><p class="event-text"></p><small class="event-location"></small></div><button class="item-delete-btn" aria-label="删除此条记录"><i class="fas fa-trash-alt"></i></button>';
-              li.querySelector('.event-time').textContent=[event.start,event.active?'进行中':event.ended?'已结束':''].filter(Boolean).join(' · ');
+              li.querySelector('.event-time').textContent=[event.start,event.active?'进行中':event.closureKind==='deadline'?'期限届满·结果未确认':event.ended?'已结束':''].filter(Boolean).join(' · ');
               li.querySelector('.event-text').textContent=[event.title,event.description!==event.title?event.description:''].filter(Boolean).join('｜');
-              li.querySelector('.event-location').textContent=[event.scope,event.effect,event.active&&event.estimatedEnd&&'预计结束 '+event.estimatedEnd,
+              li.querySelector('.event-location').textContent=[event.scope,event.effect,event.eventCategory&&'类别 '+event.eventCategory,event.expiresAt&&'窗口截止 '+event.expiresAt,event.active&&event.estimatedEnd&&'预计结束 '+event.estimatedEnd,
                 event.active&&event.endsAt&&'确定结束 '+event.endsAt,event.active&&event.endCondition&&'结束条件 '+event.endCondition].filter(Boolean).join('｜');
               li.querySelector('.item-delete-btn').dataset.id=event.id;
               li.querySelector('.item-delete-btn').addEventListener('click', async e => {
@@ -119364,7 +119454,7 @@ ${!avatarUrl ? avatarPlaceholder : ''}
           const mapListContainer = document.getElementById('map-list-container');
           mapListContainer.innerHTML = '<p style="text-align:center; opacity:0.7;">正在加载地图列表...</p>';
 
-          const archives = await db.archives.orderBy('name').toArray();
+          const archiveKeys = await db.archives.orderBy('name').primaryKeys();
           let mapItems = [];
 
           // 添加默认初始地图
@@ -119377,7 +119467,9 @@ ${!avatarUrl ? avatarPlaceholder : ''}
           });
 
           // 读取每个存档的地图数据
-          for (const archive of archives) {
+          for (const key of archiveKeys) {
+            const archive = await db.archives.get(key);
+            if (!archive) continue; // May have been deleted while the list was being read.
             const mapData = archive.data.state?.worldMap || DEFAULT_WORLD_MAP_DATA;
             mapItems.push({
               id: archive.name,

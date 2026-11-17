@@ -1,3 +1,4 @@
+import { WORLD_EVENT_LIFECYCLE_RULE_TEXT } from './world-events.js';
 import { numericRulesText, legacyMortalNumericRulesText, NUMERIC_IMMORTAL_REALM_ROWS, NUMERIC_ATTRIBUTE_FACTORS, NUMERIC_SCALAR_RANGES } from './numeric-realms.js';
 import { techniqueSpeedContract, buildCultivationSpeedRules, CULTIVATION_ROOT_BASES, CULTIVATION_BASE_YEARS,
   CULTIVATION_DAYS_PER_YEAR, TECHNIQUE_SPEED_BY_GRADE, CULTIVATION_ROOT_LABELS, CULTIVATION_ROOT_TRAITS } from './cultivation-speed.js';
@@ -22,6 +23,7 @@ export function numericRuleDefaults() {
       return `${tier}·${quality} | ${rate} | ${rule.minConsciousness} / ${rule.perfectConsciousness}`;
     }));
   return [
+    { id: 'world-event-lifecycle', name: '世界大事持续与延期', content: WORLD_EVENT_LIFECYCLE_RULE_TEXT },
     { id: 'attribute-baseline', name: '境界白值', content: baselineRules() },
     { id: 'attribute-factors', name: '白值换算系数', content: ['属性 | 基准倍率',
       ...Object.entries(NUMERIC_ATTRIBUTE_FACTORS).map(([key,value])=>`${key} | ${value}`),
@@ -123,6 +125,7 @@ export function configureNumericRules(rules) {
         row=[rate[0],rate[1]??rate[0],...threshold];
       }else if(parsed.some(value=>value.length!==1))throw new Error(rule.name+'「'+label+'」须逐项填写数字');
       if(['attribute-baseline','scalar-ranges'].includes(rule.id)&&row[1]<=row[0])throw new Error(label+'的上界须大于下界');
+      if(rule.id==='world-event-lifecycle'&&row.some(value=>!Number.isInteger(value)||value<=0))throw new Error(label+' duration must be positive integer days');
       if(['attribute-factors','cultivation-progress'].includes(rule.id)&&row[0]<=0)throw new Error(label+'须大于零');
       values.set(label,row);
     }

@@ -1745,7 +1745,7 @@ function frCanonTraceBegin(phase, options) {
     var inherited=!!opts.signal&&parent?.archiveName===archive&&parent._replay===session
       &&(parent.phase==='变量演化'?'ce':'canon')===system;
     if(direct||inherited){
-      Object.defineProperty(run,'_replay',{value:session,enumerable:false});
+      Object.defineProperty(run,'_replay',{value:session,enumerable:false,configurable:true});
       run.replayOf=session.context?.sourceRunId||'局部重跑';
     }
   })();
@@ -3539,7 +3539,7 @@ async function frCanonOpenStories(){
       if(Array.isArray(raw)){
         if(lifecycle)items=lifecycle.projectWorldEvents(raw,at||(typeof ceBridgeReadWorldTime==='function'?ceBridgeReadWorldTime():'')).map(row=>({
           ...row,kind:row.active||row.ended?'world':'player',place:row.scope,
-          status:row.active?'ongoing':row.ended?'completed':'',settled:row.ended,
+          status:row.active?'ongoing':row.closureKind==='deadline'?'期限届满·结果未确认':row.ended?'completed':'',settled:row.ended,
           end:row.endedAt||row.endsAt,endKnown:row.ended&&Boolean(row.endedAt||row.endsAt)
         }));
         else items=raw.map(worldPlayerEventRow).filter(Boolean);
@@ -3596,7 +3596,10 @@ async function frCanonOpenStories(){
       /* 当前进展 / 已发生 / 尚未发生：让玩家知道这件大事走到哪一步了。 */
       var desc=[];
       if(it.description&&it.description!==it.title)desc.push(it.description);
-      if(it.effect)desc.push((it.active?'当前影响：':'结案影响：')+it.effect);
+      if(it.effect)desc.push((it.active?'当前影响：':it.closureKind==='deadline'?'最近已知影响：':'结案影响：')+it.effect);
+      if(it.eventCategory)desc.push('事件类别：'+it.eventCategory);
+      if(it.expiresAt)desc.push('当前窗口截止：'+it.expiresAt);
+      if(it.lifecycleReviewNeeded)desc.push('待下一轮依据资料与因果复核分类或时间，不丢弃原历史。');
       if(it.active&&it.estimatedEnd)desc.push('预计结束：'+it.estimatedEnd);
       if(it.active&&it.endsAt)desc.push('确定结束时间：'+it.endsAt);
       if(it.active&&it.endCondition)desc.push('结束条件：'+it.endCondition);

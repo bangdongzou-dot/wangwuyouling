@@ -293,7 +293,7 @@ async function main() {
   const shim = await readOwn('st-shim.js');
   const { bundleCoreModules } = await import(pathToFileURL(path.join(BUILD_ROOT, 'lib', 'bundle-core.mjs')).href);
   const { source: chatRequestPolicy } = await bundleCoreModules(CARD_ROOT, {
-    files: ['chat-request-policy.js'],
+    files: ['chat-request-policy.js','story-image-assets.js'],
     globalName: 'FR_CHAT_REQUEST_CORE'
   });
   const builtinMod = await readOwn('builtin-preset.js');
