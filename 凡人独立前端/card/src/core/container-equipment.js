@@ -392,7 +392,7 @@ export function npcEquipmentUpgrade(item,equipment,columns,options){
   if(!slotKey)return null;
   const equipped=equipment?.[slotKey]??[];
   const candidate=isTreasureSet(item)?item:{...item,5:'1'};
-  const eligible=indices.filter(index=>equipmentEligibility(columns,slotKey,index,candidate).allowed);
+  const eligible=indices.filter(index=>!options?.protectedSlots?.has(slotKey+'['+index+']')&&equipmentEligibility(columns,slotKey,index,candidate).allowed);
   const empty=eligible.find(index=>!equipped[index]&&compareNpcEquipment(item,null,columns,options)>0);
   if(empty!==undefined)return {slotKey,index:empty};
   const best=eligible.map(index=>({index,gain:compareNpcEquipment(item,equipped[index],columns,options)}))

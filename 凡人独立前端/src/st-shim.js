@@ -407,6 +407,24 @@
       error => !error?.partialOutput);
   }
 
+  // Only structural metadata: never log response text, prompts, URL, model or credentials.
+  function recordProseResponseMeta(meta, text) {
+    try {
+      var value = String(text || '').replace(/<(thinking|think|analysis)>[\s\S]*?<\/\1>/gi, '');
+      console.info('[正文回包诊断] ' + JSON.stringify({
+        transport:meta.transport, status:meta.status, finishReason:meta.finishReason,
+        doneMarker:meta.doneMarker, eof:meta.eof, malformedFrames:meta.malformedFrames,
+        chars:String(text || '').length,
+        contentOpen:(value.match(/<content>/gi)||[]).length,
+        contentClose:(value.match(/<\/content>/gi)||[]).length,
+        elapsedMs:Date.now()-meta.started
+      }));
+    } catch (_) { /* Diagnostics must not change generation behavior. */ }
+  }
+  function proseFinishReason(value) {
+    return value == null ? null : ['stop','length','content_filter','tool_calls','function_call'].includes(value) ? value : 'other';
+  }
+
   function checkProseOutputLength(choice) {
     if (choice?.finish_reason === 'length')
       throw Object.assign(new Error('正文接口达到输出上限，正文未完成。可重新发送本轮'), {code:'FR_PROSE_OUTPUT_LENGTH'});
@@ -442,6 +460,8 @@
 
     var controller = new AbortController();
     var emitted = false;
+    var responseText = "";
+    var responseMeta = {transport:body.stream ? "sse" : "json",status:"failed",finishReason:null,doneMarker:false,eof:false,malformedFrames:0,started:Date.now()};
     var abort = function () { controller.abort(options.signal?.reason); };
     activeControllers.add(controller);
     // 允许外部 signal 联动
@@ -469,9 +489,12 @@
       if (!body.stream) {
         var json = await resp.json();
         var choice = json?.choices?.[0];
+        responseMeta.finishReason = proseFinishReason(choice?.finish_reason);
+        responseText = String(choice?.message?.content || '');
         checkProseOutputLength(choice);
-        var text = String(choice?.message?.content || '');
+        var text = responseText;
         if(!text.trim())throw new Error('正文接口返回空内容');
+        responseMeta.status = "returned";
         return text;
       }
 
@@ -492,22 +515,25 @@
           var line = lines[i].trim();
           if (!line || line.indexOf('data:') !== 0) continue;
           var payload = line.slice(5).trim();
-          if (payload === '[DONE]') continue;
+          if (payload === '[DONE]') { responseMeta.doneMarker = true; continue; }
           var chunk;
-          try { chunk = JSON.parse(payload); } catch (e) { continue; }
+          try { chunk = JSON.parse(payload); } catch (e) { responseMeta.malformedFrames++; continue; }
           var frame = chunk?.choices?.[0];
+          if(frame?.finish_reason != null) responseMeta.finishReason = proseFinishReason(frame.finish_reason);
           checkProseOutputLength(frame);
           var piece = frame?.delta?.content;
           if (typeof piece === 'string' && piece) {
             full += piece;
+            responseText = full;
             emitted = true;
             // 卡片里监听这个事件做逐字上屏
             window.eventEmit('js_stream_token_received_incrementally', { token: piece, full: full });
           }
         }
-        if (step.done) break;
+        if (step.done) { responseMeta.eof = true; break; }
       }
       if(!full.trim())throw new Error('正文流式接口返回空内容');
+      responseMeta.status = "returned";
       return full;
     } catch (error) {
       /* ★★ 2026-11-01 玩家：「这个正文错误又是什么？」（截图：API调用失败: network error）
@@ -525,6 +551,7 @@
       if(emitted) failure.partialOutput = true;
       throw failure;
     } finally {
+      if(options.proseRequest) recordProseResponseMeta(responseMeta, responseText);
       options.signal?.removeEventListener('abort',abort);
       activeControllers.delete(controller);
     }

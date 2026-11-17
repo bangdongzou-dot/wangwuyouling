@@ -794,6 +794,73 @@
       let playerDisplaySettings = {};
       let isTheaterGenerating = false; // 【【【新增这行代码】】】
       let isMainApiGenerating = false;
+      // 生成任务直到 finally 收尾后才摘除；取消不能提前释放写入中的任务。
+      const frGenerationTasks = new Set();
+      const frGenerationDrainWaiters = new Set();
+      function frWaitForGenerationStop() {
+        if (!frGenerationTasks.size) return Promise.resolve();
+        return new Promise(resolve => frGenerationDrainWaiters.add(resolve));
+      }
+      let frGenerationEpoch = 0;
+      let frGenerationBranchEpoch = 0;
+      function frGenerationGuard(signal, archiveName = currentArchiveName) {
+        const epoch = frGenerationEpoch;
+        const active = () => !signal?.aborted && epoch === frGenerationEpoch && archiveName === currentArchiveName;
+        const check = () => {
+          signal?.throwIfAborted();
+          if (!active()) throw Object.assign(new Error('旧生成任务已停止或切换存档'), {name:'AbortError'});
+        };
+        check.active = active;
+        return check;
+      }
+      function frTrackGeneration(controller, parentSignal) {
+        const forward = () => controller.abort(parentSignal.reason);
+        if (parentSignal) {
+          if (parentSignal.aborted) forward();
+          else parentSignal.addEventListener('abort', forward, {once:true});
+        }
+        frGenerationTasks.add(controller);
+        frRefreshGenerationButton();
+        return () => {
+          parentSignal?.removeEventListener('abort', forward);
+          frGenerationTasks.delete(controller);
+          if (!frGenerationTasks.size) {
+            for (const resolve of frGenerationDrainWaiters) resolve();
+            frGenerationDrainWaiters.clear();
+          }
+          frRefreshGenerationButton();
+        };
+      }
+      function frRefreshGenerationButton() {
+        if (typeof sendMessageButton === 'undefined' || !sendMessageButton) return;
+        const busy = isMainApiGenerating || frGenerationTasks.size > 0;
+        sendMessageButton.disabled = false;
+        sendMessageButton.innerHTML = busy ? '<i class="fas fa-stop-circle"></i>' : '<i class="fas fa-paper-plane"></i>';
+        sendMessageButton.title = busy ? '停止当前所有生成流程' : '发送';
+        sendMessageButton.onclick = event => {
+          event?.preventDefault(); event?.stopPropagation();
+          if (isMainApiGenerating || frGenerationTasks.size) frStopCurrentGeneration();
+          else void sendMessage();
+        };
+      }
+      function frStopCurrentGeneration() {
+        frGenerationEpoch++;
+        if (typeof _commercialAutoPortraitSweepSeq !== 'undefined') _commercialAutoPortraitSweepSeq++;
+        const reason = Object.assign(new Error('玩家已停止当前生成流程'), {name:'AbortError',code:'FR_USER_STOP'});
+        const abort = controller => { try { if (controller && !controller.signal.aborted) controller.abort(reason); } catch (_) {} };
+        for (const controller of frGenerationTasks) abort(controller);
+        if (typeof frCanonStopAll === 'function') frCanonStopAll('all');
+        if (typeof cancelConcurrentEvolution === 'function') cancelConcurrentEvolution({silent:true});
+        if (typeof theaterApiController !== 'undefined') abort(theaterApiController);
+        if (typeof imageTaggingApiController !== 'undefined') abort(imageTaggingApiController);
+        if (typeof knowledgeSearchApiController !== 'undefined') abort(knowledgeSearchApiController);
+        if (typeof _commercialAutoPortraitSweepTimer !== 'undefined' && _commercialAutoPortraitSweepTimer) {
+          clearTimeout(_commercialAutoPortraitSweepTimer); _commercialAutoPortraitSweepTimer = null;
+        }
+        if (typeof abortAllCommercialAutoPortraitTasks === 'function') abortAllCommercialAutoPortraitTasks('玩家停止生成');
+        window.parent?.TavernHelper?.stopAllGeneration?.();
+        frRefreshGenerationButton();
+      }
       const activeImageGenDanmaku = new Map();
       let aiNotificationQueue = [];
       let bondMapChart = null;
@@ -2428,7 +2495,11 @@ unequipItem("B1", "treasure", {"index": 1})
           targetLogId,
           bypassGlobalLock = false,
           skipSave = false,
+          parentSignal = null,
         ) {
+          const archiveName = currentArchiveName;
+          const checkTurn = frGenerationGuard(parentSignal, archiveName);
+          checkTurn();
           if (!bypassGlobalLock && isTheaterGenerating) return null;
           const isAutoGenEnabled = localStorage.getItem('theater_autoGenEnabled') === 'true';
           if (!bypassGlobalLock && (!isAutoGenEnabled || !currentArchiveName)) return null;
@@ -2491,6 +2562,8 @@ unequipItem("B1", "treasure", {"index": 1})
           let statusDanmaku = null;
           let localController = new AbortController();
           const signal = localController.signal;
+          const releaseGeneration = frTrackGeneration(localController, parentSignal);
+          const checkRequest = () => { signal.throwIfAborted(); checkTurn(); };
 
           try {
             if (!bypassGlobalLock) {
@@ -2522,7 +2595,8 @@ unequipItem("B1", "treasure", {"index": 1})
 
             let previousStateContext = '无上一轮交互记录';
             try {
-              const arc = await db.archives.get(currentArchiveName);
+              const arc = await db.archives.get(archiveName);
+                checkRequest();
               if (arc && arc.data.logs && arc.data.logs.length > 0) {
                 const lastLogWithState = [...arc.data.logs]
                   .reverse()
@@ -2584,7 +2658,9 @@ unequipItem("B1", "treasure", {"index": 1})
             const streamTarget = document.getElementById('daily-paper-process-content');
             if (streamTarget) streamTarget.textContent = '生成中...';
 
+            checkRequest();
             const aiResponse = await frFeatureStream('FR_THEATER_API_BINDING_V1', undefined, apiUrl, apiKey, model, messages, signal, false, streamTarget);
+            checkRequest();
             latestDailyPaperResponse = aiResponse;
 
             let cleanResponse = aiResponse
@@ -2631,7 +2707,8 @@ unequipItem("B1", "treasure", {"index": 1})
 
             if (!skipSave && targetLogId && currentArchiveName) {
               try {
-                const archive = await db.archives.get(currentArchiveName);
+                const archive = await db.archives.get(archiveName);
+                checkRequest();
                 if (archive && archive.data.logs) {
                   const previousPaperLog = [...archive.data.logs]
                     .reverse()
@@ -2649,11 +2726,14 @@ unequipItem("B1", "treasure", {"index": 1})
                     if (!archive.data.state) archive.data.state = {};
                     archive.data.state.latestDailyPaper = htmlCodeForStorage;
                     archive.data.state.activeTheaterHTML = finalHtml;
+                    checkRequest();
                     await db.archives.put(archive);
+                    checkRequest();
                     console.log('✅ [自动日报] 内容已单独同步到数据库，并清理了旧图');
                   }
                 }
               } catch (e) {
+                if(e?.name==='AbortError')throw e;
                 console.error('❌ [自动日报] 保存失败:', e);
               }
             } else if (skipSave) {
@@ -2666,6 +2746,7 @@ unequipItem("B1", "treasure", {"index": 1})
 
             if (matchedTemplate && matchedTemplate.autoPopup === true) {
               setTimeout(() => {
+                if (signal.aborted || !checkTurn.active()) return;
                 if (targetLogId) {
                   currentDailyPaperLogId = targetLogId;
                 }
@@ -2689,8 +2770,10 @@ unequipItem("B1", "treasure", {"index": 1})
             }
             return null;
           } finally {
+            releaseGeneration();
+            if (signal.aborted && statusDanmaku) statusDanmaku.aborted = true;
             if (statusDanmaku && statusDanmaku.parentNode) statusDanmaku.remove();
-            if (!bypassGlobalLock) {
+            if (!bypassGlobalLock && theaterApiController === localController) {
               isTheaterGenerating = false;
               theaterApiController = null;
             }
@@ -12294,8 +12377,12 @@ function _portraitPruneTimelineMapToLayer(timelineMap, targetLayer, logs) {
   };
 }
 
-async function applyGeneratedPortrait(charId, charName, imageDataUrl) {
-  var archive = await db.archives.get(currentArchiveName);
+async function applyGeneratedPortrait(charId, charName, imageDataUrl, options) {
+  const archiveName=options?.archiveName || currentArchiveName;
+  const checkGeneration=options?.checkTurn || frGenerationGuard(options?.signal,archiveName);
+  checkGeneration();
+  var archive = await db.archives.get(archiveName);
+  checkGeneration();
   if (!archive || !archive.data) throw new Error('无法获取当前存档');
   if (!archive.data.state) archive.data.state = {};
 
@@ -12336,7 +12423,9 @@ async function applyGeneratedPortrait(charId, charName, imageDataUrl) {
     archive.data.state.npcAvatars[uniqueKeys[j]] = imageDataUrl;
   }
 
+  checkGeneration();
   await db.archives.put(archive);
+  checkGeneration();
   _commercialAutoPortraitDebugLog('applyGeneratedPortrait:archive_put_done', {
     charId: String(charId || ''),
     keys: uniqueKeys,
@@ -12900,6 +12989,7 @@ function _commercialAutoPortraitCloseStatus(task) {
 
 
 function _commercialAutoPortraitSchedulePersistenceCheck(charId, fallbackName) {
+  const checkGeneration = frGenerationGuard();
   var targetId = String(charId || '').trim();
   if (!targetId) return;
   _commercialAutoPortraitDebugLog('persistenceCheck:scheduled', {
@@ -12908,6 +12998,7 @@ function _commercialAutoPortraitSchedulePersistenceCheck(charId, fallbackName) {
   });
   setTimeout(async function() {
     try {
+      if (!checkGeneration.active()) return;
       if (!_commercialAutoPortraitConfigCache || !_commercialAutoPortraitConfigCache.enabled) return;
       if (_commercialAutoPortraitTasks[targetId]) return;
 
@@ -12915,6 +13006,7 @@ function _commercialAutoPortraitSchedulePersistenceCheck(charId, fallbackName) {
       if (db && db.archives && typeof db.archives.get === 'function' && currentArchiveName) {
         archive = await db.archives.get(currentArchiveName);
       }
+      if (!checkGeneration.active()) return;
       var layer = _portraitGetCurrentLayerFromArchive(archive);
       var char = _sceneAvatarFindCharById(targetId) || { id: targetId, name: fallbackName || targetId };
       var avatar = await _portraitResolveExistingAvatarForAutoGen(char, archive, layer);
@@ -12928,6 +13020,7 @@ function _commercialAutoPortraitSchedulePersistenceCheck(charId, fallbackName) {
         return;
       }
 
+      if (!checkGeneration.active()) return;
       delete _commercialAutoPortraitLastAttemptLayerByChar[targetId];
       delete _commercialAutoPortraitLastAttemptTsByChar[targetId];
       _commercialAutoPortraitDebugLog('persistenceCheck:retry_triggered', {
@@ -13022,6 +13115,9 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
 
   var charName = String(char.name || char.id || '未知角色').trim();
   var controller = new AbortController();
+  const archiveName=currentArchiveName;
+  const checkGeneration=frGenerationGuard(controller.signal,archiveName);
+  const releaseGeneration=frTrackGeneration(controller);
   var stagePrompt = '商用自动生图 [' + charName + '] 提示词生成中...';
   var statusItem = showDanmaku(stagePrompt, 'status', controller, true);
   var task = {
@@ -13116,7 +13212,9 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
       return;
     }
 
-    await applyGeneratedPortrait(task.charId, latestChar.name || charName, imageDataUrl);
+    checkGeneration();
+    await applyGeneratedPortrait(task.charId, latestChar.name || charName, imageDataUrl,{signal:controller.signal,archiveName,checkTurn:checkGeneration});
+    checkGeneration();
     _commercialAutoPortraitDebugLog('task:saved', {
       charId: task.charId,
       charName: String((latestChar && latestChar.name) || charName || ''),
@@ -13137,6 +13235,7 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
       message: e && e.message ? e.message : String(e || '')
     });
   } finally {
+    releaseGeneration();
     _commercialAutoPortraitCloseStatus(task);
     delete _commercialAutoPortraitTasks[taskKey];
     _commercialAutoPortraitDebugLog('task:done', {
@@ -13147,9 +13246,11 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
 }
 
 async function _commercialAutoPortraitRunSweep() {
+  const checkGeneration=frGenerationGuard();
   if (!_commercialAutoPortraitConfigCache) {
     _commercialAutoPortraitConfigCache = await loadCommercialAutoPortraitConfig();
   }
+  if (!checkGeneration.active()) return;
   if (!_commercialAutoPortraitConfigCache.enabled) return;
   if (!Array.isArray(surroundingCharacters) || surroundingCharacters.length === 0) return;
 
@@ -13162,7 +13263,7 @@ async function _commercialAutoPortraitRunSweep() {
       archive = null;
     }
   }
-  if (seq !== _commercialAutoPortraitSweepSeq) return;
+  if (seq !== _commercialAutoPortraitSweepSeq || !checkGeneration.active()) return;
 
   var currentLayer = _portraitGetCurrentLayerFromArchive(archive);
   var candidates = surroundingCharacters.filter(function(char) {
@@ -13180,7 +13281,7 @@ async function _commercialAutoPortraitRunSweep() {
     return _portraitResolveExistingAvatarForAutoGen(char, archive, currentLayer)
       .catch(function() { return { src: '', source: 'none' }; });
   }));
-  if (seq !== _commercialAutoPortraitSweepSeq) return;
+  if (seq !== _commercialAutoPortraitSweepSeq || !checkGeneration.active()) return;
 
   for (var i = 0; i < candidates.length; i++) {
     var char = candidates[i];
@@ -16379,6 +16480,7 @@ async function callImageTaggingApi(
           streamTargetElement = null,
           targetLogId = null,
           forceCall = false,
+          parentSignal = null,
         ) {
           if (!storyText || typeof storyText !== 'string' || storyText.trim() === '') {
             return { success: false, text: storyText, skipped: true, reason: 'Input text was empty' };
@@ -16400,9 +16502,12 @@ async function callImageTaggingApi(
 
           const worldBooks = activePreset.worldBooks || [];
 
+          parentSignal?.throwIfAborted();
           let statusDanmaku = null;
           imageTaggingApiController = new AbortController();
-          const signal = imageTaggingApiController.signal;
+          const localController=imageTaggingApiController;
+          const releaseGeneration=frTrackGeneration(localController,parentSignal);
+          const signal = localController.signal;
 
           try {
             statusDanmaku = showDanmaku('正在优化正文...', 'status', imageTaggingApiController, true);
@@ -16553,10 +16658,12 @@ const textToSearch = storyText + (userInput || '');
               return { success: false, text: storyText, error: error.message };
             }
           } finally {
+            releaseGeneration();
+            if(signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
             if (statusDanmaku) {
               statusDanmaku.remove();
             }
-            imageTaggingApiController = null;
+            if(imageTaggingApiController===localController)imageTaggingApiController = null;
           }
         }
 
@@ -17296,7 +17403,10 @@ function frFindBondedSourceRow(state, archive, id) {
   return null;
 }
 
-async function applyChanges(baseState, delta) {
+async function applyChanges(baseState, delta, executionOptions) {
+  const fixedArchive = executionOptions?.archiveName || currentArchiveName;
+  const checkExecution = executionOptions?.checkTurn || (() => { executionOptions?.signal?.throwIfAborted(); if (executionOptions && fixedArchive !== currentArchiveName) throw Object.assign(new Error('AbortedByUser'),{name:'AbortError'}); });
+  checkExecution();
   const frStrict = typeof frInCanonCommit === 'function' && frInCanonCommit();
   if (frStrict) frAssertCanonCommit();
 console.log('【步骤2: 进入 applyChanges】开始应用变量变更...');
@@ -17313,7 +17423,8 @@ newState = JSON.parse(JSON.stringify(baseState));
 }
 const characterNameChanges = {};
 const updatedCharacterIds = new Set();
-const archive = await db.archives.get(currentArchiveName);
+const archive = await db.archives.get(fixedArchive);
+checkExecution();
 if (frStrict) { frAssertCanonCommit(); if (!archive) throw new Error('补演提交：当前存档不存在'); }
 let npcAvatarsNeedsUpdate = false;
 if (archive && !archive.data.state.npcAvatars) {
@@ -17332,6 +17443,7 @@ const bioMap = new Map((bioSnapshot || []).map(bio => [bio.key, bio]));
 let bioHasChanged = false;
 
 for (const rawOp of delta) {
+checkExecution();
 if (frStrict) frAssertCanonCommit();
 const op = typeof frCleanVariableCommand === 'function' ? frCleanVariableCommand(rawOp) : rawOp;
 console.log('--- 【步骤2.1】正在应用指令:', JSON.stringify(op), '---');
@@ -17363,7 +17475,9 @@ const charName = (charRow['1'] || '|').split('|')[0];
 // data['19'] 保留原始 <img> 格式，不覆写为 URL
 if (idToProcess === 'B1') {
 if (frStrict) throw new Error('补演提交：禁止修改玩家头像设置');
-await dbSet(`${CUSTOM_AVATAR_KEY}_${currentArchiveName}`, imageUrl);
+checkExecution();
+await dbSet(`${CUSTOM_AVATAR_KEY}_${fixedArchive}`, imageUrl);
+checkExecution();
 } else if (charName && archive && archive.data.state.npcAvatars) {
 const uniqueImageKey = `${idToProcess}_${charName}`;
 archive.data.state.npcAvatars[uniqueImageKey] = imageUrl;
@@ -17645,7 +17759,7 @@ break;
 }
 }
 } catch (e) {
-if (frStrict) throw e;
+if (frStrict || e?.name === 'AbortError') throw e;
 console.error('应用更改时出错:', op, e);
 }
 }
@@ -17653,13 +17767,17 @@ console.error('应用更改时出错:', op, e);
 if (bioHasChanged && lastLogWithBioIndex !== -1) {
 archive.data.logs[lastLogWithBioIndex].biographySnapshot = Array.from(bioMap.values());
 if (frStrict) frAssertCanonCommit();
+checkExecution();
 await db.archives.put(archive);
+checkExecution();
 if (frStrict) frAssertCanonCommit();
 }
 
 if (npcAvatarsNeedsUpdate) {
 if (frStrict) frAssertCanonCommit();
+checkExecution();
 await db.archives.put(archive);
+checkExecution();
 if (frStrict) frAssertCanonCommit();
 }
 const statusTime = frStatusWorldTime(newState);
@@ -28284,13 +28402,15 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
   // 出图可与变量、补演并行。楼层写入收尾后才改正文 HTML，以免被快照覆盖或误判为改稿。
   if (context.waitForFloorWrites) await context.waitForFloorWrites();
   signal?.throwIfAborted();
-  const inserted = await ceSaveGeneratedStoryImages(archiveName, floor.id, ready, floor.content);
+  const inserted = await ceSaveGeneratedStoryImages(archiveName, floor.id, ready, floor.content, signal);
   return { inserted, results };
 }
 
-async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedContent) {
+async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedContent, signal) {
+  signal?.throwIfAborted();
   let updatedLog, insertedCount = 0;
   await db.archives.where('name').equals(archiveName).modify(archive => {
+    signal?.throwIfAborted();
     const log = archive?.data?.logs?.find(entry => entry.id === logId);
     if (!log || (expectedContent !== undefined && log.content !== expectedContent)) return false;
     const baseHtml = ceStripGeneratedImageBlocksFromHtml(ceStripImagePromptBlocksFromHtml(String(log.content || '')));
@@ -28334,9 +28454,10 @@ async function ceGenerateAndInsertImagesToLatestLog(imagePrompts, config, signal
   }
 }
 
-async function ceRunStoryImageJob({archiveName, logId, config, automatic = false, waitForFloorWrites}) {
+async function ceRunStoryImageJob({archiveName, logId, config, automatic = false, waitForFloorWrites, signal: parentSignal}) {
   const controller = new AbortController();
   const {signal} = controller;
+  const releaseGeneration = frTrackGeneration(controller, parentSignal);
   let bubble, stage = '分镜';
   const clearBubble = () => {
     if (bubble) { bubble.aborted = true; bubble.remove(); bubble = null; }
@@ -28356,6 +28477,7 @@ async function ceRunStoryImageJob({archiveName, logId, config, automatic = false
     const fallback = ceExtractOriginalTimelineTimeLocationInfoFromStateLike(currentState);
     const currentTime = [...markup.content.querySelectorAll('ui_sys ti,.fr-story-status-time,ti')].at(-1)?.textContent?.trim() || fallback.timeText;
     const currentLocation = [...markup.content.querySelectorAll('ui_sys li,.fr-story-status-place')].at(-1)?.textContent?.trim() || fallback.locationText;
+    signal.throwIfAborted();
     showProgress('正在规划分镜');
     const plan = await requestImageEvolutionPhase({storyText,archiveName,manual:!automatic,currentTime,currentLocation,signal,
       config,archive,entryDecisionEntries:automatic ? [] : undefined});
@@ -28379,7 +28501,7 @@ async function ceRunStoryImageJob({archiveName, logId, config, automatic = false
   } catch (error) {
     clearBubble();
     if (!signal.aborted) showDanmaku('正文插图 · ' + stage + '失败 · ' + frErrorText(error),'error');
-  } finally { clearBubble(); }
+  } finally { clearBubble(); releaseGeneration(); }
 }
 
 
@@ -47836,6 +47958,10 @@ function patchConcurrentEvolutionSnapshotDebug() {
   }
   const originalApplyVariableAndUiUpdates = applyVariableAndUiUpdates;
   applyVariableAndUiUpdates = async function(...args) {
+    const executionOptions = args[9];
+    const archiveName = executionOptions?.archiveName || currentArchiveName;
+    const checkTurn = frGenerationGuard(executionOptions?.signal,archiveName);
+    checkTurn();
     let [delta, smallSummary, largeSummary, initialState, logEntry, ...rest] = args;
     const isAllFocus = window._ceSkipThinkingApi === true || window._ceSkipWorldEvolutionApi === true;
     let forwardedInitialState = initialState;
@@ -47929,7 +48055,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
         if ((preservedForcedSmallSummary === undefined || preservedForcedLargeSummary === undefined) && logEntry && logEntry.id) {
           try {
             if (db?.archives?.get && currentArchiveName) {
-              const archive = await db.archives.get(currentArchiveName);
+              const archive = await db.archives.get(archiveName);
+          checkTurn();
               const archiveLogs = Array.isArray(archive?.data?.logs) ? archive.data.logs : [];
               const archivedLog = archiveLogs.find(function(entry) {
                 return !!(entry && String(entry.id || '').trim() === String(logEntry.id || '').trim());
@@ -47977,6 +48104,7 @@ function patchConcurrentEvolutionSnapshotDebug() {
       this, delta, smallSummary, largeSummary, forwardedInitialState, logEntry, ...rest
     );
 
+    checkTurn();
     if (shouldRestoreForcedSummary && logEntry && logEntry.id) {
       const restoreSummaryValue = function(target, key, value) {
         if (!target || !key) return;
@@ -47990,7 +48118,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
       restoreSummaryValue(logEntry, 'largeSummary', preservedForcedLargeSummary);
       try {
         if (db?.archives?.get && db?.archives?.put && currentArchiveName) {
-          const archive = await db.archives.get(currentArchiveName);
+          const archive = await db.archives.get(archiveName);
+          checkTurn();
           const logs = Array.isArray(archive?.data?.logs) ? archive.data.logs : [];
           const logIndex = logs.findIndex(function(entry) {
             return !!(entry && String(entry.id || '').trim() === String(logEntry.id || '').trim());
@@ -47998,7 +48127,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
           if (logIndex >= 0) {
             restoreSummaryValue(logs[logIndex], 'smallSummary', preservedForcedSmallSummary);
             restoreSummaryValue(logs[logIndex], 'largeSummary', preservedForcedLargeSummary);
-            await db.archives.put(archive);
+            checkTurn();
+                await db.archives.put(archive);
           }
         }
         console.log('[并发演化][快照修复] 已恢复 all_focus 强制快照前的 summary，避免空字符串覆盖旧总结', {
@@ -48032,7 +48162,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
       if (hasSnapshot && !hasBioSnapshot &&
           window._concurrentEvolutionProcessedIds && window._concurrentEvolutionProcessedIds.size > 0) {
         try {
-          const archive = await db.archives.get(currentArchiveName);
+          const archive = await db.archives.get(archiveName);
+          checkTurn();
           if (archive && archive.data.logs) {
             const processedIds = window._concurrentEvolutionProcessedIds;
             console.log('[并发演化][快照修复] 手动补充 biographySnapshot，处理', processedIds.size, '个角色');
@@ -48041,7 +48172,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
             const logIndex = archive.data.logs.findIndex(l => l.id === logEntry.id);
             if (logIndex === -1) {
               console.warn('[并发演化][快照修复] 无法在 archive.data.logs 中找到 logEntry, id=', logEntry?.id);
-              return result;
+              checkTurn();
+    return result;
             }
             console.log('[并发演化][快照修复] 找到日志索引:', logIndex, ', logEntry.id=', logEntry.id);
 
@@ -48082,11 +48214,13 @@ function patchConcurrentEvolutionSnapshotDebug() {
               console.log('[并发演化][快照修复] biographySnapshot 已补充:', worldBookEntries.length, '条');
 
               // 保存更新后的 archive
-              await db.archives.put(archive);
+              checkTurn();
+                await db.archives.put(archive);
               console.log('[并发演化][快照修复] 已保存到数据库');
 
               // 验证保存是否成功
-              const verifyArchive = await db.archives.get(currentArchiveName);
+              const verifyArchive = await db.archives.get(archiveName);
+          checkTurn();
               const savedSnapshot = verifyArchive?.data?.logs?.[logIndex]?.biographySnapshot;
               console.log('[并发演化][快照修复] 验证保存: biographySnapshot 条数=', savedSnapshot?.length || 0);
             } else {
@@ -48136,7 +48270,8 @@ function patchConcurrentEvolutionSnapshotDebug() {
     if (isAllFocus) {
       try {
         if (db?.archives?.get && db?.archives?.put && currentArchiveName) {
-          const finalArchive = await db.archives.get(currentArchiveName);
+          const finalArchive = await db.archives.get(archiveName);
+          checkTurn();
           if (finalArchive?.data?.logs?.length > 0) {
             const preferredLogId = logEntry?.id || (typeof window !== 'undefined' ? window._ceCurrentLogId : null) || null;
             let finalLogIndex = preferredLogId
@@ -48198,6 +48333,7 @@ function patchConcurrentEvolutionSnapshotDebug() {
               }
 
               if (needsSave) {
+                checkTurn();
                 await db.archives.put(finalArchive);
                 if (typeof ceSyncWorldBookCachesFromStateEntries === 'function' && Array.isArray(finalArchive.data?.state?.worldBookEntries)) {
                   ceSyncWorldBookCachesFromStateEntries(finalArchive.data.state.worldBookEntries, 'all_focus_final_guard');
@@ -64678,7 +64814,7 @@ function executeEquipItem(op,selection){
  const eligibility=FrEquipmentRuntime.eligibility(row,slot,index,itemData);
  if(!eligibility.allowed)return {success:false,error:eligibility.reason,owner,slot,itemId,op};
  const old=arr[index];
- if(owner!=='B1'&&getManagedItemId(old)!==itemId){
+ if(owner!=='B1'&&getManagedItemId(old)!==itemId&&!(selection?.explicitEquipment===true&&slot!=='technique')){
    const effective=compare(old);
    const reasonedTechnique=slot==='technique'&&old&&typeof op.reason==='string'&&op.reason.trim();
    if(typeof effective==='number'&&effective<=0&&!(effective===0&&reasonedTechnique))
@@ -64687,7 +64823,7 @@ function executeEquipItem(op,selection){
  }
  if(slot==='technique')ceUpdateTechniqueItemCurrentEffect(itemData,ceGetCharacterRealmText(row));
  FrEquipmentRuntime.adopt(row,p,currentState);FrEquipmentRuntime.write(currentState,row,slot,index,itemData);ceSyncCharacterTechniqueEffects(owner,row);
- return {success:true,owner,slot,index,itemId,itemName:String(getManagedItemName(itemData)||itemId).replace(/<[^>]*>/g,'')};
+ return {success:true,owner,slot,index,itemId,displacedItemId:getManagedItemId(old)!==itemId?getManagedItemId(old):undefined,itemName:String(getManagedItemName(itemData)||itemId).replace(/<[^>]*>/g,'')};
 }
 
 /**
@@ -65062,7 +65198,7 @@ async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStor
           result = executeDestroyItem(op);
           break;
         case 'equipItem':
-          result = executeEquipItem(op,selection(op.owner));
+          result = executeEquipItem(op,{...selection(op.owner),explicitEquipment:true});
           break;
         case 'unequipItem':
           result = executeUnequipItem(op);
@@ -65104,10 +65240,12 @@ async function executeItemOperations(operations, {npcLoadoutIds=[],techniqueStor
     const loadout=affectedCharIds.has(cid)?FrEquipmentRuntime.consolidate(row,currentState):FrEquipmentRuntime.project(row);
     if(cid==='B1')continue;
     const bag=ceParseItemManagementNested(loadout.remarks.inventory,[]);
-    const blocked=new Set(sortedOperations.filter(op=>op.owner===cid&&op.type==='unequipItem').map(op=>op.itemId));
+    const resolvedEquipment=results.filter(result=>result.success&&!result.skipped&&result.owner===cid&&['equipItem','unequipItem'].includes(result.type));
+    const protectedSlots=new Set(resolvedEquipment.map(result=>result.slot+'['+result.index+']'));
+    const blocked=new Set(resolvedEquipment.flatMap(result=>result.type==='unequipItem'?[result.itemId]:[result.displacedItemId]).filter(Boolean));
     for(const {slotKey,index,item} of frContainerCore()?.planNpcLoadout(bag.filter(item=>
       !blocked.has(getManagedItemId(item))&&(!preserveTechnique||FrEquipmentRuntime.core().classifyItem(item).slotKey!=='technique')&&
-      (Number(item?.['5']??item?.quantity)===1||FrEquipmentRuntime.core().isTreasureSet(item))),loadout.equipment,row,selection(cid))||[]){
+      (Number(item?.['5']??item?.quantity)===1||FrEquipmentRuntime.core().isTreasureSet(item))),loadout.equipment,row,{...selection(cid),protectedSlots})||[]){
       const settled=executeEquipItem({owner:cid,slot:slotKey,index,itemId:getManagedItemId(item)},selection(cid));
       if(settled.success&&!settled.skipped){
         affectedCharIds.add(cid);
@@ -65862,7 +66000,9 @@ async function runConcurrentEvolution(options = {}) {
 
     concurrentEvolutionRunning = true;
   concurrentEvolutionAbortController = new AbortController();
-  if(signal){if(signal.aborted)concurrentEvolutionAbortController.abort();else signal.addEventListener('abort',()=>concurrentEvolutionAbortController?.abort(),{once:true});}
+  const ceRunController = concurrentEvolutionAbortController;
+  const forwardTurnAbort = () => ceRunController.abort(signal.reason);
+  if(signal){if(signal.aborted)forwardTurnAbort();else signal.addEventListener('abort',forwardTurnAbort,{once:true});}
   const runtimeAbortSignal = concurrentEvolutionAbortController.signal;
   let frCeTrace=null,frCeResult=null;
   let frCeRecorder=null;
@@ -66964,6 +67104,7 @@ async function runConcurrentEvolution(options = {}) {
       && concurrentEvolutionAbortController.signal
       && concurrentEvolutionAbortController.signal.aborted
     );
+    signal?.removeEventListener('abort', forwardTurnAbort);
     concurrentEvolutionRunning = false;
     concurrentEvolutionAbortController = null;
     if (typeof window !== 'undefined') {
@@ -76441,11 +76582,11 @@ async function scheduleBiographyCompressionAfterThinking() {
   }
 }
 
-async function scheduleBiographyCompressionAfterWorldEvolution() {
+async function scheduleBiographyCompressionAfterWorldEvolution(signal) {
   console.log('[生平压缩] scheduleBiographyCompressionAfterWorldEvolution 被调用');
   try {
     ceBiographyCompressionPending = false;
-    return await runBiographyCompression({ reason: 'world_evolution' });
+    return await runBiographyCompression({ reason: 'world_evolution', signal });
   } catch (e) {
     console.error('[生平压缩] 世界演化后触发失败:', e);
     return { skipped: true, reason: 'error', error: e.message };
@@ -80737,7 +80878,10 @@ try {
           force = false,
           storyTextForReroll = null,
           biographiesForReroll = null,
+          parentSignal = null,
         ) {
+          const checkTurn = frGenerationGuard(parentSignal);
+          checkTurn();
           console.log('开始执行世界演化检查...');
 // === 并发演化: all_focus模式下跳过自动世界演化 ===
 if (typeof isConcurrentEvolutionEnabled === 'function') {
@@ -80881,7 +81025,9 @@ if (evolutionTargets.length === 0) {
             return null;
           }
 
+          checkTurn();
           const controller = new AbortController();
+          const releaseGeneration = frTrackGeneration(controller,parentSignal);
           let statusDanmaku = showDanmaku(
             `后台世界演化中... [${evolutionTargets.length}人]`,
             'status',
@@ -81011,6 +81157,7 @@ if (evolutionTargets.length === 0) {
               allApiResponses = [fullResponse];
             }
 
+            controller.signal.throwIfAborted(); checkTurn();
             latestWorldEvolutionResponse = allApiResponses
               .map((resp, i) => `--- Batch ${i + 1} Response ---\n${resp || '此批次无响应'}`)
               .join('\n\n');
@@ -81120,19 +81267,23 @@ try {
             }
             return null;
           } finally {
+            if(controller.signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
             try {
-  if (typeof scheduleBiographyCompressionAfterWorldEvolution === 'function') {
-    await scheduleBiographyCompressionAfterWorldEvolution();
+  if (!controller.signal.aborted && checkTurn.active() && typeof scheduleBiographyCompressionAfterWorldEvolution === 'function') {
+    await scheduleBiographyCompressionAfterWorldEvolution(controller.signal);
   }
 } catch (e) {
   console.error('[生平压缩] 世界演化后触发失败:', e);
 }
+releaseGeneration();
 if (statusDanmaku) statusDanmaku.remove();
           }
         }
 
 
-        async function _internalRunPlotEvolution(storyText) {
+        async function _internalRunPlotEvolution(storyText, parentSignal = null) {
+const checkTurn = frGenerationGuard(parentSignal);
+checkTurn();
 const config = frResolveLibraryConfig(WORLD_EVOLUTION_API_CONFIG_KEY,(await dbGet(WORLD_EVOLUTION_API_CONFIG_KEY)) || {});
 if (!config.plotEvolutionEnabled) return;
 
@@ -81184,12 +81335,16 @@ const finalPrompt = promptTemplate
 .replace(/\${worldGeography}/g, worldGeography)
 .replace(/\${world_factors}/g, worldFactorsContext);
 
-const statusDanmaku = showDanmaku('正在进行剧情演化...', 'status', null, true);
+checkTurn();
+const controller = new AbortController();
+const releaseGeneration = frTrackGeneration(controller,parentSignal);
+const statusDanmaku = showDanmaku('正在进行剧情演化...', 'status', controller, true);
 
 try {
 const response = await frFeatureChat(WORLD_EVOLUTION_API_CONFIG_KEY,undefined,apiUrl, apiKey, apiModel, [
 { role: 'user', content: finalPrompt },
-]);
+],controller.signal);
+controller.signal.throwIfAborted(); checkTurn();
 if (response) {
 if (!currentState.state) currentState.state = {};
 currentState.state.latestPlotGuidance = response.trim();
@@ -81199,9 +81354,12 @@ console.log('[剧情演变] 结果已更新:', response);
 return response;
 }
 } catch (e) {
+if(e?.name==='AbortError')return;
 console.error('[剧情演变] 失败:', e);
 showDanmaku('剧情演变推演失败', 'error');
 } finally {
+releaseGeneration();
+if(controller.signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
 if (statusDanmaku) statusDanmaku.remove();
 }
 }
@@ -83224,15 +83382,36 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
           systemNotifications,
           turnOptions,
         ) {
+          const archiveName = turnOptions?.archiveName || currentArchiveName;
+          const checkTurn = frGenerationGuard(turnOptions?.signal, archiveName);
+          checkTurn();
           const combinedDelta = [...(delta || [])];
 
           // 性能优化：使用 requestAnimationFrame 批量处理 DOM 更新
           const pendingDomUpdates = [];
 
           if (combinedDelta.length > 0 || smallSummary !== null || largeSummary !== null) {
-            const result = await applyChanges(JSON.parse(JSON.stringify(initialState)), combinedDelta);
+            const result = await applyChanges(JSON.parse(JSON.stringify(initialState)), combinedDelta, {signal:turnOptions?.signal,archiveName,checkTurn});
+            checkTurn();
             const { newState, characterNameChanges, updatedCharacterIds: localUpdatedIds } = result;
+            // 先落盘已接受的普通变量检查点，再发布内存。停止只能阻止下一阶段，
+            // 不能留下“内存已变、楼层快照未存”的半提交；不重建已回退楼层。
+            if (turnOptions?.signal) {
+              await db.transaction('rw',db.archives,async()=>{
+                const checkpoint=await db.archives.get(archiveName);
+                checkTurn();
+                const floor=checkpoint?.data?.logs?.find(row=>row.id===logEntry.id);
+                if(!floor)throw Object.assign(new Error('本轮正文已回退'),{name:'AbortError'});
+                floor.stateSnapshot=JSON.stringify(newState);
+                checkpoint.data.state ||= {};
+                checkpoint.data.state.currentState=newState;
+                await db.archives.put(checkpoint);
+              });
+              // 事务一旦提交，即是已完成结果；取消不撤销它。
+              if(currentArchiveName!==archiveName)throw Object.assign(new Error('存档已切换'),{name:'AbortError'});
+            }
             currentState = newState;
+            checkTurn();
 
             if (localUpdatedIds && localUpdatedIds.size > 0) {
               let hasNpcUpdate = false;
@@ -83272,6 +83451,7 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
 
             // 优化：延迟显示 Diff 弹窗，避免阻塞
             setTimeout(() => {
+                if (!checkTurn.active()) return;
                 displayVariableDiff(initialState, currentState);
                 const diffPopup = document.getElementById('variable-diff-popup');
                 if (diffPopup && diffPopup.innerHTML.includes('<li>')) {
@@ -83292,7 +83472,9 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
             });
             
             await updateAvatar(currentPlayerData);
+            checkTurn();
             await updateMiniMap();
+            checkTurn();
             checkPlayerDeath();
 
             if (surroundingCharactersOverlay.classList.contains('visible')) {
@@ -83334,11 +83516,14 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
   console.warn('[并发演化][worldbook] 调用点接管失败:', e);
 }
 await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
+checkTurn();
 
             await db.transaction('rw',db.archives,async()=>{
-            const archive = await db.archives.get(currentArchiveName);
+            const archive = await db.archives.get(archiveName);
+            checkTurn();
             if (archive) {
               const logIndex = archive.data.logs.findIndex(l => l.id === logEntry.id);
+              if (turnOptions?.signal && logIndex < 0) throw Object.assign(new Error('本轮正文已回退'),{name:'AbortError'});
               if (logIndex !== -1) {
                 const {canonPending,...ordinaryLogEntry}=logEntry;
                 Object.assign(archive.data.logs[logIndex],ordinaryLogEntry);
@@ -83350,13 +83535,14 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
               if (archive.data.logs.length < originalLogCount)
                 console.log('成功生成新回复，已清理过时的深度记忆备份。');
 
+              checkTurn();
               await db.archives.put(archive);
               console.log('变量和初步日志已保存到数据库。');
 // === 并发演化: 此hook已废弃（仅支持混合模式，由before_thinking触发） ===
             }
             });
             if (useIndependentSummary && logEntry.type === 'ai') {
-              autoApiUpdateSummaryForLog(logEntry).catch(e => {
+              autoApiUpdateSummaryForLog(logEntry, turnOptions?.signal).catch(e => {
                 console.error('[分段记忆] 自动API更新失败:', e);
               });
             }
@@ -83365,6 +83551,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
           // 执行所有累积的 DOM 更新
           if (pendingDomUpdates.length > 0) {
               requestAnimationFrame(() => {
+                  if (!checkTurn.active()) return;
                   pendingDomUpdates.forEach(fn => fn());
               });
           }
@@ -83372,13 +83559,15 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
           const backgroundTasks = [];
           const worldEvolutionConfig = (await dbGet('CULTIVATION_WORLD_EVOLUTION_API_CONFIG_V1')) || {};
 
+          checkTurn();
           if(!turnOptions?.deferTheater)backgroundTasks.push({
             name: '日报/剧场',
-            promise: callAutomatedAITheater(storyContentForVisuals, newsReferenceContent, logEntry.id),
+            promise: callAutomatedAITheater(storyContentForVisuals, newsReferenceContent, logEntry.id, false, false, turnOptions?.signal),
           });
 
           if (worldEvolutionConfig.enabled && lastAiStoryText) {
-            const archive = await db.archives.get(currentArchiveName);
+            const archive = await db.archives.get(archiveName);
+            checkTurn();
             const aiLogs = archive?.data?.logs?.filter(l => l.type === 'ai' && !l.isUndoSnapshot) || [];
             const currentRound = aiLogs.length;
             const frequency = worldEvolutionConfig.frequency || 1;
@@ -83393,7 +83582,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
                   }).join('\n\n=== 接上文 ===\n\n');
                   if (combinedText) contextStoryText = combinedText;
               }
-              backgroundTasks.push({ name: '世界演化', promise: _internalRunWorldEvolution(false, contextStoryText) });
+              backgroundTasks.push({ name: '世界演化', promise: _internalRunWorldEvolution(false, contextStoryText, null, turnOptions?.signal) });
               console.log(`[世界演化] 第 ${currentRound} 轮，触发演化`);
             }
 
@@ -83413,7 +83602,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
                     
                     backgroundTasks.push({ 
                         name: '剧情演变', 
-                        promise: _internalRunPlotEvolution(plotContextText) 
+                        promise: _internalRunPlotEvolution(plotContextText, turnOptions?.signal) 
                     });
                     console.log(`[剧情演变] 第 ${currentRound} 轮，触发推演 (频率: 每${plotFreq}轮)`);
                 }
@@ -83426,6 +83615,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
           }
 
           const results = await Promise.allSettled(backgroundTasks.map(t => t.promise));
+          checkTurn();
 
           let worldEvoUpdates = null;
           let hasBackgroundData = false;
@@ -83458,7 +83648,8 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
 
           try {
             await db.transaction('rw',db.archives,async()=>{
-            const archive = await db.archives.get(currentArchiveName);
+            const archive = await db.archives.get(archiveName);
+            checkTurn();
             if (archive) {
               const mostRecentBiographies = logEntry.biographySnapshot || [];
 
@@ -83474,6 +83665,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
               archive.data.state.worldBookEntries = finalBiographies;
 
               const logIndex = archive.data.logs.findIndex(l => l.id === logEntry.id);
+              if (turnOptions?.signal && logIndex < 0) throw Object.assign(new Error('本轮正文已回退'),{name:'AbortError'});
               if (logIndex !== -1) {
                 const {canonPending,...ordinaryLogEntry}=logEntry;
                 Object.assign(archive.data.logs[logIndex],ordinaryLogEntry);
@@ -83483,6 +83675,7 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
 
               archive.data.state.currentState = currentState;
 
+              checkTurn();
               await db.archives.put(archive);
 
               console.log('后台任务数据已合并并保存到数据库。');
@@ -83503,8 +83696,8 @@ await autoGenerateCharacterWorldBooks(localUpdatedIds, logEntry, currentState);
             });
             
             // === 新增：触发自动记忆审计 ===
-            if (summaryConfig.autoVerificationEnabled) {
-                checkAndRunMemoryVerification(logEntry).catch(e => {
+            if (checkTurn.active() && summaryConfig.autoVerificationEnabled) {
+                checkAndRunMemoryVerification(logEntry, turnOptions?.signal).catch(e => {
                     console.error("自动记忆审计触发失败:", e);
                 });
             }
@@ -88618,7 +88811,9 @@ listEl.appendChild(fragment);
         }
 
         // 自动向量保存函数
-        async function autoSaveToVectorDb(storyText) {
+        async function autoSaveToVectorDb(storyText, parentSignal = null) {
+          const checkTurn=frGenerationGuard(parentSignal);
+          checkTurn();
           console.group('⚡ [自动归档调试] Start');
 
           if (!storyText || storyText.length < 10) {
@@ -88638,7 +88833,10 @@ listEl.appendChild(fragment);
             return;
           }
 
+          checkTurn();
           const saveController = new AbortController();
+          const releaseGeneration=frTrackGeneration(saveController,parentSignal);
+          const checkRequest=()=>{saveController.signal.throwIfAborted();checkTurn();};
           let statusDanmaku = showDanmaku('正在后台自动归档...', 'status', saveController, true);
           const shouldMerge = bgConfig.vectorAutoMerge !== false;
 
@@ -88731,6 +88929,7 @@ listEl.appendChild(fragment);
 
             if (statusDanmaku) statusDanmaku.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在分析剧情...';
 
+            checkRequest();
             let summaryRes = await frFeatureChat('CULTIVATION_KNOWLEDGE_SEARCH_API_CONFIG_V2', 'vectorSaveApiPresetId', 
               apiUrl,
               apiKey,
@@ -88744,6 +88943,7 @@ listEl.appendChild(fragment);
               saveController.signal,
             );
 
+            checkRequest();
             if (!summaryRes || !summaryRes.trim()) throw new Error('API返回为空');
 
             let entriesToSave = [];
@@ -88785,6 +88985,7 @@ listEl.appendChild(fragment);
 
             const CHUNK_SIZE = bgConfig.vectorChunkSize || 500;
             let allDbEntries = [];
+            const allItemsToRetire = [];
             let newFoldersDetected = false;
             let currentTimestamp = Date.now();
 
@@ -88794,6 +88995,7 @@ listEl.appendChild(fragment);
             if (statusDanmaku) statusDanmaku.innerHTML = '<i class="fas fa-atom fa-spin"></i> 正在生成向量...';
 
             for (const entry of entriesToSave) {
+              checkRequest();
               const title = entry.title || '未知片段';
               const content = entry.content || '';
               let folderName =
@@ -88831,6 +89033,7 @@ listEl.appendChild(fragment);
 
               let finalContent = content;
               let mergedLog = '';
+              let itemsToRetire = [];
 
               if (shouldMerge) {
                 try {
@@ -88847,14 +89050,16 @@ listEl.appendChild(fragment);
                     const oldContents = sortedItems.map(i => i.content).join('\n\n');
                     finalContent = `${oldContents}\n\n[updated: ${currentTime}]\n${content}`;
 
-                    const itemsToRetire = existingItems.map(item => ({
+                    itemsToRetire = existingItems.map(item => ({
                       ...item,
                       outdatedTimestamp: currentTimestamp,
                     }));
-                    await db.vectors.bulkPut(itemsToRetire);
+                    checkRequest();
+                    // 新向量成功后与旧记录退休一起原子提交。
                     mergedLog = `(已标记 ${existingItems.length} 条合并过期)`;
                   }
                 } catch (err) {
+                  if(err?.name==='AbortError')throw err;
                   console.error('[自动归档] 合并检查出错:', err);
                 }
               }
@@ -88878,7 +89083,8 @@ listEl.appendChild(fragment);
               });
 
               try {
-                const embeddings = await fetchEmbedding(textsToEmbed, embedConfig);
+                const embeddings = await fetchEmbedding(textsToEmbed, embedConfig, saveController.signal);
+                checkRequest();
 
                 if (embeddings && embeddings.length === contentChunks.length) {
                   const chunkEntries = contentChunks.map((chunk, idx) => ({
@@ -88894,9 +89100,11 @@ listEl.appendChild(fragment);
                   }));
 
                   allDbEntries.push(...chunkEntries);
+                  allItemsToRetire.push(...itemsToRetire);
                   console.log(`[自动归档] 处理条目: "${title}" ${mergedLog}`);
                 }
               } catch (embedError) {
+                if(embedError?.name==='AbortError')throw embedError;
                 console.error(`[自动归档] Embedding 失败 (${title}):`, embedError);
                 showDanmaku(`向量化失败 (条目: ${title}): ${embedError.message}`, 'error');
                 failedEntries.push({
@@ -88912,7 +89120,14 @@ listEl.appendChild(fragment);
             }
 
             if (allDbEntries.length > 0) {
-              await db.vectors.bulkAdd(allDbEntries);
+              checkRequest();
+              await db.transaction('rw',db.vectors,async()=>{
+                checkRequest();
+                if(allItemsToRetire.length)await db.vectors.bulkPut(allItemsToRetire);
+                checkRequest();
+                await db.vectors.bulkAdd(allDbEntries);
+              });
+              checkRequest();
               window.lastWorldEvoVectorIds = allDbEntries.map(e => e.uuid);
 
               if (newFoldersDetected) {
@@ -88922,9 +89137,10 @@ listEl.appendChild(fragment);
               console.log(`[自动归档] 成功写入 ${allDbEntries.length} 条数据。`);
               if (statusDanmaku) statusDanmaku.remove();
 
-              setTimeout(() => cleanupOutdatedVectors(), 5000);
+              setTimeout(() => { if(checkTurn.active()&&!saveController.signal.aborted)cleanupOutdatedVectors(); }, 5000);
 
               setTimeout(() => {
+                if(!checkTurn.active()||saveController.signal.aborted)return;
                 affectedFolders.forEach(folder => {
                   if (typeof triggerVectorFolderCondensation === 'function') {
                     triggerVectorFolderCondensation(folder);
@@ -88935,15 +89151,19 @@ listEl.appendChild(fragment);
               if (statusDanmaku) statusDanmaku.remove();
             }
 
+            checkRequest();
             window._vectorArchiveFailedEntries = failedEntries;
             window._vectorArchiveEmbedConfig = embedConfig;
             window._vectorArchiveCurrentTimestamp = currentTimestamp;
             updateRetryFailedVectorBtn();
           } catch (e) {
+            if(e?.name==='AbortError'){if(statusDanmaku)statusDanmaku.remove();return;}
             console.error('[自动归档] 异常:', e);
             showDanmaku(`剧情归档失败: ${e.message}`, 'error');
             if (statusDanmaku) statusDanmaku.remove();
           } finally {
+            releaseGeneration();
+            if(saveController.signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
             console.groupEnd();
           }
         }
@@ -93440,29 +93660,12 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
         }
 
         async function sendMessage(branchText = null, options = {}) {
+          if (isMainApiGenerating || frGenerationTasks.size) { frStopCurrentGeneration(); return; }
           if(typeof frReplayBusy!=='undefined'&&frReplayBusy){showDanmaku('局部重跑尚未结束，请等待完成或停止恢复。','warning');return;}
           // 玩家 2026-10-30：不要因为「有中断备份」就挡住继续游戏。
           // 玩家可能就想直接重 roll 这一轮，或干脆继续往下走；
           // 备份只是保险，不是锁。真要恢复，右侧局部重跑入口里随时可以点。
           if(currentArchiveName&&await dbGet('FR_REPLAY_RECOVERY_V1:'+currentArchiveName)){console.warn('[局部重跑] 检测到上次中断的备份，不阻断本轮发送；可在局部重跑入口选择恢复。');}
-          // 玩家 2026-11-01：「就算未完成也只能是提醒，玩家想怎么推进你都不允许拦截或者阻止」。
-          // 之前这里是硬拦截（未完成就 return，不给发），玩家账本都已经记好了还被卡住，
-          // 而且 canonPending 清不掉时会永久卡死。现在只提醒，不挡路。
-          //
-          // 玩家 2026-11-01（第二次纠正文案）：
-          //   「这个提示也不对，应该是提示玩家如果这回合没跑完，后面没办法补了才对啊」
-          // 原文案说「可随时从局部重跑入口补完」是**假承诺**：
-          //   frCanonContinueTurn 取的是 frReplayLatestLog(archive) —— **最新一层**。
-          //   玩家一旦推进到新回合，最新层就变成新那层，
-          //   上一层残留的 canonPending 再也取不到，
-          //   点「继续本轮」只会报「本轮没有待继续事项」，那一层的补演永远补不回来。
-          // 所以文案必须说实话：过了这村没这店，要走就现在决定。
-          if(currentArchiveName && typeof frCanonRequireCompletedTurn==='function' && !await frCanonRequireCompletedTurn()){
-            try{
-              if(typeof showDanmaku==='function')showDanmaku('原著补演上一轮还没跑完。继续推进后，那一轮就补不回来了；想补请先点「继续本轮」把它跑完。','warning');
-              if(typeof ceBridgePushCanonDiag==='function')ceBridgePushCanonDiag('warn','原著补演未收尾','上一轮补演未完成。继续推进后最新楼层会前移，那一层将无法再补run；如需保留请先继续本轮跑完。');
-            }catch(_){}
-          }
           // 指导只在本次发送内复用；回退、同输入重发、切换开关必须重读事实。
           var ceCanonGuidanceKey = null;
           var ceCanonGuidanceBlock = '';
@@ -93479,7 +93682,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
            * 才是直接写入快照，比如说账本。」
            *
            * 位置放在真正发请求之前、所有前置判断之后：
-           * 上面那句「上一轮没跑完」的提醒要用到上一轮的 canonPending，
+           * 真正推进前的「上一轮没跑完」提醒要用到上一轮的 canonPending，
            * 提前清掉会让提醒失效。 */
           // 【性能优化】立即让 UI 响应
           await new Promise(resolve => requestAnimationFrame(resolve));
@@ -93496,17 +93699,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
             // 不要修改输入框内容，保持友好提示
           }
           // ------------------
-          if (isMainApiGenerating) {
-            if (
-              window.parent &&
-              window.parent.TavernHelper &&
-              typeof window.parent.TavernHelper.stopAllGeneration === 'function'
-            ) {
-              window.parent.TavernHelper.stopAllGeneration();
-              console.log('已发送中断请求。');
-            }
-            return;
-          }
+          if (isMainApiGenerating || frGenerationTasks.size) { frStopCurrentGeneration(); return; }
           const isSummaryRequest = options.isSummary || false;
           const isHiddenSystem = options.isHiddenSystem || false;
           let messageText = branchText || messageInput.value.trim();
@@ -93532,37 +93725,45 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           if (!messageText && actionQueue.length === 0 && !isSummaryRequest) {
             return;
           }
+          // 停止生成、空输入、总结和隐藏系统请求不推进普通回合，不提示将丢失上一轮补演。
+          // 玩家 2026-11-01：「就算未完成也只能是提醒，玩家想怎么推进你都不允许拦截或者阻止」。
+          // 之前这里是硬拦截（未完成就 return，不给发），玩家账本都已经记好了还被卡住，
+          // 而且 canonPending 清不掉时会永久卡死。现在只提醒，不挡路。
+          //
+          // 玩家 2026-11-01（第二次纠正文案）：
+          //   「这个提示也不对，应该是提示玩家如果这回合没跑完，后面没办法补了才对啊」
+          // 原文案说「可随时从局部重跑入口补完」是**假承诺**：
+          //   frCanonContinueTurn 取的是 frReplayLatestLog(archive) —— **最新一层**。
+          //   玩家一旦推进到新回合，最新层就变成新那层，
+          //   上一层残留的 canonPending 再也取不到，
+          //   点「继续本轮」只会报「本轮没有待继续事项」，那一层的补演永远补不回来。
+          // 所以文案必须说实话：过了这村没这店，要走就现在决定。
+          if(!isSummaryRequest && !isHiddenSystem && currentArchiveName && typeof frCanonRequireCompletedTurn==='function' && !await frCanonRequireCompletedTurn()){
+            try{
+              if(typeof showDanmaku==='function')showDanmaku('原著补演上一轮还没跑完。继续推进后，那一轮就补不回来了；想补请先点「继续本轮」把它跑完。','warning');
+              if(typeof ceBridgePushCanonDiag==='function')ceBridgePushCanonDiag('warn','原著补演未收尾','上一轮补演未完成。继续推进后最新楼层会前移，那一层将无法再补run；如需保留请先继续本轮跑完。');
+            }catch(_){}
+          }
           // A rejected/empty send is not a new turn. Clear only after both guards pass.
           if (typeof frCanonDropTurnDerivedState === 'function') {
             try { frCanonDropTurnDerivedState('推进下一轮',{keepWorldview:isSummaryRequest||isHiddenSystem}); } catch (_) {}
           }
           const frTurnController = new AbortController();
+          const frReleaseTurn = frTrackGeneration(frTurnController);
+          const frTurnArchiveName = currentArchiveName, frTurnBranchEpoch = frGenerationBranchEpoch;
           const frMainStoryLogId = isSummaryRequest ? '' : crypto.randomUUID();
           const frWorldviewTurn = !isSummaryRequest&&!isHiddenSystem ? window.FRWorldview?.traceBegin(
             currentArchiveName,frMainStoryLogId,frCurrentBranchLogId(),options.preparedMain?.bundle?.worldviewTrace) : null;
           const frEndDiagnosticRound=globalThis.FrDiagnosticLog?.beginRound(frMainStoryLogId);
           let frEarlyPreparation = null;
           let frFinishOrdinaryWrite = null;
+          let frCanonTurnPromise = null;
           const frAbortOnPageHide = () => frTurnController.abort();
           window.addEventListener('pagehide',frAbortOnPageHide,{once:true});
           let thinkingMessage = null;
           let frMainPromptDisplayId = '';
           isMainApiGenerating = true;
-          sendMessageButton.disabled = false;
-          sendMessageButton.innerHTML = '<i class="fas fa-stop-circle"></i>';
-          sendMessageButton.title = '停止生成';
-          sendMessageButton.onclick = e => {
-            e.preventDefault();
-            e.stopPropagation();
-            frTurnController.abort();
-            if (
-              window.parent &&
-              window.parent.TavernHelper &&
-              typeof window.parent.TavernHelper.stopAllGeneration === 'function'
-            ) {
-              window.parent.TavernHelper.stopAllGeneration();
-            }
-          };
+          frRefreshGenerationButton();
           const tokenTimerDisplay = document.getElementById('token-timer-display');
           if (tokenTimerDisplay) tokenTimerDisplay.textContent = '';
           const timers = {
@@ -94456,8 +94657,9 @@ if (worldBookContext) {
                         contextTexts.push(textForAutoArchive);
                       }
                       const combinedText = contextTexts.join('\n\n==========\n\n');
+                      frTurnController.signal.throwIfAborted();
                       console.log('⚡ [自动归档] 触发并行剧情分析...');
-                      autoSaveToVectorDb(combinedText).catch(e => console.error('自动归档后台执行出错:', e));
+                      autoSaveToVectorDb(combinedText,frTurnController.signal).catch(e => console.error('自动归档后台执行出错:', e));
                     }
                   }
                 }
@@ -94502,8 +94704,9 @@ try {
       const preOptResult = await callImageTaggingApi(
         preOptCleanStory, preOptSnapshot, cleanMessageText,
         latestThinkingContent, tableThinkContent, worldBookContext, geographyContext,
-        preOptLogElement, crypto.randomUUID()
+        preOptLogElement, crypto.randomUUID(), false, frTurnController.signal
       );
+      frTurnController.signal.throwIfAborted();
       preOptLogElement.classList.remove('optimizing');
       if (preOptResult.success && preOptResult.text) {
         let raw = preOptResult.text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -94560,8 +94763,9 @@ try {
                 worldBookContext,
                 geographyContext,
                 logElement,
-                newLogId,
+                newLogId, false, frTurnController.signal,
               );
+              frTurnController.signal.throwIfAborted();
               logElement.classList.remove('optimizing');
               if (textProcessingResult.success && textProcessingResult.text) {
                 let rawOptimizedText = textProcessingResult.text;
@@ -94711,7 +94915,9 @@ const logEntry = {
   newsReference: newsReferenceContent || '无',
 };
 if(frEarlyPreparation?.requiredBoundary)logEntry.canonPending={status:'running',reason:'本轮边界已判定，等待普通与原著任务保存'};
+frTurnController.signal.throwIfAborted();
 const storyImageConfig = await loadConcurrentEvolutionConfig();
+frTurnController.signal.throwIfAborted();
 const autoStoryImage = storyImageConfig.enableImageEvolution === true;
 if (autoStoryImage) {
   if (!await saveToLog(storyArchiveName, logEntry)) throw new Error('本轮正文保存失败，未启动正文插图');
@@ -94719,7 +94925,7 @@ if (autoStoryImage) {
   const floorWrites = new Promise(resolve => {
     finishStoryImageWrites = () => { writesFinished = true; resolve(); };
   });
-  void ceRunStoryImageJob({archiveName:storyArchiveName,logId:logEntry.id,config:storyImageConfig,automatic:true,
+  void ceRunStoryImageJob({archiveName:storyArchiveName,logId:logEntry.id,config:storyImageConfig,automatic:true,signal:frTurnController.signal,
     waitForFloorWrites:onWaiting=>{if (!writesFinished) onWaiting(); return floorWrites;}});
 }
 
@@ -94938,6 +95144,7 @@ if (window._concurrentEvolutionPromise) {
   } catch (e) {
     console.error('[并发演化] 等待并发演化失败:', e);
   }
+  frTurnController.signal.throwIfAborted();
   // 并发演化结束后，同步初始状态，避免后续变量应用覆盖并发演化结果
   try {
     if (typeof initialState !== 'undefined' && initialState && typeof currentState !== 'undefined') {
@@ -95210,6 +95417,7 @@ try {
                 newLogId,
                 false,
                 frDeferTheater,
+                frTurnController.signal,
               ).catch(err => {
                 console.error('并行日报生成出错:', err);
               });
@@ -95223,7 +95431,7 @@ try {
             }
             // 两条线路并行准备。预制成品编译落地提案前，要等同层普通写入完成。
             const ordinaryWrite = new Promise(resolve => { frFinishOrdinaryWrite = resolve; });
-            const canonTurnPromise=(frCanonTimingEnabled&&typeof frRunCanonAfterHostTurn==='function')
+            const canonTurnPromise=frCanonTurnPromise=(frCanonTimingEnabled&&typeof frRunCanonAfterHostTurn==='function')
               ? (async function(){
                   try {
                     return await frRunCanonAfterHostTurn({
@@ -95246,6 +95454,7 @@ try {
                 })()
               : null;
             const variableResult = await processVariablesPromise;
+            frTurnController.signal.throwIfAborted();
             timers.variables.status=frTurnController.signal.aborted?'cancelled':variableResult.error?'error':'done';renderTimers();
 
             if (variableResult.error) {
@@ -95301,6 +95510,7 @@ try {
                 });
               }
 
+              frTurnController.signal.throwIfAborted();
               await applyVariableAndUiUpdates(
                 openingClock ? ceFrOpeningStoryDelta(variableResult.delta, finalStoryContentForDisplay, currentState) : variableResult.delta,
                 variableResult.smallSummary,
@@ -95311,7 +95521,7 @@ try {
                 lastUnoptimizedAiStoryText,
                 newsReferenceContent,
                 systemNotificationsForThinking,
-                {deferTheater:frDeferTheater},
+                {deferTheater:frDeferTheater,signal:frTurnController.signal,archiveName:storyArchiveName},
               );
             }
             if(!variableResult.error&&frEarlyPreparation?.requiredBoundary&&window._ceSkipThinkingApi!==true&&typeof frRecordOrdinarySettlement==='function')frRecordOrdinarySettlement({appliedChanges:(variableResult.delta||[]).map(function(operation){return {success:true,operation:operation};})},finalStoryContentForDisplay,logEntry.id);
@@ -95320,7 +95530,7 @@ try {
             if (canonTurnPromise) await canonTurnPromise;
             if(frDeferTheater&&!variableResult.error&&!frTurnController.signal.aborted&&currentArchiveName===frTheaterArchive){
               try{
-                const paper=await (dailyPaperPromise||callAutomatedAITheater(lastUnoptimizedAiStoryText,newsReferenceContent,newLogId,false,true));
+                const paper=await (dailyPaperPromise||callAutomatedAITheater(lastUnoptimizedAiStoryText,newsReferenceContent,newLogId,false,true,frTurnController.signal));
                 if(paper&&!frTurnController.signal.aborted&&currentArchiveName===frTheaterArchive){
                   await db.transaction('rw',db.archives,async()=>{
                     const fresh=await db.archives.get(frTheaterArchive);
@@ -95353,6 +95563,7 @@ try {
             frMainStage='界面刷新';
             await updateMiniMap();
           } catch (error) {
+            if (currentArchiveName !== frTurnArchiveName || frGenerationBranchEpoch !== frTurnBranchEpoch) return;
             if(frGeneratedStory)frGeneratedStory.stage=frMainStage;
             /* 2026-11-02 玩家：「中止就是中止，不是错误，是玩家的主动合理操作啊。
              *                      真错误才报错误」
@@ -95391,9 +95602,9 @@ try {
             if (streamingMessage&&!retained) {
               streamingMessage.remove();
             }
-            if(frUserAborted&&!retained){
+            if(frUserAborted){
               // 玩家主动中止且没有可保留的正文：只轻提示，不写日志条目。
-              try{showDanmaku('已中止本轮生成','info');}catch(_){}
+              try{showDanmaku(retained?'已停止本轮后续流程，已完成正文和结果保留':'已中止本轮生成','info');}catch(_){}
               console.log('[正文] 玩家主动中止本轮生成（'+frMainStage+'）');
             }else{
               if(!retained&&error?.name==='TimeoutError')console.warn('[正文] '+frMainStage+'超时');
@@ -95410,6 +95621,7 @@ try {
             if (frMpEndRequest(frMainPromptDisplayId)) frMpRefreshVisible();
             window.removeEventListener('pagehide',frAbortOnPageHide);
             frFinishOrdinaryWrite?.(false);
+            if (frTurnController.signal.aborted) await Promise.allSettled([frCanonTurnPromise, window._concurrentEvolutionPromise].filter(Boolean));
             if(typeof frCancelCanonEarlyPreparation==='function')frCancelCanonEarlyPreparation(frEarlyPreparation);
             if (thinkingMessage && thinkingMessage.parentNode) {
               thinkingMessage.parentNode.removeChild(thinkingMessage);
@@ -95429,10 +95641,7 @@ try {
             }
             finishStoryImageWrites?.();
             isMainApiGenerating = false;
-            sendMessageButton.disabled = false;
-            sendMessageButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
-            sendMessageButton.title = '发送';
-            sendMessageButton.onclick = () => sendMessage();
+            frReleaseTurn();
             const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
             if (mainContentArea && scrollToBottomBtn) {
               const isScrolledUp =
@@ -104455,14 +104664,18 @@ ${delBtn}
          * 检查并运行自动记忆审计/补全
          * @param {Object} currentLogEntry - 当前最新生成的 AI 日志
          */
-        async function checkAndRunMemoryVerification(currentLogEntry) {
+        async function checkAndRunMemoryVerification(currentLogEntry, parentSignal = null) {
+            const archiveName=currentArchiveName;
+            const checkTurn=frGenerationGuard(parentSignal,archiveName);
+            checkTurn();
             // 1. 基础检查
             if (!summaryConfig.autoVerificationEnabled) return;
             if (!currentArchiveName) return;
             // 必须有独立的API配置，因为这是后台耗时任务
             if (!summaryConfig.apiUrl || !summaryConfig.apiModel) return;
 
-            const archive = await db.archives.get(currentArchiveName);
+            const archive = await db.archives.get(archiveName);
+            checkTurn();
             if (!archive) return;
 
             // 获取上次审计的位置
@@ -104543,11 +104756,15 @@ ${large}
             prompt = prompt.replace('{{input_data}}', inputXml);
 
             // 3. 调用 API
-            const statusDanmaku = showDanmaku(`正在后台审计最近 ${batchLogs.length} 层记忆...`, 'status', null, true);
+            checkTurn();
+            const controller=new AbortController();
+            const releaseGeneration=frTrackGeneration(controller,parentSignal);
+            const statusDanmaku = showDanmaku(`正在后台审计最近 ${batchLogs.length} 层记忆...`, 'status', controller, true);
             console.log(`[记忆审计] 开始审计 ${batchLogs.length} 条日志，标准：${summaryConfig.verificationCriteria}`);
 
             try {
-                const response = await callSummaryApiDirect(prompt);
+                const response = await callSummaryApiDirect(prompt,controller.signal);
+                controller.signal.throwIfAborted(); checkTurn();
                 
                 // 4. 解析结果 (JSON)
                 let corrections = [];
@@ -104568,7 +104785,8 @@ ${large}
                 let updateCount = 0;
                 if (Array.isArray(corrections) && corrections.length > 0) {
                     // 重新获取最新的 archive (防止并发冲突)
-                    const freshArchive = await db.archives.get(currentArchiveName);
+                    const freshArchive = await db.archives.get(archiveName);
+            checkTurn();
                     let hasChanges = false;
 
                     for (const correction of corrections) {
@@ -104604,13 +104822,16 @@ ${large}
                     freshArchive.data.state.lastVerifiedLogId = batchLogs[batchLogs.length - 1].id;
 
                     if (hasChanges || lastVerifiedId !== freshArchive.data.state.lastVerifiedLogId) {
-                        await db.archives.put(freshArchive);
+                        controller.signal.throwIfAborted(); checkTurn();
+                    await db.archives.put(freshArchive);
                     }
                 } else {
                     // 即使没有修正，也要更新进度，避免重复检查
-                    const freshArchive = await db.archives.get(currentArchiveName);
+                    const freshArchive = await db.archives.get(archiveName);
+            checkTurn();
                     if (!freshArchive.data.state) freshArchive.data.state = {};
                     freshArchive.data.state.lastVerifiedLogId = batchLogs[batchLogs.length - 1].id;
+                    controller.signal.throwIfAborted(); checkTurn();
                     await db.archives.put(freshArchive);
                 }
 
@@ -104621,8 +104842,11 @@ ${large}
                 }
 
             } catch (err) {
+                if(err?.name==='AbortError')return;
                 console.error("[记忆审计] 运行出错:", err);
             } finally {
+                releaseGeneration();
+                if(controller.signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
                 if (statusDanmaku) statusDanmaku.remove();
             }
         }
@@ -107416,6 +107640,9 @@ if (!isReadOnly) {
 
         async function loadStateFromLog(logId, isSilent = false) {
 // 静默只影响提示，不影响取消。先停止旧分支，再读取和恢复目标快照。
+frGenerationBranchEpoch++;
+frStopCurrentGeneration();
+await frWaitForGenerationStop();
 if (typeof frCanonStopAll === 'function') frCanonStopAll('all');
 try {
   if (typeof cancelConcurrentEvolution === 'function') {
@@ -114081,7 +114308,10 @@ return genericApiCall(apiUrl,apiKey,apiModel,[
 ],signal,{route,purpose:'summary',max_tokens:25000,enforceTimeout:true});
 }
 
-        async function autoApiUpdateSummaryForLog(logEntry) {
+        async function autoApiUpdateSummaryForLog(logEntry, parentSignal = null) {
+const archiveName=currentArchiveName;
+const checkTurn=frGenerationGuard(parentSignal,archiveName);
+checkTurn();
 if (ceShouldSkipSegmentedMemoryStandaloneApi()) return;
 if (!summaryConfig.autoApiUpdateEnabled) return;
 if (!summaryConfig.apiUrl || !summaryConfig.apiModel) return;
@@ -114095,17 +114325,22 @@ console.log('[分段记忆] 自动 API 更新开始...');
 const maxRetries = summaryConfig.autoUpdateRetryEnabled ? 3 : 1;
 let statusDanmaku = null;
 let controller = new AbortController();
+const releaseGeneration=frTrackGeneration(controller,parentSignal);
+const checkRequest=()=>{controller.signal.throwIfAborted();checkTurn();};
 
 
 const callWithRetry = async (prompt, typeName) => {
 for (let attempt = 1; attempt <= maxRetries; attempt++) {
 try {
-const result = await callSummaryApiDirect(prompt);
+checkRequest();
+const result = await callSummaryApiDirect(prompt, controller.signal);
+checkRequest();
 if (result) {
 return result.trim();
 }
 throw new Error('API 返回为空');
 } catch (error) {
+checkRequest();
 console.warn(`[分段记忆] ${typeName}更新失败 (尝试 ${attempt}/${maxRetries}):`, error.message);
 if (attempt < maxRetries && summaryConfig.autoUpdateRetryEnabled) {
 // 等待 1 秒后重试
@@ -114166,19 +114401,24 @@ console.log('[分段记忆] 大总结已更新');
 }
 
 
-const archive = await db.archives.get(currentArchiveName);
+const archive = await db.archives.get(archiveName);
+checkRequest();
 if (archive) {
 const logIndex = archive.data.logs.findIndex(l => l.id === logEntry.id);
 if (logIndex !== -1) {
 if (logEntry.smallSummary) archive.data.logs[logIndex].smallSummary = logEntry.smallSummary;
 if (logEntry.largeSummary) archive.data.logs[logIndex].largeSummary = logEntry.largeSummary;
+checkRequest();
 await db.archives.put(archive);
 }
 }
 } catch (error) {
+if(error?.name==='AbortError')return;
 console.error('[分段记忆] 自动 API 更新失败:', error);
 showDanmaku(`分段记忆更新失败: ${error.message}`, 'error');
 } finally {
+releaseGeneration();
+if(controller.signal.aborted && statusDanmaku)statusDanmaku.aborted=true;
 if (statusDanmaku) statusDanmaku.remove();
 }
 }

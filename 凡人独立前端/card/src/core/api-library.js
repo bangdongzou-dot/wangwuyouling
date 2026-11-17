@@ -1357,6 +1357,8 @@ export function consumerApiChain(key, slot) {
 }
 
 function drawConsumerChain(host, consumer, onChange) {
+  // One render owns one metadata request; never reuse across redraws or configuration edits.
+  let variableOptionsPromise;
   const ids = savedApiChain(consumer) || [];
   const presets = loadApiLibrary().presets;
   const save = async next => {
@@ -1413,7 +1415,10 @@ function drawConsumerChain(host, consumer, onChange) {
       const presetLabel = document.createElement('label'); presetLabel.textContent = name;
       const picker = document.createElement('select'); picker.setAttribute('aria-label', caption.textContent+' · '+name);
       picker.disabled = true;
-      Promise.resolve().then(() => routePresets.options(id)).then(items => {
+      const optionsRequest = routePresets === window.FREvolutionRoutePresets
+        ? (variableOptionsPromise ||= Promise.resolve().then(() => routePresets.options(id)))
+        : Promise.resolve().then(() => routePresets.options(id));
+      optionsRequest.then(items => {
         picker.replaceChildren();
         const selected = routePresets.get(id);
         const choices = [{id:'',name:'跟随当前'+name},...items];

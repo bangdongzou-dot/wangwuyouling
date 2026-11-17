@@ -2445,7 +2445,7 @@ function frAdaptNativeDomainRules(preset) {
   var meta = frPresetCompatMeta(preset);
   function migrate(text) {
     if (typeof text !== 'string') return text;
-    FR_NATIVE_DOMAIN_PATCHES.forEach(function(patch) { if (patch.oldText.indexOf("\n") < 0) { text = text.split("\n").map(function(line) { return line === patch.oldText ? patch.newText : line; }).join("\n"); } else if (text.indexOf(patch.oldText) >= 0) text = text.split(patch.oldText).join(patch.newText); });
+    FR_NATIVE_DOMAIN_PATCHES.forEach(function(patch) { /* Avoid whole-text line copies for absent legacy phrases; keep exact ordered replacement semantics. */ if (text.indexOf(patch.oldText) < 0) return; if (patch.oldText.indexOf("\n") < 0) { text = text.split("\n").map(function(line) { return line === patch.oldText ? patch.newText : line; }).join("\n"); } else if (text.indexOf(patch.oldText) >= 0) text = text.split(patch.oldText).join(patch.newText); });
     return text;
   }
   Object.keys(preset.prompts || {}).forEach(function(scope) { var phase=preset.prompts[scope]; (phase && Array.isArray(phase.rules) ? phase.rules : []).forEach(function(rule) {
@@ -3119,6 +3119,7 @@ var FR_NPC_LEARNING_RULE_SPECS = [
     }
   }
 ];
+var FR_MANUAL_REFERENCE_CONTENT_RULE = "【资料载体与可修习内容分流】玉简、书册、经卷、手札只是载体，先看实际内容，不以载体名、单个功法/修炼关键词或否定句判作秘籍。仅记录阵纹拓录、传送阵构造、坐标路线、地图情报、观察笔记、研究记录、普通配方等内容，且无具体可修习体系或可施展能力时，归资料载体；按原物品规则保留真实用途，不强制入功法槽、生成技能，也不要求编造“不能学习的秘籍”理由。研究、查看、参悟资料本身不等于掌握技能；“不含功法”“未记载修炼法门”等否定说明不是正向学习证据。真正持续修习体系与可施展武技/术法/神通仍按原合同落实；同一载体兼有资料与完整可修内容时，仅对明确可修内容核对学习，资料部分不因此变成能力，沿用同一实体ID，不重复创建。审计允许资料载体（无需学习）/功法/技能三类结论。此分类不新增物品取得、学习或转移事实，不扩大年表补全到普通正文；玩家B1与受玩家影响的NPC仍以真实已发生因果和原阶段权限为准。\n【剧情装备终态优先】先按当前本人已发生的装卸、换用、收起、伪装、避人耳目或特定用途落实装备终态，再考虑未指定槽位的合理择优。明确为掩饰收起神风舟改用低阶青叶法器时，应保留青叶，不因神风舟数值更高换回；功法仍按明确修习事实处理。择优只能补充剧情未作选择的空白，不能反转本轮明确装卸或否认有理由的降级。只输出从现有状态到剧情终态所需的真实最小变更，不先自动换强再换回制造中间伪流水，不复制同一实例；收起不等于消耗、销毁或失去。普通正文必须有实际发生依据，计划、建议、他人行为不作为本人已换装，玩家B1不由NPC自动择优接管。";
 function frAdaptNpcManualLearningRules(preset) {
   var meta=frPresetCompatMeta(preset),recognized=Object.create(null),visited=Object.create(null);
   FR_NPC_LEARNING_RULE_PATCHES.forEach(function(patch){
@@ -3142,11 +3143,18 @@ function frAdaptNpcManualLearningRules(preset) {
   FR_NPC_LEARNING_RULE_SPECS.forEach(function(spec){
     var phase=preset.prompts&&preset.prompts[spec.scope],rules=phase&&phase.rules;if(!Array.isArray(rules))return;
     var matches=rules.filter(function(rule){return rule&&rule.id===spec.rule.id;});
-    var old=spec.rule.content, updated=old.replace(FR_NPC_TECHNIQUE_OLD,FR_NPC_TECHNIQUE_RULE);
+    var old=spec.rule.content, previous=old.replace(FR_NPC_TECHNIQUE_OLD,FR_NPC_TECHNIQUE_RULE), updated=previous+"\n"+FR_MANUAL_REFERENCE_CONTENT_RULE;
     if(matches.length){
       var current=matches[0], text=current.content;
       if(matches.length===1&&typeof text==='string'){
         if(text.startsWith(updated))return;
+        var referenceOnly=previous+"\n"+"【资料载体与可修习内容分流】玉简、书册、经卷、手札只是载体，先看实际内容，不以载体名、单个功法/修炼关键词或否定句判作秘籍。仅记录阵纹拓录、传送阵构造、坐标路线、地图情报、观察笔记、研究记录、普通配方等内容，且无具体可修习体系或可施展能力时，归资料载体；按原物品规则保留真实用途，不强制入功法槽、生成技能，也不要求编造“不能学习的秘籍”理由。研究、查看、参悟资料本身不等于掌握技能；“不含功法”“未记载修炼法门”等否定说明不是正向学习证据。真正持续修习体系与可施展武技/术法/神通仍按原合同落实；同一载体兼有资料与完整可修内容时，仅对明确可修内容核对学习，资料部分不因此变成能力，沿用同一实体ID，不重复创建。审计允许资料载体（无需学习）/功法/技能三类结论。此分类不新增物品取得、学习或转移事实，不扩大年表补全到普通正文；玩家B1与受玩家影响的NPC仍以真实已发生因果和原阶段权限为准。";
+        if(text.startsWith(referenceOnly)){frPresetCompatBackup(meta,spec.scope,current);current.content=updated+text.slice(referenceOnly.length);return;}
+        if(text.startsWith(previous)){
+          frPresetCompatBackup(meta,spec.scope,current);
+          current.content=updated+text.slice(previous.length);
+          return;
+        }
         if(text.startsWith(old)){
           frPresetCompatBackup(meta,spec.scope,current);
           current.content=updated+text.slice(old.length);
@@ -3158,7 +3166,7 @@ function frAdaptNpcManualLearningRules(preset) {
     if(recognized[spec.scope])rules.push({...frPresetCompatCopy(spec.rule),content:updated});
     else frPresetCompatWarning(meta,spec.scope,spec.rule,'npc_learning_unknown_scope_preserved');
   });
-  meta.npcManualLearningVersion=1;
+  meta.npcManualLearningVersion=2;
 }
 
 var FR_SKILL_DESCRIPTION_RULE = {
