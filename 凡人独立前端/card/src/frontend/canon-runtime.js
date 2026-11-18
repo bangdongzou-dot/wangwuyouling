@@ -866,7 +866,7 @@ function frCanonNpcProfileGaps(row, options) {
   var place = (appearance[2] || '')
     .replace(/([（(][^（）()]+)[，,；;]\s*坐标\s*[:：]?\s*(?:未详|不详|未知|未载)\s*([）)])\s*$/u, '$1$2')
     .replace(/\s*[（(]\s*坐标\s*[:：]?\s*(?:未详|不详|未知|未载)\s*[）)]\s*$/u, '').trim();
-  if (appearance.length !== 5 || !place || /未知|不详|未详|当前位置|当前场景|原著相关地点/.test(place)) missing.push('人物位置缺失');
+  if (appearance.length !== 5 || !place || /^(?:未知|不详|未详|当前位置|当前场景|原著相关地点)/.test(place)) missing.push('人物位置缺失');
   const knownUnknown=remarks.canonActorId ? String(remarks.canonPrebuiltUnknown||'').split(',') : [];
   const realm=String(data['2']||'').split('|');
   const knownRole=knownUnknown.includes('境界')&&realm[0]?.trim()==='未知'&&realm[1]?.trim()&&!placeholder.test(realm[1].trim());
@@ -957,7 +957,8 @@ function frAssertCanonNpcProfiles(targets, options) {
     gaps.forEach(function(note) {
       var text = String(note);
       // 缺了人物直接不可用：基本身份、血量/法力、当前位置、年龄寿元。
-      if (/第1列|第2列基本身份|第3列|性格|年龄缺失|寿元缺失|isBonded|血量|法力|人物位置/.test(text)) fatal.push(text);
+      if (target.canonPrebuiltUnknownLocation&&text==='人物位置缺失') ownSoft.push(text);
+      else if (/第1列|第2列基本身份|第3列|性格|年龄缺失|寿元缺失|isBonded|血量|法力|人物位置/.test(text)) fatal.push(text);
       else ownSoft.push(text);
     });
     if (fatal.length) failed.push({ name: target.name, gaps: fatal, soft: ownSoft });
@@ -1909,7 +1910,8 @@ async function frPrepareCanonPrebuiltProposal(payload, input) {
       if(gaps.fatal.length)throw new Error(actor.name+'的预制档案无法保存：'+gaps.fatal.join('、'));
       if(actor.allowMissingLocation&&gaps.soft.includes('人物位置缺失'))
         frCanonRecordProfileGaps([{name:actor.name,gaps:['人物位置缺失']}]);
-      targets.push({id:newId,name:actor.name,type:'npc',data:newRow,sceneType:'offscene',canonNew:true});
+      targets.push({id:newId,name:actor.name,type:'npc',data:newRow,sceneType:'offscene',canonNew:true,
+        ...(actor.allowMissingLocation?{canonPrebuiltUnknownLocation:true}:{})});
       if(actor.presentAtEnd===true)scenePlacements.push({id:newId,present:true});
       readback[newId] = {fields:{...newRow},attributes:{}};
       continue;
@@ -3003,7 +3005,7 @@ async function frCommitCanonProposal(input, proposal) {
         return {...target,data:row};
       });
       // 这里已经写进数据库、回读验证过了，缺了就是真写坏，必须严格。
-  frAssertCanonNpcProfiles(savedProfiles, { allowSoft: false });
+      frAssertCanonNpcProfiles(savedProfiles, { allowSoft: false });
       frAssertCanonCommit();
       var items = await executeItemOperations(proposal.itemOperations || [],{npcLoadoutIds:targets.filter(target=>target.type==='npc').map(target=>target.id),
         preserveTechnique:!!proposal.prebuiltReadback,techniqueStory:src.storyText||''});

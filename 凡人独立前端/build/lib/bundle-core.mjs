@@ -73,6 +73,7 @@ export const CORE_MODULE_FILES = [
   'api-library.js',
   'container-equipment.js',
   'numeric-settings.js',
+  'numeric-skill.js',
   'numeric-realms.js',
   'initial-realm.js',
   'numeric-preset.js',

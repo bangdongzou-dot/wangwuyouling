@@ -1,7 +1,7 @@
 // 仅拆分已约定的 JSON 外壳；所有变量语义仍由调用方传入的原生解析器处理。
 var FrMergedEvolution = (function () {
   var items = new Set(['createItem','transferItem','transferSpiritStones','consumeItem','destroyItem','equipItem','unequipItem','refreshItemData','updateItemQuantity']);
-  var people = new Set(['add','set','de','updateAttribute','addSkill','deSkill','addTrait','deTrait']);
+  var people = new Set(['add','set','de','updateAttribute','useSkill','addSkill','deSkill','addTrait','deTrait']);
   var world = new Set(['addSmallSummary','addLargeSummary','addWorldEvent','updateWorldEvent','deleteWorldEvent','createLocation','updateRegion','deleteLocation']);
   function object(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
   /* ★★ 2026-11-06 玩家实测：「变量演化完全没跑就跳过了」。
@@ -286,7 +286,10 @@ var FrMergedEvolution = (function () {
           if (opts.sharedOnly) failure('个人变量由人物批次负责');
           if (independent.has(target)) failure('合并命令不得写独立人物的个人变量：' + target);
           if (disabled.has(target)) failure('人物提示组未启用：' + target);
-          if (!allowed.has(target)) failure('个人目标超出本轮范围：' + target);
+          if (!allowed.has(target)) failure('个人目标超出本轮范围：' + target, {
+            stage: 'commands[' + index + ']', targetId: target, allowedIds: [...allowed].filter(id => !disabled.has(id) && !independent.has(id)),
+            correction: '移除发给清单外角色的个人命令；保留清单内有正文依据的变更，不把越界变更套给其他人。'
+          });
           personal[target].push(parsedCall.text);
         }
       } else failure('不支持的命令：' + name);

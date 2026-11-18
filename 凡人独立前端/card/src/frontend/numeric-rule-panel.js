@@ -202,6 +202,17 @@
       const overview = find('[data-overview]');
       overview.replaceChildren();
       const { tables, text, lineNumbers } = readOverview(rule);
+      if (rule.id==='skill-mana-cost' && !editing) {
+        const {skillCost, SKILL_REALM_ANCHORS} = CE_CORE['numeric-skill'];
+        for (const table of tables) {
+          table[0].push('每次法力区间');
+          for (const row of table.slice(1)) {
+            const realm = row[0].replace(/阶$/u,'');
+            if (!Object.hasOwn(SKILL_REALM_ANCHORS,realm)) continue;
+            row.push(skillCost({realm,position:0}).mana+'–'+skillCost({realm,position:100}).mana);
+          }
+        }
+      }
       if(rule.id==='attribute-baseline'&&!editing){
         const numeric=CE_CORE['numeric-realms'];
         const label=document.createElement('label');

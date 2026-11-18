@@ -105,7 +105,10 @@ async function readBuiltinAssets() {
   const imageExamples = Object.fromEntries(await Promise.all(['photo', 'design', 'portrait', 'story'].map(async name => [
     name, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(imageDir, name + '.jpg'))).toString('base64')
   ])));
-  return { preset, regex, imageMaterials: { ...imagePrompts, examples: imageExamples } };
+  const defaultAvatarPosters = Object.fromEntries(await Promise.all(['male', 'female'].map(async name => [
+    name, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(dir, 'default-avatars', name + '.jpg'))).toString('base64')
+  ])));
+  return { preset, regex, imageMaterials: { ...imagePrompts, examples: imageExamples }, defaultAvatarPosters };
 }
 
 // 保持编码声明在脚本之前，浏览器读取单文件时可以尽早识别 UTF-8。
@@ -280,6 +283,7 @@ async function main() {
     'window.__FR_PROSE_RENDER_FORMAT__ = ' + safeJson((await readOwn('builtin/prose-rendering-protocol.md')).trim()) + ';',
     'window.__FR_BUILTIN_REGEX__ = ' + safeJson(builtin.regex) + ';',
     'window.__FR_IMAGE_MATERIALS__ = ' + safeJson(builtin.imageMaterials) + ';',
+    'window.__FR_DEFAULT_AVATAR_POSTERS__ = ' + safeJson(builtin.defaultAvatarPosters) + ';',
     'window.__FR_CARD__ = ' + safeJson(frCard) + ';',
     'window.__FR_CARD_BOOK__ = ' + safeJson(frCardBook) + ';'
   ].join('\n');

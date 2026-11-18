@@ -527,7 +527,7 @@ function frEvolutionWireCommand(command,index) {
   return match[1]+'('+args.map(function(arg){return JSON.stringify(arg).replace(/</g,'\\u003c').replace(/\(/g,'\\u0028').replace(/\)/g,'\\u0029');}).join(',')+')';
 }
 
-function frEvolutionWireReply(response,preset,withCompletion=false) {
+function frEvolutionWireReply(response,preset,withCompletion=false,captureCommandIssues=false) {
   if(!frUsesDeepSeekEvolutionWire(preset))return {text:response,error:''};
   var prefix='DS 返回格式不符：';
   try{
@@ -544,7 +544,19 @@ function frEvolutionWireReply(response,preset,withCompletion=false) {
     if(!Array.isArray(value.commands))return {text:'',error:prefix+'commands 必须是数组；无变化时使用 []'};
     if(withCompletion&&(!value.completion||typeof value.completion!=='object'||Array.isArray(value.completion)||!Array.isArray(value.completion.actors)))
       return {text:'',error:prefix+'completion.actors 必须是回执数组'};
-    var commands=value.commands.map(frEvolutionWireCommand);
+    var issues=[];
+    var commands=value.commands.map(function(command,index){
+      try{return frEvolutionWireCommand(command,index);}
+      catch(error){
+        if(!captureCommandIssues)throw error;
+        issues.push({index,command,reason:String(error.message||error)});
+        return '';
+      }
+    });
+    if(issues.length){
+      var repairable=issues.every(function(issue){return typeof issue.command==='string'&&/^\s*\w+\s*\(/.test(issue.command);});
+      return {text:'',error:prefix+issues[0].reason,commandRepair:repairable?{value,issues}:null};
+    }
     var body='<upstore>'+commands.join('\n')+'</upstore>';
     if(withCompletion)body+='\n<canon_completion>'+JSON.stringify(value.completion).replace(/</g,'\\u003c')+'</canon_completion>';
     return {text:body,error:'',commandCount:commands.length};
@@ -3220,6 +3232,45 @@ var FR_SKILL_DESCRIPTION_RULE = {
   content:'【技能字段与人物经历分开】技能第4列只写技能原理、用法、适用条件与限制，第6列写当前可用效果，第7列只写熟练度，第9列写各层效果。取得、初学、练习、试招和实战的日期、地点、人物及过程，记入对应人物生平、正文或本次增减的依据。把这类素材中确证的能力归纳为通用效果，保留消耗、组合用法和限制。校订第9列 skills 或输出 addSkill 时检查所有技能文字；已有同名技能只修实际需要改动的字段，沿用 ID、已证实进度和有效机制。'
 };
 
+var FR_SKILL_PRICING_RULE = {
+  id:'fr-skill-pricing-v1',name:'技能品阶、消耗与当前能力',enabled:true,role:'system',
+  content:[
+    '【技能定标】按技能自身的施展条件、威力、范围、持续时间和附带效果评定大阶与阶内位置。以可独立施展的招式为单位；功法层数、人物境界、熟练度和装备品阶另记。已有技能的定标在同一招式沿用，真正发生质变才调整。',
+    '已掌握且主动消耗法力的技能增加 skillPricing，例如 {"realm":"筑基","position":45}。realm用炼气、筑基、结丹等大阶原名，position为0–100整数。程序由同一数值规则生成第2列品阶和第8列每次法力；青元剑芒的默认样例为筑基阶·中品、72 法力／次。第1–9列仍保留文本，第2/8列是显示值。没有明确精确消耗时按档位定标，无需寻找正文数字。',
+    '未学成或仅研读、凡俗武技、固有感知、功法本体不虚构法力扣费。体力、精血、符箓、法器和灵石等真实代价按对应资源另结，招式与其载体各归其位。',
+    '第3列写技能属性类型，第4列写核心用法，第5列写技能自身总层数，第6列写当下能稳定施展的机制与影响结果的条件，第7列写实际研习进度，第9列写已知独立层效。原文无独立层效可写未载；普通施展和战例放在正文或变化依据。',
+    '${numeric_rule:skill-mana-cost}',
+  ].join('\n')
+};
+
+var FR_SKILL_SPEND_RULE = {
+  id:'fr-skill-spend-v1',name:'已催发技能的法力结算',enabled:true,role:'system',
+  content:'人物变量阶段仅在本轮正文已实际催发带 skillPricing 的既有技能时，输出 useSkill("真实人物ID","真实技能ID",实际催发次数)。次数为正整数，技能ID取当时已持有技能。已催发后落空、被挡照扣，尚未催发不扣。程序按面板最终当前法力和固定单价验算并扣款，计入已生效的常驻加成和 Buff。法力消耗记录由程序维护；同一笔不得同时用 updateAttribute 扣减。其他明确的法力变化继续使用原生资源指令，并按实际发生顺序结算。'
+};
+
+function frAdaptSkillPricing(preset) {
+  if (!/^(?:ds-)?(?:full|light)$/.test(preset.frBuiltinCatalogId || '')) return;
+  const meta = frPresetCompatMeta(preset);
+  const scopes = [
+    ['sharedRules',preset.sharedRules],
+    ...['player','npc','humanoid_beast','merged_variables'].map(scope=>[scope,preset.prompts?.[scope]?.rules]),
+  ];
+  for (const [scope,rules] of scopes) {
+    if (!Array.isArray(rules)) continue;
+    for (const rule of rules) {
+      if (rule.id !== 'rule-49' || !rule.content?.startsWith('## 通用技能与描述补充规则') ||
+          !rule.content.includes('须根据技能名称合理推演并补全，禁止留空')) continue;
+      frPresetCompatBackup(meta,scope,rule);
+      const boundary = rule.content.indexOf('### 【角色数值边界】');
+      rule.content = '## 技能字段填写\n技能效果、品阶、消耗与进阶按技能定标规则处理。证据不足的具体层效可记未载。'+
+        (boundary < 0 ? '' : '\n\n'+rule.content.slice(boundary));
+    }
+    const additions = scope==='sharedRules' || scope==='merged_variables' ? [FR_SKILL_PRICING_RULE] : [];
+    if (scope==='player'||scope==='npc'||scope==='merged_variables') additions.push(FR_SKILL_SPEND_RULE);
+    for (const rule of additions) if (!rules.some(current=>current.id===rule.id)) rules.push(frPresetCompatCopy(rule));
+  }
+}
+
 
 var FR_FORTUNE_TRAIT_RULE_PATCHES = [
   {
@@ -4042,6 +4093,7 @@ function frAdaptEvolutionPreset(preset, referencePreset) {
     });
   }
   frAdaptNpcManualLearningRules(copy);
+  frAdaptSkillPricing(copy);
   if (/^(?:ds-)?(?:full|light)$/.test(copy.frBuiltinCatalogId || '') &&
       Array.isArray(copy.sharedRules) && !copy.sharedRules.some(rule=>rule.id===FR_SKILL_DESCRIPTION_RULE.id))
     copy.sharedRules.push(frPresetCompatCopy(FR_SKILL_DESCRIPTION_RULE));

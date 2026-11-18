@@ -1,5 +1,6 @@
 // Runtime/model projections only. Never migrate or rewrite stored source rows.
 // Numeric columns belong to a schema: do not recurse through inventory, skills or equipment.
+import { projectSkillCost } from './numeric-skill.js';
 export const PREBUILT_PROFILE_ESTIMATE_RULE = '年龄、寿元、地点都须填写。优先使用明确资料及最近已确认前态。原文没有精确数字时，按出生年、亲属辈分、人生阶段和年表时间估算整岁年龄，按种族、实际境界与现行设定估算寿元上限。沿用可信寿元，随剧情时间更新年龄；不得提前套用未来境界、死亡或寿元变化。地点取此人本节点最后可确认的位置，按人物正文、行动、前态或所属地域推断，离场人物不套用玩家地点。无精确地标可写可信的上级地名，无可靠坐标只写地名。三项只更新终态，不登记变量增减或来源。第9列用中文键「年龄」「寿元」，第16列第三段写地点。';
 export const PREBUILT_TERMINAL_TEXT_RULE = '所有适用人物列遵循同一顺序：明确事实优先，继承仍适用的前态，再按人物、经历、环境和现行规则合理推断。原文没明说不等于未知。对不影响事实、时序或游戏消费的措辞、估值和细节差异予以通过。无适用内容可留空；真实得失、突破、数量变化仍须核对来源。背景和内心想法填文本，境界与身份按第2列原格式。' + PREBUILT_PROFILE_ESTIMATE_RULE;
 
@@ -85,10 +86,14 @@ function mapVariableFields(row, transforms) {
 }
 const cleanTextFields=(row,keys)=>mapVariableFields(row,Object.fromEntries(keys.map(key=>[key,cleanVariablePresentationText])));
 const itemTextKeys=['3','4','6','7','8','9','description','desc','effect','effects','restriction','currentEffect','allEffects','realmEffects','maxRealm'];
-const skillTextKeys=['3','4','5','6','7','8','9','description','desc','effect','effects','restriction','currentEffect','allEffects'];
 const traitTextKeys=['desc','description','effect','effects'];
 export const cleanVariableItem = row=>cleanTextFields(row,itemTextKeys);
-export const cleanVariableSkill = row=>cleanTextFields(row,skillTextKeys);
+const skillTextKeys=['3','4','5','6','7','8','9','description','desc','effect','effects','restriction','currentEffect','allEffects'];
+export function cleanVariableSkill(row) {
+  const cleaned = cleanTextFields(row,skillTextKeys);
+  try { return projectSkillCost(cleaned); }
+  catch { return cleaned; }
+}
 export const cleanVariableTrait = row=>cleanTextFields(row,traitTextKeys);
 export const cleanVariableBeast = row=>cleanTextFields(row,['2','3','4','5','6']);
 const cleanVariableArt = row=>cleanTextFields(row,['desc','description','notes','effect','effects']);

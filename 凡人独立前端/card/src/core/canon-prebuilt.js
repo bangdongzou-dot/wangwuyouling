@@ -7,7 +7,7 @@ import { coalesceTreasureSets, equipmentEligibility, getEquipmentSlots, isTreasu
 import { canonActorId } from './role-roster.js';
 import { withRetry } from './retry.js';
 import { normalizeRequestLimits } from './request-budget.js';
-import { applyEventFieldChanges, eventFieldChanges, eventSourceRecord, isPrebuiltEventField, isPrebuiltSnapshotColumn, isPrebuiltStatusOperation, mergeEventSourceRecords } from './canon-event-details.js';
+import { applyEventFieldChanges, eventFieldChanges, eventSourceRecord, isLegacyPrebuiltBeastDescription, isPrebuiltEventField, isPrebuiltSnapshotColumn, isPrebuiltStatusOperation, mergeEventSourceRecords, SPIRIT_STONE_SETTLEMENT_RULE } from './canon-event-details.js';
 import { WORLD_EVENT_CLOSURE_RULE, WORLD_EVENT_OPPORTUNITY_RULE } from './world-events.js';
 import { repairCarriedBreakthrough, carryAdjustedWhiteValues } from './numeric-realms.js';
 import { INVENTORY_STOCK_RULE, validStockMembers } from './inventory-stock.js';
@@ -49,6 +49,7 @@ const isPrebuiltDeltaOperation = op => !isRetiredCharacterOperation(op) && !isPr
 const prebuiltVariableReply = INVENTORY_STOCK_RULE+'\nvariables 和 ordinaryDelta 都是数组，不是按列号索引的对象。每笔包含 kind、action、column、subject、value、previousValue、terminalValue、evidence。' +
   '\n'+CHARACTER_STATUS_RULE+'\n动作、穿着、实际地点、身段和样貌直接填写第16列终态，不进入 variables 或 ordinaryDelta。' +
   '灵石余额中，下品只写第26列，不写入第9列 inventory，不创建灵石物品。其他品级写第9列备注 spiritStoneGrades 的中品、上品、极品数字余额。收支用 kind=currency，下品写 column="26"、subject="灵石"，从 previousColumns["26"] 读取 previousValue，再计算 terminalValue 写入 columns["26"]；其余写 column="9"、subject="spiritStoneGrades.中品" 或对应品级，同样依据该品级前态计算对应终态。' +
+  '\n'+SPIRIT_STONE_SETTLEMENT_RULE+'\n' +
   '百艺实际变化用 attribute/9/set，subject 为 cultivationArts.<项目>，value 和 terminalValue 为同一个完整档位项 {tier,progress,basis}，previousValue 为完整前项或首次确认时的 null。没有实际变化时保留原百艺。' +
   'kind 取 '+[...categories].filter(kind=>kind!=='location').join('、')+'；action 取 '+[...actions].join('、')+'。没有对应变化用 []，ordinaryDelta 无对应变化可省略。' +
   'columns 才按列号索引，沿用 previousColumns 未变化的列。新人物第1列为「姓名|性别」，第2列为「境界|身份」，第16列为「动作|穿着|地点|身段|样貌」。' +
@@ -107,7 +108,7 @@ function validPrebuiltVariableValue(op) {
   const key=cultivationArtSubjects.get(op.subject);
   return Boolean(key && op.kind==='attribute' && String(op.column)==='9' && op.action==='set' &&
     (op.key===undefined || op.key===op.subject) && isRecord(op.value) && !validateCultivationArts({[key]:op.value}).length &&
-    (op.previousValue===null || isRecord(op.previousValue) && !validateCultivationArts({[key]:op.previousValue}).length) &&
+    (op.previousValue===null || isRecord(op.previousValue) && !validateCultivationArts({[key]:op.previousValue},{requireBasis:false}).length) &&
     (op.beforeValue===undefined || cultivationArtStateEqual(op.beforeValue,op.previousValue)) &&
     cultivationArtStateEqual(op.terminalValue,op.value));
 }
@@ -511,6 +512,8 @@ export function mergeLegacyPrebuiltActorStep(current, {productBefore,productAfte
       if(next||prior){
         const key='@'+JSON.stringify([op.subject,(next||prior)['2']||'']);
         const path=['9','skills',key],oldValue=op.previousValue,newValue=op.terminalValue;
+        if(prior&&next&&prior['2']===next['2']&&details.fields?.some(field=>
+          field.path.length>path.length&&path.every((part,index)=>field.path[index]===part)))continue;
         if((prior?.['7']??null)===(oldValue??null)&&(next?.['7']??null)===(newValue??null)){
           blocked.add(JSON.stringify(path));
           explicit.push({path,...(prior?{before:prior}:{}),...(next?{after:next}:{})});
@@ -584,7 +587,8 @@ export function mergeLegacyPrebuiltActorStep(current, {productBefore,productAfte
       }
     }
     if(!changed)changed=applyEventFieldChanges(result,[field],{prebuilt:true});
-    if(column==='11'&&changed?.['11']?.[key]?.current>changed['11'][key].max)continue;
+    const attribute=column==='11'?changed?.['11']?.[key]:null;
+    if(attribute&&attribute.current>attribute.max)continue;
     if(changed)result=changed;
   }
   return result;
@@ -1910,6 +1914,7 @@ export function buildPrebuiltPayload(plan, end, range) {
           details.knownBaseline=true;
         }
         if(!revised&&!verified&&planned?.fields?.length)details.fields=structuredClone(planned.fields);
+        if(!revised&&Array.isArray(planned?.disclosures))details.fields.push(...planned.disclosures.map(field=>({...structuredClone(field),disclosed:true})));
         const whiteFields=repairedFields.get(JSON.stringify([node.id,person.name]));
         if(whiteFields)details.fields.push(...whiteFields.filter(field=>
           !details.fields.some(existing=>existing.path.join('.')===field.path.join('.'))));
@@ -2103,6 +2108,7 @@ function compileNativeItem(native) {
   }
   for(const key of ['equipmentRole','artifactTier']) if(cleanText(native[key])) item[key]=native[key];
   for(const key of ['inventoryGroup','quantityDetail']) if(cleanText(native[key])) item[key]=native[key];
+  if(Array.isArray(native.tags)&&native.tags.every(cleanText))item.tags=[...native.tags];
   if(Object.hasOwn(native,'stockMembers')){
     if(!validStockMembers(native)||!plainNativeValue(native.stockMembers))return null;
     item.stockMembers=structuredClone(native.stockMembers);
@@ -2116,6 +2122,9 @@ function compileNativeItem(native) {
 function normalizePrebuiltTerminalColumns(columns, previous) {
   if (!isRecord(columns)) return columns;
   const normalized = {...columns};
+  // Old products carried narrative notes in the native roster column.
+  if(isLegacyPrebuiltBeastDescription(normalized['30']))delete normalized['30'];
+  if(normalized['33']==='false')normalized['33']=false;
   if(normalized['4']==null&&typeof previous?.['4']==='string')normalized['4']=previous['4'];
   for (const key of ['10','12']) {
     const value = columns[key];

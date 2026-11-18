@@ -4,6 +4,51 @@
 const neutral='#b9a783';
 const divineTier = '幻彩神物';
 const divineColor = '#f4c8ff';
+// 这里只映射展示色；不据颜色反推品阶，不改写物品记录。
+const gradeHues=[['#d7d7ce','#5d5b50'],['#69f0ae','#176b43'],['#82c7eb','#245f91'],['#e7a5f7','#79448e'],['#ffd700','#825b0b'],['#f49a91','#9a392f']];
+const techniqueTiers=['黄阶','玄阶','地阶','天阶','仙阶','道阶'];
+const plainText=value=>typeof value==='string'||typeof value==='number'?String(value).replace(/<[^>]*>/g,'').trim():'';
+function rankNumber(value){
+ const text=String(value),digits='零一二三四五六七八九';
+ if(/^\d{1,2}$/.test(text))return Number(text);
+ if(text==='十')return 10;
+ if(text.length===1)return digits.indexOf(text);
+ const match=text.match(/^([一二三]?)十([一二三四五六七八九]?)$/u);
+ return match?(match[1]?digits.indexOf(match[1]):1)*10+(match[2]?digits.indexOf(match[2]):0):0;
+}
+function rankPresentation(raw){
+ const text=plainText(raw);
+ if(!text||/^(?:无|未详|未知|未载|未定|普通|凡物|杂物)(?:品阶)?$/u.test(text))return null;
+ const pair=text.match(/^([黄玄地天仙道]阶)\s*(?:[·・／/]\s*|[（(]\s*)?(下品|中品|上品|极品)?[）)]?$/u);
+ if(pair){const [color,dayColor]=gradeHues[techniqueTiers.indexOf(pair[1])];return{label:pair[1]+(pair[2]?' · '+pair[2]:''),color,dayColor,known:true,needsClassification:false,colorSource:'grade'};}
+ const numeric=text.match(/^([一二三四五六七八九十零\d]{1,4})\s*品(?:[·・／/]?([人玄地天]阶))?$/u);
+ if(numeric){const rank=rankNumber(numeric[1]);if(rank<1||rank>24)return null;const index=rank>=17?3:rank>=11?2:rank>=5?1:0;const [color,dayColor]=gradeHues[index];return{label:text,color,dayColor,known:true,needsClassification:false,colorSource:'grade'};}
+ const realm=text.match(/^(炼气|筑基|结丹|元婴|化神|炼虚|合体|大乘|渡劫|真仙|金仙|太乙|大罗|道祖)阶(?:\s*[·・／/]\s*(下品|中品|上品|顶阶|极品))?$/u);
+ if(realm){const index=Math.min(5,['炼气','筑基','结丹','元婴','化神','炼虚','合体','大乘','渡劫','真仙','金仙','太乙','大罗','道祖'].indexOf(realm[1]));const [color,dayColor]=gradeHues[index];return{label:realm[1]+'阶'+(realm[2]?' · '+realm[2]:''),color,dayColor,known:true,needsClassification:false,colorSource:'grade'};}
+ const quality=text.match(/^(下品|中品|上品|顶阶|极品)$/u);
+ if(quality){const [color,dayColor]=gradeHues[{下品:0,中品:1,上品:2,顶阶:3,极品:4}[quality[1]]];return{label:text,color,dayColor,known:true,needsClassification:false,colorSource:'grade'};}
+ return null;
+}
+function otherItemRank(i){
+ const effect=i['4']??i.effect;
+ const structured=effect&&typeof effect==='object'?effect:{};
+ for(const value of [i.itemGrade,i.grade,i.rank,i.quality,i.品阶,i.显示品阶,i.品质,structured.品阶,structured.品质]){const raw=plainText(value);const parsed=rankPresentation(/^\d{1,2}$/u.test(raw)?raw+'品':raw);if(parsed)return parsed;}
+ const numbered=structured.品质档??i.品质档;
+ if(numbered!=null){const parsed=rankPresentation(plainText(numbered).replace(/品$/u,'')+'品');if(parsed)return parsed;}
+ // 旧约定把明确品阶写在描述开头；不扫描姓名、器物夸饰或正文中的未来品阶。
+ const prefix=plainText(i['3']??i.description).match(/^(?:【)?((?:[一二三四五六七八九十零\d]{1,4}\s*品(?:[·・／/]?[人玄地天]阶)?)|(?:[黄玄地天仙道]阶(?:[·・／/]?(?:下品|中品|上品|极品))?)|(?:下品|中品|上品|顶阶|极品))(?=[^一二三四五六七八九十零\d]|$)/u);
+ return prefix?rankPresentation(prefix[1]):null;
+}
+function categoryPresentation(i,c){
+ const type=typeOf(i),desc=plainText(i['3']??i.description);
+ const spiritualHerb=/^(?:灵草|灵药)$/u.test(type)||/^(?:药材|草药|药草)$/u.test(type)&&/(?:灵草|灵药)/u.test(desc);
+ const spiritualMaterial=/^(?:灵材|炼器材料|炼丹材料)$/u.test(type)||c.category==='material'&&/(?:灵材|妖兽[^。；]{0,8}材料|炼器材料|炼丹材料)/u.test(desc);
+ const label=spiritualHerb?'灵草':spiritualMaterial?'灵材':/^(?:丹药|灵兽丹)$/u.test(type)?'丹药':/^(?:符箓|符纸)$/u.test(type)?'符箓':/^(?:阵盘|阵具)$/u.test(type)?'阵具':'';
+ if(!label)return null;
+ const hue=label==='灵草'||label==='灵材'?1:label==='丹药'?4:2;
+ const [color,dayColor]=gradeHues[hue];
+ return{label:'',categoryLabel:label,color,dayColor,known:false,needsClassification:false,colorSource:'category'};
+}
 const paths={
 weapon:'M22 2 24 4 12 18 9 15Z M22 4 11 16 M7 14 14 20 M5 13 7 14 6 17 11 22 14 20 15 22 M9 19 4 24 M6 22 8 24 M4 24 3 26 M18 8l2 2',
 head:'M6 18 5 10 9 8 10 3h8l1 5 4 2-1 8 M8 18h12 M6 22h16l1-4H5Z M10 5l4 3 4-3 M9 8l5 4 5-4 M14 8v10 M4 11 2 15l4 3 M24 11l2 4-4 3',
@@ -49,7 +94,13 @@ function rarity(i){
 if(!i||typeof i!=='object')return{label:'',color:neutral,known:false,needsClassification:false};
 i=projectMiracleBottle(i);
 const c=classify(i),equipment=c.category==='equipment'||c.category==='treasure';
-if(!equipment)return{label:'',color:neutral,known:false,needsClassification:false};
+if(c.category==='technique'){
+ const baseline=core('cultivation-speed')?.techniqueSpeedBaseline(i);
+ const index=techniqueTiers.indexOf(baseline?.tier);
+ if(index>=0){const [color,dayColor]=gradeHues[index];return{label:baseline.tier+(baseline.quality?' · '+baseline.quality:''),color,dayColor,known:true,needsClassification:false,colorSource:'grade'};}
+ return{label:'',categoryLabel:'功法',color:'#dac39a',dayColor:'#795533',known:false,needsClassification:false,colorSource:'category'};
+}
+if(!equipment)return otherItemRank(i)||categoryPresentation(i,c)||{label:'',color:neutral,known:false,needsClassification:false};
 const engine=core('container-equipment');
 const colors=engine?.CONTAINER_CLASS_COLORS||{};
 const parsed=engine?.parseItemContainerEquipment(i);
@@ -64,6 +115,7 @@ return{label,color:neutral,known:false,needsClassification:true};
 function ornament(i){
  const r=rarity(i),colors=core('container-equipment')?.CONTAINER_CLASS_COLORS||{};
  if(r.ornament)return r.ornament;
+ if(r.colorSource)return 'plain';
  if(!r.known)return 'plain';
  const levels={凡器:'mortal',法器:'magic',法宝:'treasure',灵宝:'spirit',通天灵宝:'celestial',玄天之宝:'supreme'};
  return Object.keys(levels).find(k=>colors[k]===r.color)?levels[Object.keys(levels).find(k=>colors[k]===r.color)]:'plain';
@@ -72,7 +124,13 @@ function decorate(element,item){
  if(!element)return;
  element.classList.add('fr-item-surface');
  element.setAttribute('data-fr-item-tier',ornament(item));
- element.style.setProperty('--fr-item-aura',rarity(item).color);
+ const r=rarity(item);
+ const classColors=core('container-equipment')?.CONTAINER_CLASS_COLORS||{};
+ const classIndex=['凡器','法器','法宝','灵宝','通天灵宝','玄天之宝'].findIndex(key=>classColors[key]===r.color);
+ element.style.setProperty('--fr-item-aura',r.color);
+ element.setAttribute('data-fr-item-color-source',r.colorSource||(r.known?'grade':'none'));
+ element.style.setProperty('--fr-item-label-color',r.color);
+ element.style.setProperty('--fr-item-label-day-color',r.dayColor||(classIndex>=0?gradeHues[classIndex][1]:r.color));
 }
 const detailEscape=text=>String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const detailSection=(title,html,extra='')=>html?'<section class="fr-chaos-section '+extra+'"><h3>'+detailEscape(title)+'</h3>'+html+'</section>':'';
@@ -153,10 +211,10 @@ function detailHtml(raw,options={}){
   const knownSpeed=Object.hasOwn(options,'techniqueSpeed');
   const speed=knownSpeed?options.techniqueSpeed:baseline;
   const format=(n,suffix)=>Number.isFinite(n)&&n!==0?(n>0?'+':'')+n+suffix:'';
-  const amount=speed?[format(speed.percent,'%'),format(speed.flat,'')].filter(Boolean).join(' / ')||'0':'尚未解锁';
+  const amount=speed?[format(speed.percent,'%'),format(speed.flat,'')].filter(Boolean).join(' / ')||'0':'未生效';
   const tierBasis=speed?.tier?speed.tier+(speed.quality?' · '+speed.quality:'')+'基准':'入门基准';
   const basis=knownSpeed?(speed?.source==='record'?'按当前已解锁境界记录':tierBasis):tierBasis+' · 明示境界加成优先';
-  const speedCard=cultivation?'<div class="fr-item-outcome fr-technique-speed"><div><span>修炼速度加成</span><strong>'+detailEscape(amount)+'</strong></div><span>'+detailEscape(speed?basis:'达到首个功法境界后生效')+'</span></div>':'';
+  const speedCard=cultivation?'<div class="fr-item-outcome fr-technique-speed"><div><span>修炼速度加成</span><strong>'+detailEscape(amount)+'</strong></div><span>'+detailEscape(speed?basis:options.inactiveReason||'达到首个功法境界后生效')+'</span></div>':'';
   const metrics=[gradeLabel?['功法品阶',gradeLabel]:null,realm?['修炼上限',realm]:null,options.status?['修习状态',options.status]:null].filter(Boolean);
   const facts=metrics.length?'<dl class="fr-item-metrics'+(metrics.length===3?' fr-item-metrics-three':'')+'">'+metrics.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+detailEscape(value)+'</dd></div>').join('')+'</dl>':'';
   return section('修习概览',speedCard+facts+(options.currentEffect?'<div class="fr-item-entry"><strong>当前境界效果</strong><div>'+detailText(options.currentEffect)+'</div></div>':''))+

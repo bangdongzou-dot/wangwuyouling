@@ -377,7 +377,19 @@ function techniqueStoryDecision(item, columns, story, actorScoped) {
 }
 
 export function compareNpcEquipment(candidate,current,columns,{techniqueStory,actorScoped=false}={}){
-  if(classifyItem(candidate).slotKey!=='technique')return compareContainerEquipment(candidate,current,columns);
+  const slot=classifyItem(candidate).slotKey;
+  if(slot!=='technique'){
+    const comparable=compareContainerEquipment(candidate,current,columns);
+    if(comparable!==null||slot!=='weapon'||classifyItem(current).slotKey!=='weapon')return comparable;
+    const next=compareContainerEquipment(candidate,null,columns);
+    const old=compareContainerEquipment(current,null,columns);
+    if(next===null||old===null)return null;
+    if(next===0||old===0)return next-old;
+    const a=parseItemContainerEquipment(candidate),b=parseItemContainerEquipment(current);
+    const types=Object.keys(CONTAINER_LIMITS);
+    return types.indexOf(a.type)-types.indexOf(b.type) ||
+      Object.keys(CONTAINER_LIMITS[a.type]).indexOf(a.quality)-Object.keys(CONTAINER_LIMITS[b.type]).indexOf(b.quality);
+  }
   const wanted = techniqueStoryDecision(candidate, columns, techniqueStory, actorScoped);
   const prior = techniqueStoryDecision(current, columns, techniqueStory, actorScoped);
   if (wanted?.use === false) return -1;

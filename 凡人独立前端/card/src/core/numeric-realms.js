@@ -48,7 +48,7 @@ const realmRow=row=>{
   return range?{...row,min:range[0],max:range[1]}:row;
 };
 export function resolveNumericRealm(raw) {
-  let realm=String(raw??'').split('|')[0].trim().replace(/\s+/g,'').replace(/[（(]\d+(?:\.\d+)?%[）)]$/u,'').replace(/^练气/u,'炼气');
+  let realm=String(raw??'').split('|')[0].trim().replace(/\s+/g,'').replace(/[（(]\d+(?:\.\d+)?%[）)]$/u,'').replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
   realm=realm.replace(/(?:妖修|妖族|妖兽|灵兽)$/u,'');
   if(NUMERIC_REALM_ROWS.some(row=>row.realm===realm))return realm;
   const immortal=realm.match(/^(真仙|金仙|太乙(?:玉仙)?|大罗(?:金仙)?|道祖)(?:期|境)?(下位|中位|上位|初期|中期|后期|圆满|大圆满|巅峰)?$/u);

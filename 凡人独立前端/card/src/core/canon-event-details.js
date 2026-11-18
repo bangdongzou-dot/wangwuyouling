@@ -4,6 +4,8 @@ import { splitProseParagraphs } from './prose-validate.js';
 import { CULTIVATION_ARTS } from './cultivation-arts.js';
 import { isCompressedInventoryItem } from './inventory-stock.js';
 
+export const SPIRIT_STONE_SETTLEMENT_RULE = '【灵石成交与品级】区分报价、抵价估值和实际交割，只登记已完成的实际灵石收支；报价、支付意向、未成交和以物折抵的作价均不是扣款。原文未注明品级时按下品口径记数。支付时核对相应品级的前态余额；余额不足说明需要核对前态或交割证据，不能仅凭兑率推断支付品级、自动兑换或补造进账。确有其他品级交割或实际兑换时，按交割证据核对相关钱包。原文只给出可支配余额的上下限时，保留这个约束，不把上限写成确切余额，也不为凑数补记历史收支。';
+
 const eventCode = /^E-\d+(?:\.\d+)?$/u;
 export const ordinaryCrossEvent = block => new Set([...(block?.eventIds||[]),
   ...(block?.eventWindows||[]).filter(window=>!window.gap).map(window=>window.code)].filter(id=>eventCode.test(id))).size > 1;
@@ -81,6 +83,14 @@ const itemFields=value=>{
   if(!object(value))return value;
   const {'0':id,inventoryGroup,...fields}=value;
   return fields;
+};
+const sameItemFields=(left,right,allowMissingTags)=>{
+  const a=itemFields(left),b=itemFields(right);
+  if(allowMissingTags&&object(a)&&object(b)&&(!Object.hasOwn(a,'tags')||!Object.hasOwn(b,'tags'))){
+    delete a.tags;
+    delete b.tags;
+  }
+  return same(a,b);
 };
 const listMap=value=>{
   if(!Array.isArray(value))return null;
@@ -193,11 +203,16 @@ export function prebuiltEquipmentSlotChanges(before, after) {
     .filter(index=>!same(a[index]??null,b[index]??null));
 }
 
+export function isLegacyPrebuiltBeastDescription(value) {
+  return typeof value==='string'||Array.isArray(value)&&value.length>0&&value.every(item=>typeof item==='string');
+}
+
 export function isPrebuiltEventField(field) {
   if (!Array.isArray(field?.path)) return false;
   const {path,before,after}=field;
   const [column,key,part,leaf] = path;
   if (column === '13') return path.length === 2 && !equivalentPrebuiltRelationship(before,after);
+  if (column === '30' && (isLegacyPrebuiltBeastDescription(before)||isLegacyPrebuiltBeastDescription(after))) return false;
   if (column !== '9') return prebuiltSourceColumns.has(column) &&
     !(Number.isFinite(before) && typeof after === 'string' && String(before) === after.trim() ||
       Number.isFinite(after) && typeof before === 'string' && String(after) === before.trim());
@@ -254,6 +269,18 @@ export function applyEventFieldChanges(row, changes, {reverse=false,requireMatch
     const path=change?.path;
     if(!Array.isArray(path)||!path.length||path.some(key=>typeof key!=='string'||unsafe.has(key))||
       excluded.has(path[0])||(path[0]==='9'&&protectedNotes.has(path[1])))return null;
+    if(prebuilt&&!reverse&&change.disclosed&&path.length===3&&path[0]==='9'&&['inventory','equipment'].includes(path[1])){
+      const [group,part]=path.slice(1);
+      const slots=prebuiltEquipmentSlotChanges(change.before,change.after);
+      if(group==='equipment'&&slots.length!==1)return null;
+      const item=group==='inventory'?change.after:change.after?.[slots[0]];
+      const identity=itemKey(item);
+      if(!identity)return null;
+      const remarks=next['9'];
+      const equipment=Object.values(remarks?.equipment||{}).filter(Array.isArray).flat();
+      if([...(remarks?.inventory||[]),...equipment].some(row=>itemKey(row)===identity)||
+        group==='equipment'&&remarks?.equipment?.[part]?.[slots[0]])continue;
+    }
     let target=next;
     for(const key of path.slice(0,-1)){
       if(Array.isArray(target)&&key.startsWith('@')){
@@ -291,8 +318,8 @@ export function applyEventFieldChanges(row, changes, {reverse=false,requireMatch
       const number=Number(balance)+(reverse?-change.delta:change.delta);
       if(!Number.isFinite(number)||number<0)return null;
       value=typeof current==='string'?String(number):number;
-    }else if(requireMatch&&!same(list?itemFields(current):current,list?itemFields(expected):expected)){
-      if(same(list?itemFields(current):current,list?itemFields(value):value))continue;
+    }else if(requireMatch && !(list?sameItemFields(current,expected,prebuilt&&path[1]==='inventory'):same(current,expected))){
+      if(list?sameItemFields(current,value,prebuilt&&path[1]==='inventory'):same(current,value))continue;
       return null;
     }
     if(list){

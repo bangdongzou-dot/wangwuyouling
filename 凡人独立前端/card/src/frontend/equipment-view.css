@@ -82,6 +82,14 @@
 
 /* 品阶装饰共用于背包、装备、赠送与详情。纹饰层级来自实际器类，文字仍保留。 */
 .fr-item-surface{--fr-item-aura:#b9a783;isolation:isolate}
+/* 品阶色和类别色只影响名称，文字标签仍区分已知品阶与物品类别。 */
+.fr-item-surface[data-fr-item-color-source='grade'] :is(.inventory-slot-name,.inventory-slot-name span,.fr-equip__name,.fr-equip__grade),
+.fr-item-surface[data-fr-item-color-source='category'] :is(.inventory-slot-name,.inventory-slot-name span,.fr-equip__name){color:var(--fr-item-label-color)!important}
+body.theme-day .fr-item-surface[data-fr-item-color-source]:not([data-fr-item-color-source='none']):not(.fr-equip__slot) :is(.inventory-slot-name,.inventory-slot-name span){color:var(--fr-item-label-day-color)!important}
+.item-detail-beautiful-header[data-fr-item-color-source='grade'] :is(.item-detail-name-large,.item-tag.rarity),
+.item-detail-beautiful-header[data-fr-item-color-source='category'] :is(.item-detail-name-large,.item-tag.rarity){color:var(--fr-item-label-color)!important}
+body.theme-day #item-detail-overlay .fr-item-dossier .item-detail-beautiful-header[data-fr-item-color-source]:not([data-fr-item-color-source='none']) .item-detail-name-large,
+body.theme-day .item-detail-beautiful-header[data-fr-item-color-source]:not([data-fr-item-color-source='none']) .item-tag.rarity{color:var(--fr-item-label-day-color)!important;background:none;-webkit-text-fill-color:currentColor}
 .fr-item-icon{flex-shrink:0;overflow:visible}
 .fr-item-surface[data-fr-item-tier='magic']{border-color:color-mix(in srgb,var(--fr-item-aura) 45%,#625139)}
 .fr-item-surface[data-fr-item-tier='treasure']{border-color:color-mix(in srgb,var(--fr-item-aura) 65%,#cbb581);box-shadow:inset 0 0 0 3px #18191e,inset 0 0 0 4px color-mix(in srgb,var(--fr-item-aura) 38%,transparent),0 2px 8px #0003}

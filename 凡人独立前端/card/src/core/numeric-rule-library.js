@@ -4,6 +4,7 @@ import { techniqueSpeedContract, buildCultivationSpeedRules, CULTIVATION_ROOT_BA
   CULTIVATION_DAYS_PER_YEAR, TECHNIQUE_SPEED_BY_GRADE, CULTIVATION_ROOT_LABELS, CULTIVATION_ROOT_TRAITS } from './cultivation-speed.js';
 import { CONTAINER_LIMITS, CONTAINER_HARD_CAPS } from './container-equipment.js';
 import { applyNumericSettings } from './numeric-settings.js';
+import { DEFAULT_SKILL_COST_PERCENT, SKILL_REALM_ANCHORS } from './numeric-skill.js';
 
 const baselineRules = () => numericRulesText({includeTechniqueSpeed:false}).split('\n【修炼速度生成与消费合同')[0]
   .split('\n').filter(line=>!line.startsWith('基准区间乘下列系数')&&!line.startsWith('气运、魅力单独用')).join('\n');
@@ -51,6 +52,14 @@ export function numericRuleDefaults() {
       '持续照管药园等收入较高的低级差事，每月约2–5块下品灵石。首次任职从低端估起，涨报酬须符合职责和表现。',
       '黄枫谷筑基弟子每年可领一块中品灵石，并有额外材料和供给。不同宗门、身份及职务按当地制度估算。',
       '按实际已任职时间或已有资格的供给周期合计过账，入门当天不预发未来俸禄。同一份供给与同一段差事不重复记，已结算的期间不再计入。来源、品类和实发数有原文时优先用原文。',
+    ].join('\n') },
+    { id: 'skill-mana-cost', name: '技能品阶与法力消耗', content: [
+      '技能大阶 | 消耗下限（%） | 消耗上限（%）',
+      ...Object.keys(SKILL_REALM_ANCHORS).map(realm=>[realm+'阶',...DEFAULT_SKILL_COST_PERCENT].join(' | ')),
+      '基准是技能大阶入门时的标准法力白值下界。按阶内位置在上下限之间线性取值，最后四舍五入为每次法力消耗。',
+      '阶内位置 0–24 为下品，25–49 为中品，50–74 为上品，75–100 为顶阶。已有定标沿用；技能本身发生质变时才重新判档。',
+      '角色突破、资源亏空和装备变化不抬高同一招式的单次消耗。按面板最终当前法力判定并扣减，包含已生效的常驻加成和 Buff。未发动不扣费，已发动后落空、被挡也扣费。',
+      '凡俗武学、固有感官与装备或耗材自身的代价按真实资源处理，不套法力区间。',
     ].join('\n') },
     { id: 'equipment-transmission', name: '装备容器与神识门槛', content: [
       '器类·品质 | 传导率 | 启动 / 完整传导神识',
@@ -126,6 +135,7 @@ export function configureNumericRules(rules) {
       }else if(parsed.some(value=>value.length!==1))throw new Error(rule.name+'「'+label+'」须逐项填写数字');
       if(['attribute-baseline','scalar-ranges'].includes(rule.id)&&row[1]<=row[0])throw new Error(label+'的上界须大于下界');
       if(rule.id==='world-event-lifecycle'&&row.some(value=>!Number.isInteger(value)||value<=0))throw new Error(label+' duration must be positive integer days');
+      if(rule.id==='skill-mana-cost'&&(row[0]<=0||row[1]<row[0]||row[1]>100))throw new Error(label+'须满足 0＜消耗下限≤消耗上限≤100');
       if(['attribute-factors','cultivation-progress'].includes(rule.id)&&row[0]<=0)throw new Error(label+'须大于零');
       values.set(label,row);
     }

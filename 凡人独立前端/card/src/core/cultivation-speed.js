@@ -142,7 +142,7 @@ export function resolveCultivationSpeedCell(raw, character) {
 }
 
 export function calculateCultivationProgress(input = {}) {
-  const realm = String(input.realm || '').replace(/^练气/u,'炼气');
+  const realm = String(input.realm || '').trim().replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
   const stage = Object.keys(CULTIVATION_BASE_YEARS).find(key => realm.startsWith(key));
   if (!stage) return {ok:false,reason:'unsupported_realm'};
   const speed = input.finalSpeed && typeof input.finalSpeed === 'object' ? input.finalSpeed.current : input.finalSpeed;

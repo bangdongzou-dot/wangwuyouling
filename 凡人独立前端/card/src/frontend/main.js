@@ -11976,6 +11976,74 @@ async function _portraitCallDoubaoImageGen(providerConfig, prompt, signal) {
   return await _portraitExtractOpenAiStyleImageData(data, providerConfig.responseFormat || 'b64_json', signal);
 }
 
+async function frStoryImageWebpCopy(blob, signal) {
+  let bitmap, canvas;
+  try {
+    signal?.throwIfAborted();
+    bitmap = await createImageBitmap(blob);
+    signal?.throwIfAborted();
+    canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    const copy = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.9));
+    signal?.throwIfAborted();
+    if (copy?.type === 'image/webp' && copy.size > 0 && copy.size < blob.size) return copy;
+  } catch (error) {
+    signal?.throwIfAborted();
+  } finally {
+    bitmap?.close();
+    if (canvas) { canvas.width = 0; canvas.height = 0; }
+  }
+  return blob;
+}
+
+function frStoryImageUploadLabel(info) {
+  return '参考图 ' + info.referenceCount + ' 张 · 提示词 ' + info.promptChars +
+    ' 字符 · 请求体 ' + info.requestBytes + ' 字节';
+}
+
+async function frStoryImageReferenceCopy(src, signal) {
+  const blob = await (await fetch(src, { signal })).blob();
+  return {attachment: await frStoryImageWebpCopy(blob, signal), originalBytes: blob.size};
+}
+
+async function frBuildStoryImageUpload(body, references, signal, readReference = src=>frStoryImageReferenceCopy(src,signal)) {
+  // GPT Image validates the image count, each image, and the prompt separately.
+  const promptChars = Array.from(body.prompt).length;
+  if (promptChars > 32000) throw new Error('GPT Image 提示词为 ' + promptChars + ' 字符，超过官方 32000 字符限制。');
+  if (references.length > 16) throw new Error('GPT Image 本次有 ' + references.length + ' 张参考图，超过官方 16 张限制。');
+  const info = {referenceCount: references.length, promptChars, referenceBytes: 0, originalReferenceBytes: 0,
+    previousFloorCount: 0, previousFloorBytes: 0};
+  if (!references.length) {
+    const request = new Blob([JSON.stringify(body)], {type: 'application/json'});
+    return {request, info: {...info, requestBytes: request.size}};
+  }
+  // Compose one Blob so that its byte length is that of the very body fetch sends.
+  const boundary = '----fanrenimage' + crypto.randomUUID();
+  const parts = Object.entries(body).map(([key, value]) => '--' + boundary +
+    '\r\nContent-Disposition: form-data; name="' + key + '"\r\n\r\n' +
+    String(value).replace(/\r\n|\r|\n/g, '\r\n') + '\r\n');
+  for (const [index, reference] of references.entries()) {
+    signal?.throwIfAborted();
+    const {attachment, originalBytes} = await readReference(reference.src);
+    if (attachment.size >= 50_000_000)
+      throw new Error('GPT Image 第 ' + (index + 1) + ' 张参考图为 ' + attachment.size + ' 字节，超过官方单图限制（须小于 50 MB）。');
+    const extension = attachment.type.split('/')[1];
+    parts.push('--' + boundary + '\r\nContent-Disposition: form-data; name="image[]"; filename="reference-' +
+      (index + 1) + '.' + extension + '"\r\nContent-Type: ' + attachment.type + '\r\n\r\n', attachment, '\r\n');
+    info.originalReferenceBytes += originalBytes;
+    info.referenceBytes += attachment.size;
+    if (reference.name === '上一个有插图的回合') {
+      info.previousFloorCount++;
+      info.previousFloorBytes += attachment.size;
+    }
+  }
+  parts.push('--' + boundary + '--\r\n');
+  const request = new Blob(parts, {type: 'multipart/form-data; boundary=' + boundary});
+  return {request, info: {...info, requestBytes: request.size}};
+}
+
 async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal, references = []) {
   if (!providerConfig.apiUrl || !providerConfig.apiKey || !providerConfig.apiModel) {
     throw new Error('请先配置 OpenAI 文生图 API（URL、Key、模型）');
@@ -11984,10 +12052,15 @@ async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal, refer
   signal = library.imageRequestSignal(providerConfig,signal);
   const body = library.gptImageRequestBody(providerConfig,prompt);
   const headers = { Authorization: 'Bearer ' + providerConfig.apiKey };
-  let operation = 'images/generations';
+  const operation = references.length ? 'images/edits' : 'images/generations';
   let requestBody = JSON.stringify(body);
-  if (references.length) {
-    operation = 'images/edits';
+  let uploadInfo;
+  if (providerConfig.storyImageUpload) {
+    const {request, info} = await frBuildStoryImageUpload(body, references, signal, providerConfig.readStoryImageReference);
+    requestBody = request;
+    headers['Content-Type'] = request.type;
+    uploadInfo = info;
+  } else if (references.length) {
     const form = new FormData();
     for (const [key, value] of Object.entries(body)) form.set(key, value);
     for (const [index, reference] of references.entries()) {
@@ -12001,6 +12074,10 @@ async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal, refer
   }
   signal?.throwIfAborted();
   library.takeImageRouteSlot(providerConfig);
+  if (uploadInfo) {
+    providerConfig.storyImageUpload(uploadInfo);
+    console.info('[正文插图上传]', JSON.stringify(uploadInfo));
+  }
   var response = await fetch(CE_CORE['api-library'].modelEndpoint(providerConfig.apiUrl, operation), {
     method: 'POST',
     headers,
@@ -12008,6 +12085,10 @@ async function _portraitCallOpenAiImageGen(providerConfig, prompt, signal, refer
     signal: signal || null
   });
   if (!response.ok) {
+    if (response.status === 413 && uploadInfo) {
+      console.warn('[正文插图上传 413]', JSON.stringify(uploadInfo));
+      throw new Error('GPT Image 线路返回 413，请求体过大。' + frStoryImageUploadLabel(uploadInfo) + '。');
+    }
     var openaiErr = await _portraitExtractApiError(response);
     throw new Error((references.length ? 'GPT Image 参考图请求失败' : 'OpenAI 图片生成失败') +
       ' (' + response.status + '): ' + openaiErr);
@@ -14520,7 +14601,7 @@ function _techniqueItemDetailParseChineseNumber(text) {
 }
 
 function _techniqueItemDetailGetRealmRank(realmText) {
-  var realm = String(realmText || '').replace(/\s+/g, '');
+  var realm = String(realmText || '').replace(/\s+/g, '').replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
   if (!realm) return -1;
   if (realm.indexOf('凡人') !== -1) return 0;
   if (realm.indexOf('炼气') !== -1) {
@@ -17402,6 +17483,17 @@ function frFindBondedSourceRow(state, archive, id) {
   return null;
 }
 
+function frSpendSkillMana(character, skills, operation, worldTime) {
+  if (frNumericIsTranscendent(character['2']) || (typeof frNumericIsRedCompanion === 'function' && frNumericIsRedCompanion(character))) return;
+  const skill = skills.find(row => (row?.['0'] || row?.id) === operation.skillId);
+  if (!skill) throw new Error('未找到角色已掌握的技能：' + operation.skillId);
+  const attributes = parseNestedJsonString(character['11'], {});
+  const panel = frNumericNativeCharacterAttributes(operation.id, character, worldTime)?.['法力'];
+  if (panel?.numericValidity?.current!=='valid') throw new Error('当前法力无效');
+  const mana = CE_CORE['numeric-skill'].settleSkillMana(skill, attributes['法力'], panel, operation.uses, panel.sources.skillMana);
+  character['11'] = JSON.stringify({...attributes, '法力':mana});
+}
+
 async function applyChanges(baseState, delta, executionOptions) {
   const fixedArchive = executionOptions?.archiveName || currentArchiveName;
   const checkExecution = executionOptions?.checkTurn || (() => { executionOptions?.signal?.throwIfAborted(); if (executionOptions && fixedArchive !== currentArchiveName) throw Object.assign(new Error('AbortedByUser'),{name:'AbortError'}); });
@@ -17449,7 +17541,7 @@ console.log('--- 【步骤2.1】正在应用指令:', JSON.stringify(op), '---')
 try {
 const { command, id, data, eventData, attribute, value, slot, item, locationId, regionData } = op;
 if (frStrict) {
-const supported = ['set','add','updateAttribute','de','equipItem','unequipItem','addWorldEvent','updateWorldEvent','deleteWorldEvent','addItem','addSkill','addTrait','createLocation','updateRegion','deleteLocation'];
+const supported = ['set','add','updateAttribute','useSkill','de','equipItem','unequipItem','addWorldEvent','updateWorldEvent','deleteWorldEvent','addItem','addSkill','addTrait','createLocation','updateRegion','deleteLocation'];
 if (!supported.includes(command)) throw new Error('补演提交：未知原卡指令 ' + command);
 const objectData = v => !!v && typeof v === 'object' && !Array.isArray(v);
 if (['set','add','updateWorldEvent'].includes(command) && !objectData(data)) throw new Error('补演提交：'+command+' 缺少合法载荷');
@@ -17532,6 +17624,8 @@ if (!data || typeof data !== 'object') { if (frStrict) throw new Error('补演�
 const processedData = recursivelyParseJsonStrings(tableIndex === '0' ? frProjectCharacterColumns(data, '') : data);
 let idToSet = processedData['0'] || id;
 if (!idToSet) { if (frStrict) throw new Error('补演提交：set缺少ID'); continue; }
+if (String(tableIndex)==='8' && !Object.hasOwn(processedData,'skillPricing') && newState['8']?.[idToSet]?.skillPricing)
+  processedData.skillPricing = newState['8'][idToSet].skillPricing;
 if (frStrict && !newState[tableIndex]) throw new Error('补演提交：set目标表不存在');
 if (tableIndex === '0' && newState['0']) {
 const existingChar = newState['0'][idToSet];
@@ -17583,6 +17677,7 @@ const oldAttributes = parseNestedJsonString(targetRow['11'], {});
 Object.keys(newAttributesPartial).forEach(key => {
 const attributeKey = key === 'hp' ? '血量' : key;
 const change = newAttributesPartial[key];
+const previousCurrent = oldAttributes[attributeKey]?.current;
 if (change && typeof change === 'object' && ('current' in change || 'max' in change)) {
 if (!oldAttributes[attributeKey]) oldAttributes[attributeKey] = { current: 0, max: 0 };
 if (typeof change.current === 'number') oldAttributes[attributeKey].current = change.current;
@@ -17596,6 +17691,8 @@ oldAttributes[attributeKey].current = Math.min(
 oldAttributes[attributeKey].current,
 oldAttributes[attributeKey].max,
 );
+if (attributeKey==='法力' && oldAttributes[attributeKey].skillBonusSpent)
+  CE_CORE['numeric-skill'].clearSpentSkillBonusOnFullRecovery(oldAttributes[attributeKey],previousCurrent);
 }
 });
 targetRow['11'] = JSON.stringify(oldAttributes);
@@ -17629,6 +17726,15 @@ if (!skip) targetRow[key] = data[key];
 if (String(tableIndex)==='1') ceRemoveRetiredItemColumns(targetRow,targetRow['2'] || targetRow.type);
 break;
 }
+case 'useSkill': {
+  const character = newState['0']?.[id];
+  if (!character) throw new Error('技能消耗的人物不存在：' + id);
+  const skills = id === 'B1' ? Object.values(newState['8'] || {})
+    : parseNestedJsonString(parseRemarksString(character['9'] || '').skills, []);
+  frSpendSkillMana(character, skills, op, frStatusWorldTime(newState));
+  updatedCharacterIds.add(id);
+  break;
+}
 case 'updateAttribute':
 if (newState[tableIndex] && newState[tableIndex][id]) {
 const charRow = newState[tableIndex][id];
@@ -17636,9 +17742,12 @@ if (String(tableIndex) === '0' && (frNumericIsTranscendent(charRow['2']) || (typ
 let attributes = parseNestedJsonString(charRow['11'], {});
 const attributeKey = attribute === 'hp' ? '血量' : attribute;
 if (!attributes[attributeKey]) attributes[attributeKey] = { current: 0, max: 0 };
+const previousCurrent = attributes[attributeKey].current;
 if (typeof value.current === 'number') attributes[attributeKey].current = value.current;
 if (typeof value.max === 'number') attributes[attributeKey].max = value.max;
 attributes[attributeKey].current = Math.min(attributes[attributeKey].current, attributes[attributeKey].max);
+if (attributeKey==='法力' && attributes[attributeKey].skillBonusSpent && typeof value.current==='number')
+  CE_CORE['numeric-skill'].clearSpentSkillBonusOnFullRecovery(attributes[attributeKey], previousCurrent);
 charRow['11'] = JSON.stringify(attributes);
 }
 break;
@@ -17758,7 +17867,7 @@ break;
 }
 }
 } catch (e) {
-if (frStrict || e?.name === 'AbortError') throw e;
+if (frStrict || rawOp.command === 'useSkill' || e?.name === 'AbortError') throw e;
 console.error('应用更改时出错:', op, e);
 }
 }
@@ -17801,7 +17910,7 @@ return { newState, characterNameChanges, updatedCharacterIds };
  function extractCommands(text) {
           const commands = [];
           const commandRegex =
-            /(add|set|de|addWorldEvent|addSmallSummary|addLargeSummary|updateAttribute|equipItem|unequipItem|createLocation|updateRegion|deleteLocation|addItem|addSkill|addTrait)\s*\(/g;
+            /(add|set|de|addWorldEvent|addSmallSummary|addLargeSummary|updateAttribute|useSkill|equipItem|unequipItem|createLocation|updateRegion|deleteLocation|addItem|addSkill|addTrait)\s*\(/g;
           let match;
 
           while ((match = commandRegex.exec(text)) !== null) {
@@ -18152,7 +18261,7 @@ return sign ? (sign + randomValue.toString()) : randomValue.toString();
 });
 
 // 更新正则以支持更多指令
-const commandRegex = /(add|set|de|addWorldEvent|updateWorldEvent|deleteWorldEvent|addSmallSummary|addLargeSummary|updateAttribute|equipItem|unequipItem|createLocation|updateRegion|deleteLocation|addItem|addSkill|addTrait)\s*\(/g;
+const commandRegex = /(add|set|de|addWorldEvent|updateWorldEvent|deleteWorldEvent|addSmallSummary|addLargeSummary|updateAttribute|useSkill|equipItem|unequipItem|createLocation|updateRegion|deleteLocation|addItem|addSkill|addTrait)\s*\(/g;
 
 // 手动提取指令，因为 extractCommands 可能没更新
 const commands = [];
@@ -18260,6 +18369,11 @@ delta.push({ command: 'deleteWorldEvent', id: args[0] });
 break;
 case 'updateAttribute':
 delta.push({ command, id: args[0], attribute: args[1], value: args[2] });
+break;
+case 'useSkill':
+if (args.length !== 3 || typeof args[0] !== 'string' || typeof args[1] !== 'string' || !Number.isSafeInteger(args[2]) || args[2] < 1)
+  throw new Error('useSkill 须填写人物ID、技能ID和实际催发次数');
+delta.push({ command, id:args[0], skillId:args[1], uses:args[2] });
 break;
 case 'equipItem':
 case 'unequipItem':
@@ -19990,8 +20104,12 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
 
           if (!playerData) return;
 
-          const customAvatarData = await dbGet(`${CUSTOM_AVATAR_KEY}_${currentArchiveName}`);
+          const archiveName = currentArchiveName;
+          const customAvatarData = await dbGet(`${CUSTOM_AVATAR_KEY}_${archiveName}`);
+          if (archiveName !== currentArchiveName) return;
           const visualData = playerData.visualData;
+          const hasVisualData = visualData?.mode === 'full' ? !!visualData.fullId
+            : visualData?.mode === 'split' && !!(visualData.bodyId || visualData.faceId);
 
           const useVideo = (videoEl, imgEl, wrapperSelector, displayEl) => {
             if (!videoEl || !imgEl) return;
@@ -19999,16 +20117,38 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
             if (oldWrapper) oldWrapper.remove();
 
             let appearance = playerData.avatarAppearance || 'auto';
-            if (appearance === 'auto') {
+            if (appearance !== '男性' && appearance !== '女性') {
               appearance = playerData.gender === '女' ? '女性' : '男性';
             }
             const realm = playerData.realm && playerData.realm !== '无' ? playerData.realm.slice(0, 2) : '凡人';
             const realmVideos = realmToVideoMap[realm] || realmToVideoMap['default'];
             const videoUrl = realmVideos[appearance];
-
-            if (videoEl.src !== videoUrl) videoEl.src = videoUrl;
-            videoEl.classList.remove('hidden');
-            imgEl.classList.add('hidden');
+            const poster = window.__FR_DEFAULT_AVATAR_POSTERS__[appearance === '女性' ? 'female' : 'male'];
+            const showPoster = () => {
+              videoEl.classList.add('hidden');
+              if (imgEl.src !== poster) imgEl.src = poster;
+              imgEl.classList.remove('hidden');
+            };
+            const showVideo = () => {
+              videoEl.classList.remove('hidden');
+              imgEl.classList.add('hidden');
+              if (videoEl.paused) {
+                videoEl.play().catch(() => {
+                  if (videoEl.onloadeddata === showVideo && videoEl.error) showPoster();
+                });
+              }
+            };
+            videoEl.poster = poster;
+            videoEl.onloadeddata = showVideo;
+            videoEl.onerror = showPoster;
+            if (videoEl.src !== videoUrl) {
+              showPoster();
+              videoEl.src = videoUrl;
+            } else if (videoEl.readyState >= 2 && !videoEl.error) {
+              showVideo();
+            } else {
+              showPoster();
+            }
           };
 
           const useLocalImage = (videoEl, imgEl, wrapperSelector, displayEl, src) => {
@@ -20016,6 +20156,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
             const oldWrapper = displayEl.querySelector(wrapperSelector);
             if (oldWrapper) oldWrapper.remove();
 
+            videoEl.onloadeddata = videoEl.onerror = null;
             videoEl.classList.add('hidden');
             imgEl.src = src;
             imgEl.classList.remove('hidden');
@@ -20026,6 +20167,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
             const oldWrapper = displayEl.querySelector(wrapperSelector);
             if (oldWrapper) oldWrapper.remove();
 
+            videoEl.onloadeddata = videoEl.onerror = null;
             videoEl.classList.add('hidden');
             imgEl.classList.add('hidden');
 
@@ -20082,7 +20224,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
                 mainDisplay,
                 customAvatarData,
               );
-            } else if (visualData) {
+            } else if (hasVisualData) {
               useVisualData(mainAvatarVideo, mainCustomAvatarImg, '.dressing-room-avatar-wrapper', mainDisplay);
             } else {
               useVideo(mainAvatarVideo, mainCustomAvatarImg, '.dressing-room-avatar-wrapper', mainDisplay);
@@ -20098,7 +20240,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
                 modalDisplay,
                 customAvatarData,
               );
-            } else if (visualData) {
+            } else if (hasVisualData) {
               useVisualData(modalAvatarVideo, modalCustomAvatarImg, '.dressing-room-avatar-wrapper', modalDisplay);
             } else {
               useVideo(modalAvatarVideo, modalCustomAvatarImg, '.dressing-room-avatar-wrapper', modalDisplay);
@@ -28301,7 +28443,13 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
   const paragraphs = ceStoryImageParagraphs(plain.querySelector('content') || plain);
   const storyText = paragraphs.map(paragraph=>paragraph.text).join('\n').trim();
   const candidates = new Map((await ceIndependentStoryImageCandidates(archive, config)).map(char => [char.id, char]));
-  const providerConfig = { provider: 'openai', ...ceGetProviderImageApiConfig(config, 'openai'), storySize:config.imageStorySize };
+  const uploadCopies = new Map();
+  const readStoryImageReference = src => {
+    if (!uploadCopies.has(src)) uploadCopies.set(src, frStoryImageReferenceCopy(src,signal));
+    return uploadCopies.get(src);
+  };
+  const providerConfig = { provider: 'openai', ...ceGetProviderImageApiConfig(config, 'openai'), storySize:config.imageStorySize,
+    readStoryImageReference, storyImageUpload:info=>context.onStoryImageUpload?.(info) };
   const earlierFigures = [];
   if (config.imageSendReferences !== false && config.imageReferencePreviousFloor) {
     const logs = archive?.data?.logs || [];
@@ -28326,7 +28474,7 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
     anchors.add(item.anchor);
     return true;
   });
-  const prepare = async (item, previous) => {
+  const prepare = async (item, previous, shareFullStory = false) => {
       const visible = new Set(item.visibleActorIds || []), locked = [];
       const references = [], notes = [];
       for (const id of visible) {
@@ -28354,9 +28502,10 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
       references.push(...earlierFigures);
       const facts = config.imageSceneFacts ? ['【画面事实】',context.currentTime && '时间：' + context.currentTime,
         context.currentLocation && '地点：' + context.currentLocation,'锚点：' + item.anchor].filter(Boolean).join('\n') : '';
-      const prompt = [item.prompt,facts,config.imageSendFullStory && !locked.length && '【本回合可见正文】\n' + storyText,
+      const fullStory = config.imageSendFullStory && !locked.length && storyText;
+      const prompt = [item.prompt,facts,!shareFullStory && fullStory && '【本回合可见正文】\n' + fullStory,
         notes.length && '【人物外观】\n' + notes.join('\n')].filter(Boolean).join('\n\n');
-      return {prompt,references};
+      return {prompt,references,fullStory};
   };
   const generate = (prompt,references) => {
     const attached = frImageReferencesWithExample('story',references,16);
@@ -28376,10 +28525,12 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
   const results = [];
   if (config.imageStoryMode === 'grid' && planned.length > 1) {
     const ordered = [...planned].sort((a,b)=>a.paragraph-b.paragraph);
-    const panels = await Promise.all(ordered.map(item=>prepare(item)));
+    const panels = await Promise.all(ordered.map(item=>prepare(item,undefined,true)));
     const columns = panels.length <= 4 ? 2 : 3;
+    const storyPanels = panels.flatMap((panel,index)=>panel.fullStory ? ['第 ' + (index + 1) + ' 格'] : []);
     const gridPrompt = `生成一张 ${columns}×${columns} 的分镜网格。从左到右、从上到下，每格尺寸一致，无边框、留白和文字。各格内容独立，不得跨格。用独立的背景填充未指定的格子。\n`
-      + panels.map((item,index)=>`第 ${index + 1} 格\n${item.prompt}`).join('\n\n');
+      + panels.map((item,index)=>`第 ${index + 1} 格\n${item.prompt}`).join('\n\n')
+      + (storyPanels.length ? '\n\n【本回合可见正文，仅供' + storyPanels.join('、') + '参考】\n' + storyText : '');
     const imageUrl = await generate(gridPrompt,panels.flatMap(item=>item.references));
     results.push(...await ceSliceStoryImageGrid(imageUrl, ordered, columns));
   } else if (config.imageStoryMode === 'sequential') {
@@ -28479,6 +28630,7 @@ async function ceRunStoryImageJob({archiveName, logId, config, automatic = false
     showProgress('正在出图（计划 ' + plan.imagePrompts.length + ' 张）');
     const result = await ceGenerateAndInsertImagesToLatestLog(plan.imagePrompts,config,signal,{
       archiveName,logId,archive,currentTime,currentLocation,
+      onStoryImageUpload:info=>showProgress('正在上传 · ' + frStoryImageUploadLabel(info)),
       waitForFloorWrites:waitForFloorWrites && (()=>waitForFloorWrites(()=>showProgress('已收到图片，等待保存到本轮正文')))
     });
     signal.throwIfAborted();
@@ -41913,7 +42065,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
   });
 
   const batchedAllowedCommands = new Set([
-    'add', 'updateAttribute', 'addItem', 'addSkill', 'addTrait',
+    'add', 'updateAttribute', 'useSkill', 'addItem', 'addSkill', 'addTrait',
     'appendBiography', 'equipItem', 'unequipItem'
     // deItem/deSkill/deTrait 不走批量 applyChanges，走单条 applyConcurrentEvolutionDelta
   ]);
@@ -41979,7 +42131,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
       await ceDumpStateAndWorldbookNow('CE_DELTA_BATCH_APPLY', ceGetLastUserAction());
       return true;
     } catch (e) {
-      if (frStrict || strictApply) throw e;
+      if (frStrict || strictApply || ops.some(op=>op.command==='useSkill')) throw e;
       console.error(`[并发演化][${mergeTargetId}] 批量应用失败，回退到逐条执行`, e);
       return false;
     }
@@ -48725,7 +48877,7 @@ async function applyConcurrentEvolutionDelta(op, target, options = {}) {
   checkAbort();
   const command = op.command;
   if (frStrict && !new Set([
-    'add', 'set', 'de', 'updateAttribute', 'addItem', 'addSkill', 'addTrait',
+    'add', 'set', 'de', 'updateAttribute', 'useSkill', 'addItem', 'addSkill', 'addTrait',
     'equipItem', 'unequipItem', 'appendBiography', 'deItem', 'deSkill', 'deTrait',
     'addGongfa', 'setGongfa', 'deGongfa'
   ]).has(command)) throw new Error('补演提交：人物阶段不支持指令：' + command);
@@ -48835,7 +48987,7 @@ async function applyConcurrentEvolutionDelta(op, target, options = {}) {
       await ceDumpStateAndWorldbookNow('CE_DELTA_APPLY', ceGetLastUserAction());
       return true;
     } catch (e) {
-      if (frStrict || strictApply) throw e;
+      if (frStrict || strictApply || command==='useSkill') throw e;
       console.error('[并发演化] applyChanges 失败，回退到本地应用:', e);
     }
   }
@@ -49270,15 +49422,22 @@ function applyConcurrentEvolutionBioChanges(characterData, operation) {
       characterData['35'] = appendOp.data['35'];
       modified = true;
     }
+  } else if (command === 'useSkill') {
+    const skills = parseNestedJsonString(parseRemarksString(characterData['9'] || '').skills, []);
+    frSpendSkillMana(characterData, skills, operation, frStatusWorldTime());
+    modified = true;
   } else if (command === 'updateAttribute' && attribute && value) {
     let attributes = parseNestedJsonString(characterData['11'], {});
     const attributeKey = attribute === 'hp' ? '血量' : attribute;
     if (!attributes[attributeKey]) attributes[attributeKey] = { current: 0, max: 0 };
+    const previousCurrent = attributes[attributeKey].current;
     if (typeof value.current === 'number') attributes[attributeKey].current = value.current;
     if (typeof value.max === 'number') attributes[attributeKey].max = value.max;
     if (attributes[attributeKey].max) {
       attributes[attributeKey].current = Math.min(attributes[attributeKey].current, attributes[attributeKey].max);
     }
+    if (attributeKey==='法力' && attributes[attributeKey].skillBonusSpent && typeof value.current==='number')
+      CE_CORE['numeric-skill'].clearSpentSkillBonusOnFullRecovery(attributes[attributeKey], previousCurrent);
     characterData['11'] = JSON.stringify(attributes);
     modified = true;
   } else if (command === 'set' && data && typeof data === 'object') {
@@ -56881,6 +57040,7 @@ async function buildItemManagementPrompt(context) {
 
   prompt += '\n\n【本轮物品核对名单】\n' + scopeTargets.map(target => target.id + ' ' + (target.name || '')).join('、')
     + '\n逐个核对这些人物的储物袋、装备和功法物，实际得失、消耗和装备变化按本轮事实处理。范围内离场和在场人物使用相同的物品指令。保留原有库存，已消耗、遗失或转交的物品不得补发。只输出原协议。';
+  prompt += '\n' + CE_CORE['canon-event-details'].SPIRIT_STONE_SETTLEMENT_RULE;
   const firstNpcNames=scopeTargets.filter(target=>target.type==='npc'&&target.justCreated===true).map(target=>target.id+' '+(target.name||''));
   if(firstNpcNames.length)
     prompt += '\n【首次建档，可配置基础装备与私物】'+firstNpcNames.join('、')+'。'+FrEquipmentRuntime.core().NPC_ATTIRE_RULE;
@@ -60135,14 +60295,11 @@ async function requestMiscEvolutionPhase(options = {}) {
     allCharactersInventory: (sharedContext && sharedContext.allCharactersInventory) || ''
   });
   const fallbackPreset = preset;
-  let prompt = await buildRoutePrompt(preset);
-  if (!prompt) {
+  const fallbackPrompt = await buildRoutePrompt(preset);
+  if (!fallbackPrompt) {
     return { skipped: true, reason: 'prompt_failed' };
   }
 
-  if(sharedContext?.canonTurnPlan&&typeof frCanonOwnershipInstruction==='function')prompt+=frCanonOwnershipInstruction(sharedContext.canonTurnPlan);
-  const dsWire = typeof frUsesDeepSeekEvolutionWire === 'function' && frUsesDeepSeekEvolutionWire(preset);
-  if (dsWire) prompt=frEvolutionWirePrompt(prompt,preset);
   const miscStatusOwner=showMiscEvolutionDanmakuStatus(signal);
   const miscProgress=typeof frCanonProgressStart==='function'?frCanonProgressStart(signal,'misc'):null;
 
@@ -60160,24 +60317,32 @@ async function requestMiscEvolutionPhase(options = {}) {
     let apiRetryCount = 0;
     let parseRetryCount = 0;
     let lastParseError = '';
+    let pendingCommandRepair = null;
     while (true) {
       const _mCurCfg = _miscApiConfigs[_miscApiIdx];
       const hasNextRoute=_miscApiIdx<_miscApiConfigs.length-1;
       try {
         ceThrowIfConcurrentEvolutionAborted(signal);
         const preset = await ceResolveEvolutionRoutePreset(_mCurCfg, fallbackPreset, resolvedConfig);
-        let prompt = await buildRoutePrompt(preset);
-        if (!prompt) throw new Error('接口绑定预设未提供世界演化规则');
-        if(sharedContext?.canonTurnPlan&&typeof frCanonOwnershipInstruction==='function')prompt+=frCanonOwnershipInstruction(sharedContext.canonTurnPlan);
         const dsWire = typeof frUsesDeepSeekEvolutionWire === 'function' && frUsesDeepSeekEvolutionWire(preset);
-        if(dsWire) prompt=frEvolutionWirePrompt(prompt,preset);
+        const canRepairCommands = dsWire && typeof FrMergedEvolution === 'object';
+        const repairing = canRepairCommands ? pendingCommandRepair : null;
+        let prompt;
+        if (repairing) {
+          prompt = FrMergedEvolution.commandRepairPrompt(repairing.issues);
+        } else {
+          prompt = preset === fallbackPreset ? fallbackPrompt : await buildRoutePrompt(preset);
+          if (!prompt) throw new Error('接口绑定预设未提供世界演化规则');
+          if(sharedContext?.canonTurnPlan&&typeof frCanonOwnershipInstruction==='function')prompt+=frCanonOwnershipInstruction(sharedContext.canonTurnPlan);
+          if (dsWire) prompt=frEvolutionWirePrompt(prompt,preset);
+          if (lastParseError) prompt += ceMiscParseRepairInstruction(lastParseError);
+        }
         const shouldUseThinkingPrefill = !dsWire && !!(
           sharedContext
           && sharedContext.canonProseOnly !== true
           && sharedContext.originalTimelinePhaseReuseEnabled === true
           && sharedContext.originalTimelineThinkingEnabled !== false
         );
-        if (lastParseError) prompt += ceMiscParseRepairInstruction(lastParseError);
         const messages = shouldUseThinkingPrefill
           ? [
               { role: 'user', content: prompt },
@@ -60219,7 +60384,17 @@ async function requestMiscEvolutionPhase(options = {}) {
         }
         ceThrowIfApiFailureText(response, '杂项演化');
 
-        const wire=dsWire?frEvolutionWireReply(response,preset):null;
+        let wire=null;
+        if (repairing) {
+          try {
+            const commands=FrMergedEvolution.repairCommands(repairing.value.commands,repairing.issues,response);
+            wire=frEvolutionWireReply(JSON.stringify({...repairing.value,commands}),preset,false,true);
+          } catch (error) {
+            wire={error:'杂项指令格式修复失败：'+String(error.message||error)};
+          }
+        } else if (dsWire) {
+          wire=frEvolutionWireReply(response,preset,false,canRepairCommands);
+        }
         const parsed = wire?.error ? {error:wire.error} : parseMiscEvolutionResponse(wire?.text??response, {
           canonProseOnly: sharedContext && sharedContext.canonProseOnly === true,
           canonWorldEvidence: sharedContext && sharedContext.canonWorldEvidence
@@ -60230,6 +60405,7 @@ async function requestMiscEvolutionPhase(options = {}) {
             return { skipped:false, noOperations:false, error:parsed.error, errorType:'scope', delta:parsed.delta || [], blockedOps:parsed.blockedOps || [], thinking:parsed.thinking || '', commandsString:parsed.commandsString || '' };
           }
           lastParseError = parsed.error;
+          pendingCommandRepair = wire?.commandRepair || null;
           if (parseRetryCount < maxParseRetry) {
             parseRetryCount++;
             const retryMsg = `[杂项演化] 解析失败，重试 (${parseRetryCount}/${maxParseRetry})`;
@@ -60241,6 +60417,7 @@ async function requestMiscEvolutionPhase(options = {}) {
           }
           if (_miscApiIdx < _miscApiConfigs.length - 1) {
             _miscApiIdx++;
+            pendingCommandRepair = null;
             if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(miscProgress,{state:'backup',index:_miscApiIdx+1});
             apiRetryCount = 0;
             parseRetryCount = 0;
@@ -60296,6 +60473,7 @@ async function requestMiscEvolutionPhase(options = {}) {
         // 所有重试耗尽，尝试切换备用API
         if (_miscApiIdx < _miscApiConfigs.length - 1) {
           _miscApiIdx++;
+          pendingCommandRepair = null;
           if(typeof frCanonProgressRequest==='function')frCanonProgressRequest(miscProgress,{state:'backup',index:_miscApiIdx+1});
           apiRetryCount = 0;
           parseRetryCount = 0;
@@ -61182,6 +61360,10 @@ function ceCollectOriginalTimelineCharacterOperationSignatures(op) {
 
   if (command === 'updateAttribute') {
     pushSignature(ceBuildOriginalTimelineCharacterVariableSignature(targetId, 'attribute', op.attribute || op.field || op.subCategory || 'attribute'));
+    return signatures;
+  }
+  if (command === 'useSkill') {
+    pushSignature(ceBuildOriginalTimelineCharacterVariableSignature(targetId, 'skillUse', op.skillId));
     return signatures;
   }
   if (command === 'appendBiography') {
@@ -63664,7 +63846,7 @@ function ceMapBeastLevelToRank(level, mode = 'threshold') {
 }
 
 function ceGetRealmRank(realmText, mode = 'threshold') {
-  const realm = String(realmText || '').replace(/\s+/g, '');
+  const realm = String(realmText || '').replace(/\s+/g, '').replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
   if (!realm) return -1;
   if (realm.includes('凡人')) return CE_REALM_STAGE_BASE.凡人;
 
@@ -63772,6 +63954,7 @@ function ceParseAttributeNumber(raw) {
 }
 
 function ceExtractTechniqueEffectTokens(effectText) {
+  effectText = effectText.normalize('NFKC').replace(/−/gu,'-');
   const attrPattern = [...CE_TECHNIQUE_VALID_ATTRS, ...Object.keys(CE_TECHNIQUE_ATTR_ALIAS)]
     .sort((a, b) => b.length - a.length)
     .map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -63815,10 +63998,7 @@ function ceComposeTechniqueCurrentEffect(realmEffectsText, ownerRealmText) {
 
   const speedCore = typeof CE_CORE === 'object' && CE_CORE?.['cultivation-speed'];
   const ownerRank = speedCore?.techniqueImmortalRealmRank?.(ownerRealmText) ?? ceGetRealmRank(ownerRealmText, 'owner');
-  let active = entries.filter(entry => entry.rank === -1 || (ownerRank !== -1 && entry.rank <= ownerRank));
-  if (active.length === 0 && ownerRank === -1) {
-    active = entries.slice(0, 1);
-  }
+  const active = entries.filter(entry => entry.rank === -1 || (ownerRank !== -1 && entry.rank <= ownerRank));
   if (active.length === 0) return '';
 
   const attrLatest = new Map();
@@ -63845,13 +64025,26 @@ function ceComposeTechniqueCurrentEffect(realmEffectsText, ownerRealmText) {
   return String(active[active.length - 1].effect || '').trim();
 }
 
+function frNumericNativeCharacterAttributes(charId, row, worldTime) {
+  const previewRow = frNumericProjectRedCompanion(row);
+  const notes = parseRemarksString(previewRow['9'] || '');
+  const preview = {
+    linggen:(previewRow['0']==='B1'?notes.灵根:previewRow['5']) || previewRow['5'] || notes.灵根 || '',
+    detailedAttributes:parseNestedJsonString(previewRow['11'],{}),
+    realm:String(previewRow['2']||'').split('|')[0],
+    status:previewRow['4']||'',
+    equipment:parseNestedJsonString(notes.equipment,{}),
+    traits:parseNestedJsonString(notes.traits,[]),
+    '9':previewRow['9'],
+    worldTime,
+  };
+  return calculateTotalAttributes(String(charId),preview);
+}
+
 function ceTryGetBonusedAttributesForPrompt(charId, previewRow) {
   try {
     if (!charId || typeof calculateTotalAttributes !== 'function') return null;
-    const notes = previewRow ? parseRemarksString(previewRow['9'] || '') : null;
-    if (previewRow) previewRow = frNumericProjectRedCompanion(previewRow);
-    const preview = previewRow ? {linggen:(previewRow['0']==='B1'?notes.灵根:previewRow['5']) || previewRow['5'] || notes.灵根 || '',detailedAttributes:parseNestedJsonString(previewRow['11'],{}),realm:String(previewRow['2']||'').split('|')[0],status:previewRow['4']||'',equipment:parseNestedJsonString(notes.equipment,{}),traits:parseNestedJsonString(notes.traits,[]),'9':previewRow['9']} : null;
-    const details = calculateTotalAttributes(String(charId), preview);
+    const details = previewRow ? frNumericNativeCharacterAttributes(charId,previewRow) : calculateTotalAttributes(String(charId));
     if (!details || typeof details !== 'object') return null;
 
     const result = {};
@@ -63993,7 +64186,7 @@ function ceSyncCharacterTechniqueEffects(charId, rowData = null) {
 function ceRemoveRetiredItemColumns(item, type) {
   for (const key of ['9','10','11','sourceMark','originMark','originImprint','sameOriginEffect','sameOrigin','synergy','setEffects']) delete item[key];
   if (/功法$/.test(type)) { delete item['4']; delete item.effect; }
-  else if (type) for (const key of ['6','7','8','grade','maxRealm','realmEffects','currentEffect','activeRealmEffect']) delete item[key];
+  else if (type) for (const key of ['6','7','8','maxRealm','realmEffects','currentEffect','activeRealmEffect']) delete item[key];
   return item;
 }
 
@@ -65731,34 +65924,62 @@ async function buildMergedEvolutionPrompt(options = {}) {
       itemScope:{canonParticipantIds:targets.map(target=>target.id)}});
     template = [...new Set(characterRules),itemRules,'【逐事件正文】\n${story_text}'].filter(Boolean).join('\n\n');
   }
+  const characterBatch = options.characterBatch === true;
+  const independent = new Set(config.mergedIndependentTargetIds || []);
+  const batchTargets = characterBatch ? targets.filter(target => !independent.has(target.id) && preset.prompts?.[target.type]?.enabled) : [];
+  const batchIds = batchTargets.map(target => target.id);
+  const batchScope = characterBatch
+    ? '【本请求个人变量写入名单】' + JSON.stringify(batchIds) + '。只允许名单中的 ID。'
+      + (batchIds.includes('B1') ? '' : '玩家 B1 在本批只读；正文提到玩家时不为他生成命令。')
+      + ' 登退场、物品、时间地点及杂项本批只读；entry 只返回空数组和空事迹对象。不复制其他阶段的示例。'
+    : '';
   if (typeof frNativeEvolutionCommandContract === 'function') {
-    template = template.split(frNativeEvolutionCommandContract(true)).join(frNativeEvolutionCommandContract());
+    const native = frNativeEvolutionCommandContract();
+    template = template.split(frNativeEvolutionCommandContract(true)).join(native);
+    if (characterBatch) {
+      const people = native.split('\n').filter(line =>
+        /^(# 当前前端原生命令|commands 数组|人物：|资源：|人物组合列：)/.test(line));
+      const sample = '本批NPC_ID';
+      const personal = people.map(line => {
+        let scoped = line.replaceAll('("C1",', '(' + JSON.stringify(sample) + ',')
+          .replace(/；set\(\{"0":"C3".*?仅用于entry新建；de\("C1"\)仅用于临时离场/, '');
+        if (!batchIds.includes('B1')) scoped = scoped
+          .replace(/；主角技能set\(.*?进入8表/, '')
+          .replace(/\b(updateAttribute|addTrait|deTrait)\("B1",/g, '$1(' + JSON.stringify(sample) + ',');
+        return scoped;
+      }).join('\n');
+      template = template.split(native).join(personal);
+      if (typeof frNativeEvolutionEntryContract === 'function') template = template.split(frNativeEvolutionEntryContract()).join('');
+      template = batchScope + '\n\n' + template;
+    }
   }
   // 只展开预设自带的文字模板；未知引用留给统一残留检查，不加载代码或外部内容。
   for (let pass = 0; pass < 4; pass++) template = template.replace(/\{\{template:([^}]+)\}\}/g, (match, key) => typeof preset.contentTemplates?.[key] === 'string' ? preset.contentTemplates[key] : match);
   if (targets.length) template += '\n\n' + CE_CORE['character-status'].CHARACTER_STATUS_RULE;
+  if (!options.characterBatch && options.enabledPhases?.items !== false && hasMergedRules)
+    template += '\n\n' + CE_CORE['canon-event-details'].SPIRIT_STONE_SETTLEMENT_RULE;
   if (!options.sharedOnly && targets.some(target=>target.type==='player' || target.type==='npc')) template += '\n\n' + frPortraitVariableRule;
-  const ids = options.canonVariables ? {} : await buildEntryCharacterIdContext();
+  const scopedIds = options.canonVariables || characterBatch;
+  const ids = scopedIds ? {} : await buildEntryCharacterIdContext();
   const unavailable = '当前前端未提供此项，禁止推断、创建对应状态或据此改写角色。';
-  const independent = new Set(config.mergedIndependentTargetIds || []);
   const values = {
     story_text: sharedContext.storyText || '', user_input: sharedContext.userInput || '',
     current_time: sharedContext.currentTime || '未知', currentTime: sharedContext.currentTime || '未知', current_location: sharedContext.currentLocation || '未知',
     world_events: options.canonVariables ? unavailable : sharedContext.worldEvents || '无已提供的世界事件', world_factors: options.canonVariables ? unavailable : sharedContext.worldFactors || await resolveWorldFactorsContext(),
-    all_character_ids: options.canonVariables ? targets.map(target=>target.id+' '+target.name).join('、') : buildAllCharacterIds(), next_available_npc_id: ids.nextNpcId || '本次不允许额外创建名单外人物',
+    all_character_ids: scopedIds ? (characterBatch ? batchTargets : targets).map(target=>target.id+' '+target.name).join('、') : buildAllCharacterIds(), next_available_npc_id: ids.nextNpcId || '本次不允许额外创建名单外人物',
     world_map_pois: options.canonVariables ? unavailable : buildWorldMapPoiSummary(), scene_map_data: options.canonVariables ? unavailable : buildCurrentSceneMapSummary(), current_tasks: options.canonVariables ? unavailable : buildCurrentTasksSummary(),
-    beasts_summary: options.canonVariables ? unavailable : '以下仅为当前玩家灵兽资料，不能视为全历史身份档案：\n' + buildPlayerBeastsSummary(),
+    beasts_summary: scopedIds ? unavailable : '以下仅为当前玩家灵兽资料，不能视为全历史身份档案：\n' + buildPlayerBeastsSummary(),
     merged_characters_context: targets.map(target => '## ' + target.id + ' ' + target.name + ' [' + target.sceneType + '] ' + (options.sharedOnly ? '共用阶段参考' : independent.has(target.id) ? '个人变量独立请求' : '个人变量本次合并') + '\n' + (options.sharedOnly ? '姓名、ID与物品资料以本节为索引。' : ceBuildPromptCharacterSnapshotText(target,true) + '\n' + (target.biography?.content || '') + (options.canonVariables&&target.canonProfileInstruction?'\n【此人档案补全边界】\n'+target.canonProfileInstruction:''))).join('\n\n')
       + '\n\n' + buildAllCharactersInventory(targets) + '\n' + ceBuildItemManagementDynamicSnapshot(targets),
     merged_independent_target_ids: targets.filter(target => independent.has(target.id)).map(target => target.id).join('、') || '无',
     auto_record_key_items_enabled: '已确认持有/装备/消耗的事实仍按原物品规则完整记录（本前端无此偏好开关，不得把未提供开关当成关闭而漏记；不增加未持有或未来物品）',
     converted_beast_mappings: unavailable, beast_transformation_policy: unavailable,
-    entry_decision_new_characters: '本请求尚未执行登场判断。只依据本轮正文创建新人，不引用上轮登场结果。',
+    entry_decision_new_characters: characterBatch ? '登退场由共用阶段处理；本批只可补齐明确指定的新人物档案。' : '本请求尚未执行登场判断。只依据本轮正文创建新人，不引用上轮登场结果。',
     locked_character_portrait_prompt_ids: unavailable, locked_character_visual_anchors: unavailable, '主角长期规划': unavailable
   };
   if (options.canonTurnPlan && typeof frCanonOwnershipInstruction === 'function') template += frCanonOwnershipInstruction(options.canonTurnPlan);
-  if (!options.canonVariables && options.enabledPhases?.entry !== false && typeof ceBuildRequiredEntryDeedsPromptBlock === 'function') template += '\n\n' + ceBuildRequiredEntryDeedsPromptBlock(options.requiredDeedsTargets || []);
-  template += '\n\n【本轮允许演化范围】只允许上述目标和entry内本轮合法创建/返场者；全部角色索引不代表允许推进。不得修改未选、冻结或休眠人物。';
+  if (!scopedIds && options.enabledPhases?.entry !== false && typeof ceBuildRequiredEntryDeedsPromptBlock === 'function') template += '\n\n' + ceBuildRequiredEntryDeedsPromptBlock(options.requiredDeedsTargets || []);
+  if (!characterBatch) template += '\n\n【本轮允许演化范围】只允许上述目标和entry内本轮合法创建/返场者；全部角色索引不代表允许推进。不得修改未选、冻结或休眠人物。';
   if (!options.canonVariables && !options.characterBatch && options.enabledPhases?.entry !== false) {
     const entryIds = options.entryTargetIds || targets.map(target => target.id);
     const reentryIds = options.reentryTargetIds || targets.filter(target => target.sceneType === 'offscene').map(target => target.id);
@@ -65785,7 +66006,7 @@ async function buildMergedEvolutionPrompt(options = {}) {
       ? '\n本轮登场关闭，若杂项启用，由 commands 的杂项部分写唯一 add("TIME_LOCATION_ROW",{"0":"时间/地点 坐标"})。'
       : '\n本轮由 entry.globalCommands 写唯一 add("TIME_LOCATION_ROW",{"0":"时间/地点 坐标"})；正文状态栏有明确变化时不能留空。commands 不重复写时间地点。';
   }
-  if (!options.canonVariables && !options.sharedOnly) template += '\n【新登场人物补全】本次负责的新NPC必须给全姓名、境界与身份、第9列年龄/寿元/isBonded，以及第11列13种基础白值（血量、法力、物攻、物防、法攻、法防、神识、物理穿透、法术穿透、气运、魅力、脚力、修炼速度；每项current/max）。依据身份与正文补齐给定骨架，或与本次 entry 的 set 骨架配合。不编造未获得的物品或变化。已有且完整的角色无变化可返回空命令。';
+  if (!options.canonVariables && !options.sharedOnly && (!characterBatch || options.newEntryIds?.length)) template += '\n【新登场人物补全】本次负责的新NPC必须给全姓名、境界与身份、第9列年龄/寿元/isBonded，以及第11列13种基础白值（血量、法力、物攻、物防、法攻、法防、神识、物理穿透、法术穿透、气运、魅力、脚力、修炼速度；每项current/max）。依据身份与正文补齐给定骨架。不编造未获得的物品或变化。已有且完整的角色无变化可返回空命令。';
   if (!options.canonVariables && !options.characterBatch) template += '\n【合并杂项的世界大事尺度】仅记录地区、国家、主要势力层面的重大局势：战争联盟、广域灾变、区域资源与贸易变化、影响多方的重大修仙盛会或秘境。每事60–120字新闻简报，概述事实、范围、影响；不写个人心理对话和行动流水账，不把拜师收徒、普通招生、村落小摩擦当世界大事。E年表编号不证明尺度；无符合事实则不输出世界事件，不为凑数捏造。';
   if (!options.canonVariables && !options.characterBatch && options.enabledPhases?.misc !== false) {
     const worldRules = CE_CORE['world-events'];
@@ -65807,7 +66028,7 @@ async function buildMergedEvolutionPrompt(options = {}) {
     template+='\n\n【本次最终输出】只返回一个完整 JSON 对象，格式为 {"think":"","entry":{"entries":[],"exits":[],"globalCommands":[],"deedsUpdates":{}},"commands":[]}。think 留空；只填普通线名单和开启阶段的实际变化。年表人物的建档、事迹、物品、属性一律交给预制补演。commands 和 entry.globalCommands 只用上面的原生函数，禁止 state(...)、状态路径、短指令、标签和代码围栏。';
   }
   if (options.sharedOnly) template += '\n【分批执行，本请求仅负责全轮共用阶段】只输出已开启的登退场、物品及杂项指令。新登场人物仍在 entry 提供原生 set 骨架，个人属性和状态留给后续人物批次。commands 内禁止人物个人指令。'+(options.canonVariables?'completion 只核对物品事实，人物事实留给人物批次。':'');
-  if (options.characterBatch) template += '\n【分批执行，本请求仅负责人物】只处理本批允许的本人变量；登退场、全局时间地点、物品、杂项由全轮共用阶段负责。entry 各数组和事迹对象留空。名单以本批人物资料为准，其他人物仅作叙事背景。'+(options.canonVariables?'completion 只核对人物事实，物品核对由共用阶段负责。':'')
+  if (characterBatch) template += '\n'+batchScope+(options.canonVariables?'completion 只核对人物事实，物品核对由共用阶段负责。':'')
     +(options.newEntryIds?.length?'\n以下是本轮刚创建的 NPC，按已给骨架补齐缺失档案与白值：'+options.newEntryIds.join('、')+'。':'')
     +(options.sharedItemResponse && options.sharedItemResponse !== '<upstore></upstore>'?'\n【已规划物品操作，只读】\n'+options.sharedItemResponse:'');
   if (!options.characterBatch) template += '\n【合并指令执行顺序】游戏按物品、各人物、杂项依次执行，保留每组命令内部的顺序。把同一笔操作的前后步骤按因果顺序排列，各写一次。TIME_LOCATION_ROW 只写在本轮指定负责它的位置。';
@@ -81286,10 +81507,14 @@ if (evolutionTargets.length === 0) {
               const { command, data, attribute, value } = operation;
               if (command === 'add' && data) {
                 Object.assign(characterData, data);
+              } else if (command === 'useSkill') {
+                const skills = parseNestedJsonString(parseRemarksString(characterData['9'] || '').skills, []);
+                frSpendSkillMana(characterData, skills, operation, frStatusWorldTime());
               } else if (command === 'updateAttribute' && attribute && value) {
                 let attributes = parseNestedJsonString(characterData['11'], {});
                 const attributeKey = attribute === 'hp' ? '血量' : attribute;
                 if (!attributes[attributeKey]) attributes[attributeKey] = { current: 0, max: 0 };
+                const previousCurrent = attributes[attributeKey].current;
                 if (typeof value.current === 'number') attributes[attributeKey].current = value.current;
                 if (typeof value.max === 'number') attributes[attributeKey].max = value.max;
                 if (attributes[attributeKey].max) {
@@ -81298,6 +81523,8 @@ if (evolutionTargets.length === 0) {
                     attributes[attributeKey].max,
                   );
                 }
+                if (attributeKey==='法力' && attributes[attributeKey].skillBonusSpent && typeof value.current==='number')
+                  CE_CORE['numeric-skill'].clearSpentSkillBonusOnFullRecovery(attributes[attributeKey],previousCurrent);
                 characterData['11'] = JSON.stringify(attributes);
               }
             };
@@ -96041,8 +96268,9 @@ if (charId === 'B1') {
 const playerSkills = Object.values(currentState['8'] || {});
 playerSkills.forEach(s => {
 if (s && s['1']) {
+const priced = frVariablePresentation()?.cleanVariableSkill(s) ?? s;
 const name = s['1'];
-const level = s['2'] || '未知';
+const level = priced['2'] || '未知';
 const desc = s['4'] || '';
 const effect = s['6'] || s['9'] || ''; // 优先取已解锁效果，没有则取全部效果
 
@@ -96052,6 +96280,7 @@ const extra = getExtraFields(s, ['0','1','2','3','4','5','6','7','8','9']);
 let skillStr = `${name}(${level})`;
 if (desc) skillStr += ` 描述:${desc}`;
 if (effect) skillStr += ` 效果:${effect}`;
+if (priced.skillPricing) skillStr += ` 消耗:${priced['8']}`;
 skillStr += extra;
 
 skillList.push(skillStr);
@@ -96064,8 +96293,9 @@ let npcSkills = remarks['skills'];
 if (typeof npcSkills === 'string') npcSkills = JSON.parse(npcSkills);
 if (Array.isArray(npcSkills)) {
 npcSkills.forEach(s => {
+const priced = frVariablePresentation()?.cleanVariableSkill(s) ?? s;
 const sName = s.name || s['1'];
-const sLevel = s.level || s['2'] || '未知';
+const sLevel = priced['2'] || s.level || '未知';
 const sDesc = s.desc || s.description || s['4'] || '';
 const sEffect = s.effect || s.currentEffect || s['6'] || s['9'] || '';
 
@@ -96076,6 +96306,7 @@ const extra = getExtraFields(s, ['id','name','level','grade','desc','description
 let skillStr = `${sName}(${sLevel})`;
 if (sDesc) skillStr += ` 描述:${sDesc}`;
 if (sEffect) skillStr += ` 效果:${sEffect}`;
+if (priced.skillPricing) skillStr += ` 消耗:${priced['8']}`;
 skillStr += extra;
 
 skillList.push(skillStr);
@@ -99072,15 +99303,16 @@ console.log('【调试】renderInventory 被调用');
         : !isNpcItem && !isSectItem ? currentPlayerData : null);
     const options = {};
     if (classification.category === 'technique') {
-        options.currentEffect = owner
-            ? ceComposeTechniqueCurrentEffect(item.realmEffects || item['8'] || '', ceGetCharacterRealmText(owner)) || '当前境界暂无加成'
-            : '';
         if (owner) {
             const entries = ceParseTechniqueRealmEffects(item.realmEffects || item['8'] || '');
             const realm = ceGetCharacterRealmText(owner);
             const rank = frCultivationCore()?.techniqueImmortalRealmRank(realm) ?? ceGetRealmRank(realm,'owner');
             const active = entries.filter(entry => entry.rank === -1 || (rank !== -1 && entry.rank <= rank));
-            options.techniqueSpeed = (!entries.length || active.length) ? frCultivationCore()?.resolveTechniqueSpeed(item,active) : null;
+            const unlocked = !entries.length || active.length;
+            options.techniqueSpeed = isEquipped && unlocked ? frCultivationCore()?.resolveTechniqueSpeed(item,active) : null;
+            if (isEquipped && unlocked) options.currentEffect = ceComposeTechniqueCurrentEffect(item.realmEffects || item['8'] || '',realm);
+            if (!isEquipped) options.inactiveReason = '装备并修至对应境界后生效';
+            else if (!unlocked) options.inactiveReason = '修至'+entries[0].realm+'后解锁';
         }
         if (!isNpcItem && !isSectItem) {
             const clean = name => String(name || '').replace(/<[^>]+>/g,'').replace(/[《》【】]/g,'').trim();
@@ -99116,6 +99348,7 @@ console.log('【调试】renderInventory 被调用');
     }
 
     modal.innerHTML = headerHtml + contentHtml + footerHtml;
+    presentation.decorate(modal.querySelector('.item-detail-beautiful-header'),item);
     if(Array.isArray(item.stockMembers)&&item.stockMembers.length){
         const content=modal.querySelector('.fr-item-dossier-content');
         const title=document.createElement('h4');
@@ -101044,15 +101277,7 @@ const _timelineAvatarKey =
             document.getElementById('custom-dialog-overlay').classList.remove('visible');
 
             if (charIdToUpdate === 'B1') {
-              updateAvatar(currentPlayerData);
-              const modalAvatarContainer = document.querySelector('.character-detail-modal .detail-left-pane');
-              if (modalAvatarContainer && characterDetailOverlay.classList.contains('visible')) {
-                const videoEl = document.getElementById('modal-avatar-img');
-                const imgEl = document.getElementById('modal-custom-avatar-img');
-                imgEl.classList.add('hidden');
-                videoEl.classList.add('hidden');
-                updateNpcAvatarDisplay('B1', modalAvatarContainer);
-              }
+              await updateAvatar(currentPlayerData);
             } else {
               await refreshAllNpcViews(charIdToUpdate);
             }
@@ -115842,6 +116067,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   const parseModifierMap = text => {
     const result = {};
     if (typeof text !== 'string' || !text) return result;
+    text = text.normalize('NFKC').replace(/−/gu,'-');
 
     modifierRegex.lastIndex = 0;
     let match;
@@ -115878,7 +116104,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
     }
 
     if (typeof raw === 'string') {
-      const m = raw.trim().match(new RegExp(`^([+-]?${CE_ATTRIBUTE_NUMBER_PATTERN})\\s*(%)?$`));
+      const m = raw.trim().normalize('NFKC').replace(/−/gu,'-').match(new RegExp(`^([+-]?${CE_ATTRIBUTE_NUMBER_PATTERN})\\s*(%)?$`));
       if (m) {
         const value = ceParseAttributeNumber(m[1]);
         if (!Number.isFinite(value)) return null;
@@ -115925,7 +116151,8 @@ function calculateTotalAttributes(characterId, characterOverride) {
     return delta;
   };
 
-  const statusText = character.status ?? character['4'];
+  const nativeStatus = !characterOverride && typeof currentState!=='undefined' ? currentState?.['0']?.[characterId]?.['4'] : undefined;
+  const statusText = nativeStatus ?? character.status ?? character['4'];
   const statusCore = typeof CE_CORE !== 'undefined' && CE_CORE['character-status'];
   const statusEntries = statusText && statusCore ? statusCore.activeCharacterStatuses(
     statusText, characterOverride?.worldTime || frStatusWorldTime()
@@ -115933,9 +116160,10 @@ function calculateTotalAttributes(characterId, characterOverride) {
 
   const getCharacterRealmText = targetId => {
     if (!characterOverride && typeof currentState !== 'undefined' && currentState && currentState['0'] && currentState['0'][targetId]) {
-      return String(currentState['0'][targetId]['2'] || '').split('|')[0].trim();
+      const nativeRealm = String(currentState['0'][targetId]['2'] || '').split('|')[0].trim();
+      if (nativeRealm) return nativeRealm;
     }
-    const fallbackRealm = character && character.realm ? String(character.realm) : '';
+    const fallbackRealm = String(character.realm || character['2'] || '');
     return fallbackRealm.split('|')[0].trim();
   };
 
@@ -115982,7 +116210,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   const getRealmRank = (realmText, mode = 'threshold') => {
     const immortal = frCultivationCore()?.techniqueImmortalRealmRank(realmText);
     if (immortal != null) return immortal;
-    const realm = String(realmText || '').replace(/\s+/g, '');
+    const realm = String(realmText || '').replace(/\s+/g, '').replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
     if (!realm) return -1;
     if (realm.includes('凡人')) return 0;
 
@@ -116167,6 +116395,12 @@ function calculateTotalAttributes(characterId, characterOverride) {
     if (!Array.isArray(source)) return [];
     return source.filter(item => item && typeof item === 'object');
   };
+  const traitObject = raw => {
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch { return null; }
+    }
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  };
   const parseTraitsFromRemarksValue = remarksValue => {
     if (!remarksValue) return [];
     if (typeof remarksValue === 'object') {
@@ -116174,6 +116408,8 @@ function calculateTotalAttributes(characterId, characterOverride) {
       return nested;
     }
     if (typeof remarksValue === 'string') {
+      const direct = traitObject(remarksValue);
+      if (direct) return normalizeTraitList(direct.traits);
       const jsonText = extractPipeFieldJson(remarksValue, 'traits');
       if (!jsonText) return [];
       return normalizeTraitList(jsonText);
@@ -116301,6 +116537,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
     const gongfaDetails = [];
     const traitDetails = [];
     const buffDetails = [];
+    let manaScale = 1;
 
     const isLegacyGongfaTrait = trait => {
       if (!trait || typeof trait !== 'object') return false;
@@ -116320,13 +116557,14 @@ function calculateTotalAttributes(characterId, characterOverride) {
       if (!trait || typeof trait !== 'object') return null;
       if (isLegacyGongfaTrait(trait)) return null;
       // 此显式来源合同以天灵根为共同百分比基准，不能乘已含混沌灵根的白值。
-      const speedBonus = targetAttrKey === '修炼速度' ? trait.bonus?.修炼速度 : null;
+      const bonus = traitObject(trait.bonus) ?? traitObject(trait.attributes);
+      const speedBonus = targetAttrKey === '修炼速度' ? bonus?.修炼速度 : null;
       if (speedBonus && typeof speedBonus === 'object' && speedBonus.percentBase === '天灵根基准') {
         const parsed = normalizeBonusValue(speedBonus);
-        if (parsed) return { ...parsed, percentBase: frCultivationCore()?.CULTIVATION_ROOT_BASES?.[1] || 200, referenceName: '天灵根基准' };
+        if (parsed) return { ...parsed, percentBase: frCultivationCore()?.resolveCultivationRootBase('天灵根').value ?? 200, referenceName: '天灵根基准' };
       }
 
-      if (trait.bonus && typeof trait.bonus === 'object') {
+      if (bonus && typeof bonus === 'object') {
         let mergedModifier = null;
         const mergeBonusModifier = raw => {
           const parsed = normalizeBonusValue(raw);
@@ -116339,12 +116577,12 @@ function calculateTotalAttributes(characterId, characterOverride) {
         };
         const consumedKeys = new Set();
 
-        if (Object.prototype.hasOwnProperty.call(trait.bonus, targetAttrKey)) {
-          mergeBonusModifier(trait.bonus[targetAttrKey]);
+        if (Object.prototype.hasOwnProperty.call(bonus, targetAttrKey)) {
+          mergeBonusModifier(bonus[targetAttrKey]);
           consumedKeys.add(targetAttrKey);
         }
 
-        Object.entries(trait.bonus).forEach(([rawKey, rawValue]) => {
+        Object.entries(bonus).forEach(([rawKey, rawValue]) => {
           const key = String(rawKey || '').trim();
           if (!key || consumedKeys.has(key)) return;
           const normalized = ATTRIBUTE_ALIAS_MAP[key] || key;
@@ -116354,8 +116592,8 @@ function calculateTotalAttributes(characterId, characterOverride) {
           }
         });
 
-        if (Object.prototype.hasOwnProperty.call(trait.bonus, ALL_ATTRIBUTE_KEY)) {
-          mergeBonusModifier(trait.bonus[ALL_ATTRIBUTE_KEY]);
+        if (Object.prototype.hasOwnProperty.call(bonus, ALL_ATTRIBUTE_KEY)) {
+          mergeBonusModifier(bonus[ALL_ATTRIBUTE_KEY]);
         }
 
         if (mergedModifier) {
@@ -116363,8 +116601,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
         }
       }
 
-      const effectsText = typeof trait.effects === 'string' ? trait.effects : typeof trait.effect === 'string' ? trait.effect : '';
-      const effectsModifier = parseModifierMap(effectsText)[targetAttrKey];
+      const effectsModifier = parseModifierMap(trait.effects)[targetAttrKey] || parseModifierMap(trait.effect)[targetAttrKey];
       if (effectsModifier) return effectsModifier;
 
       const descModifier = parseModifierMap(typeof trait.desc === 'string' ? trait.desc : '')[targetAttrKey];
@@ -116389,7 +116626,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
         const isTechnique = slotKey === 'technique' || item.type === '功法';
         const modifier = isTechnique
           ? resolveTechniqueModifier(item, attrKey, characterRealmText)
-          : parseModifierMap(item.effect || '')[attrKey];
+          : parseModifierMap(item.effect || item['4'] || '')[attrKey];
         if (!modifier) return;
 
         const flat = Number(modifier.flat || 0);
@@ -116475,6 +116712,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
       statusEntries.forEach(entry => {
         const buffModifier = entry.modifiers[attrKey];
         if (!buffModifier) return;
+        if (attrKey==='法力') manaScale *= 1 + buffModifier.percent / 100;
         const currentValue =
           baseCurrent + sourceTotals.sect + sourceTotals.equipment + sourceTotals.buffs + sourceTotals.gongfa + sourceTotals.traits;
         const delta = applyModifierToCurrent(buffModifier, currentValue, { useMinimumPercentStep: attrKey !== '修炼速度', preserveFraction: attrKey === '修炼速度' });
@@ -116491,7 +116729,10 @@ function calculateTotalAttributes(characterId, characterOverride) {
     const maxBonus = sourceTotals.sect + sourceTotals.equipment + sourceTotals.gongfa + sourceTotals.traits;
     const currentOnlyBonus = sourceTotals.buffs;
     const currentBaseline = baseCurrent + maxBonus;
-    const finalCurrent = attrKey === '修炼速度' ? Math.max(0, currentBaseline + currentOnlyBonus) : currentBaseline + currentOnlyBonus;
+    const nominal = currentBaseline + currentOnlyBonus;
+    const mana = attrKey==='法力' && rawBase?.skillBonusSpent
+      ? CE_CORE['numeric-skill'].projectSkillMana(rawBase,nominal) : null;
+    const finalCurrent = attrKey === '修炼速度' ? Math.max(0,nominal) : mana?.current ?? nominal;
     const finalMax = attrKey === '修炼速度' ? Math.max(0, baseMax + maxBonus) : baseMax + maxBonus;
     const totalBonus = finalCurrent - baseCurrent;
     const roundAttribute = value => Math.round(value * 1e6) / 1e6;
@@ -116529,6 +116770,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
         currentBaseline: roundAttribute(currentBaseline),
         currentFinal: roundAttribute(finalCurrent),
         maxFinal: roundAttribute(finalMax),
+        ...(attrKey==='法力' ? {skillMana:{nominal,scale:manaScale},skillBonusSpent:roundAttribute(mana?.spent ?? 0)} : {}),
       },
     };
   });
@@ -116558,7 +116800,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   const maximum = typeof sources.maxFinal === 'number' ? sources.maxFinal : baseMax + permanent;
   const scalar = ['气运','魅力','修炼速度'].includes(attributeName);
   const speedBase = attributeName === '修炼速度' ? sources.cultivationSpeedBase : null;
-  const rootReferenceBase = (typeof frCultivationCore === 'function' ? frCultivationCore()?.CULTIVATION_ROOT_BASES?.[1] : null) || 200;
+  const rootReferenceBase = (typeof frCultivationCore === 'function' ? frCultivationCore()?.resolveCultivationRootBase('天灵根').value : null) ?? 200;
   const splitChaosRoot = speedBase?.chaosRoot;
   const rootDelta = splitChaosRoot ? base - rootReferenceBase : 0;
   const paired = !scalar && (['血量','法力'].includes(attributeName) || final !== maximum);
@@ -116612,6 +116854,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   const baseSuffix = !splitChaosRoot && speedBase?.label ? '（' + speedBase.label + '）' : '';
   row(body, splitChaosRoot ? '天灵根基准' : '基础值', splitChaosRoot ? rootReferenceBase : base, false, baseSuffix);
   row(body,'加成合计',permanent+temporary+rootDelta);
+  if(number(sources.skillBonusSpent)) row(body,'已消耗的加成法力',-number(sources.skillBonusSpent));
   const groups=[['装备与法宝',equipment,equipmentTotal],['功法',techniques,techniqueTotal],['词条',traits,traitTotal],['状态',buffs,temporary]];
   if(splitChaosRoot)groups.unshift(['灵根',[{name:'混沌灵根（天灵根基准+900%）',value:rootDelta}],rootDelta]);
   if(number(sources.sect))groups.push(['宗门',[],number(sources.sect)]);
