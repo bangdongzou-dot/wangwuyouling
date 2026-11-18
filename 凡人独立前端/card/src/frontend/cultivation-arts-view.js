@@ -1,4 +1,5 @@
 (function () {
+  const display = value => (globalThis.CE_CORE?.['numeric-display']?.formatDisplayNumber(value) ?? String(value));
   const seals = {
     talisman: '符', formation: '阵', alchemy: '丹', artifact: '器',
     puppet: '傀', beastTaming: '兽', cooking: '膳', planting: '植',
@@ -40,7 +41,7 @@
         meter.max = 100;
         meter.value = art.progress;
         meter.setAttribute('aria-label', art.name + '当前档内进度');
-        node(progress, 'strong', '', art.progress + '%');
+        node(progress, 'strong', '', display(art.progress) + '%');
       }
       const assistance = art.assistance;
       const hasAssistance = Boolean(assistance?.sources?.length);
@@ -49,7 +50,7 @@
         modifiers.setAttribute('aria-label', '功法辅助');
         for (const [key, label] of Object.entries(assistanceLabels)) {
           const value = assistance[key];
-          if (value) node(modifiers, 'span', '', label + ' ' + (value > 0 ? '+' : '') + value + (key === 'success' ? ' 个百分点' : '%'));
+          if (value) node(modifiers, 'span', '', label + ' ' + (value > 0 ? '+' : '') + display(value) + (key === 'success' ? ' 个百分点' : '%'));
         }
       }
       if (art.basis || art.legacy || hasAssistance) {

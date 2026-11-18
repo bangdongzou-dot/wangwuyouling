@@ -14871,11 +14871,7 @@ function _patchTechniqueItemDetailShowItemDetail() {
 
 // === NPC 属性页增强（显示加成后属性 + 点击来源）===
 function _npcAttrFormatBigNumber(num, isBonus) {
-  if (isNaN(num)) return String(num);
-  var sign = num > 0 && isBonus ? '+' : '';
-  if (Math.abs(num) >= 100000000) return sign + (num / 100000000).toFixed(2).replace(/\.00$/, '') + '亿';
-  if (Math.abs(num) >= 10000) return sign + (num / 10000).toFixed(1).replace(/\.0$/, '') + '万';
-  return sign + String(Number(Number(num).toFixed(6)));
+  return (num > 0 && isBonus ? '+' : '') + formatNumber(num);
 }
 
 function _npcAttrParseMaybeJson(raw, fallback) {
@@ -17836,15 +17832,14 @@ return { newState, characterNameChanges, updatedCharacterIds };
         }
 
         function formatNumber(num) {
-          if (isNaN(num)) return num;
-          const numAbs = Math.abs(num);
-          if (numAbs < 10000) {
-            return num.toString();
-          }
-          if (numAbs < 100000000) {
-            return (num / 10000).toFixed(1).replace(/\.0$/, '') + '万';
-          }
-          return (num / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
+          return CE_CORE['numeric-display'].formatDisplayNumber(num);
+        }
+        function frDisplayNumericText(value) {
+          return CE_CORE['numeric-display'].formatDisplayNumericText(value);
+        }
+        function frDisplaySpiritStoneWallet(wallet, separator = ' / ') {
+          return Object.entries(wallet || {}).filter(([,amount])=>amount>0)
+            .map(([grade,amount])=>grade+'灵石 '+formatNumber(amount)).join(separator) || '0';
         }
 
         function buildComprehensiveCharMap(state, bios) {
@@ -20148,13 +20143,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
             const totalCurrent = attr.current;
             const totalMax = attr.max;
 
-            const formatBigNumber = (num, isBonus = false) => {
-              if (isNaN(num)) return num;
-              const sign = num > 0 && isBonus ? '+' : '';
-              if (Math.abs(num) >= 100000000) return `${sign}${(num / 100000000).toFixed(2).replace(/\.00$/, '')}亿`;
-              if (Math.abs(num) >= 10000) return `${sign}${(num / 10000).toFixed(1).replace(/\.0$/, '')}万`;
-              return `${sign}${Number(Number(num).toFixed(6))}`;
-            };
+            const formatBigNumber = (num, isBonus = false) => (num > 0 && isBonus ? '+' : '') + formatNumber(num);
 
             let valueHtml = `${frNumericFormatValue(attr,'current',formatBigNumber)}/${frNumericFormatValue(attr,'max',formatBigNumber)}`;
             if (attrKey === '气运' || attrKey === '魅力') {
@@ -20232,13 +20221,7 @@ if (typeof triggerCommercialAutoPortraitForSurroundingCharacters === 'function')
     const totalCurrent = attr.current;
     const totalMax = attr.max;
 
-    const formatBigNumber = (num, isBonus = false) => {
-      if (isNaN(num)) return num;
-      const sign = num > 0 && isBonus ? '+' : '';
-      if (Math.abs(num) >= 100000000) return `${sign}${(num / 100000000).toFixed(2).replace(/\.00$/, '')}亿`;
-      if (Math.abs(num) >= 10000) return `${sign}${(num / 10000).toFixed(1).replace(/\.0$/, '')}万`;
-      return `${sign}${Number(Number(num).toFixed(6))}`;
-    };
+    const formatBigNumber = (num, isBonus = false) => (num > 0 && isBonus ? '+' : '') + formatNumber(num);
 
     let valueHtml = `${frNumericFormatValue(attr,'current',formatBigNumber)}/${frNumericFormatValue(attr,'max',formatBigNumber)}`;
     if (attrKey === '气运' || attrKey === '魅力' || attrKey === '修炼速度') {
@@ -32134,6 +32117,10 @@ async function collectEvolutionTargets(config, options = {}) {
       throw e;
     }
   }
+
+  // 登退场身份候选不受后台轮转/关注预算限制；这里只读收集，不授予变量写权。
+  // 沿用上面的权威档案、类型、删除标记和可解析性筛选。
+  if (options.entryCandidatesOnly === true) return allTargets;
 
   // 4. 根据变量演化模式过滤目标
   let targets = allTargets;
@@ -65717,6 +65704,17 @@ async function requestItemManagementPhase(options = {}) {
  * @returns {Object} 执行结果，包含 processedIds
  * 注: 仅处理世界档案的变量演化列表中的角色
  */
+function frMergedReentryBaselineTargets(options = {}) {
+  if (options.canonVariables || options.characterBatch || options.enabledPhases?.entry === false) return [];
+  const existing = new Set((options.targets || []).map(target => target.id));
+  const eligible = new Set(options.reentryTargetIds || (options.entryTargets || []).filter(target => target.sceneType === 'offscene').map(target => target.id));
+  const candidates = (options.entryTargets || []).filter(target => eligible.has(target.id) && !existing.has(target.id));
+  const matchCandidates = candidates.map(target => ({id: target.id, matchTokens: ceCollectOffscreenCandidateTokens(target.biography, target.data, target.name, target.id)}));
+  const mentioned = ceFindMentionedOffscreenIds(options.sharedContext?.storyText || '', matchCandidates);
+  const requested = new Set(options.reentryBaselineIds || []);
+  return candidates.filter(target => mentioned.has(target.id) || requested.has(target.id));
+}
+
 async function buildMergedEvolutionPrompt(options = {}) {
   if (typeof FrMergedEvolution !== 'object') throw new Error('合并演化模块尚未装配');
   const { preset, targets = [], sharedContext = {}, config = {} } = options;
@@ -65761,6 +65759,25 @@ async function buildMergedEvolutionPrompt(options = {}) {
   if (options.canonTurnPlan && typeof frCanonOwnershipInstruction === 'function') template += frCanonOwnershipInstruction(options.canonTurnPlan);
   if (!options.canonVariables && options.enabledPhases?.entry !== false && typeof ceBuildRequiredEntryDeedsPromptBlock === 'function') template += '\n\n' + ceBuildRequiredEntryDeedsPromptBlock(options.requiredDeedsTargets || []);
   template += '\n\n【本轮允许演化范围】只允许上述目标和entry内本轮合法创建/返场者；全部角色索引不代表允许推进。不得修改未选、冻结或休眠人物。';
+  if (!options.canonVariables && !options.characterBatch && options.enabledPhases?.entry !== false) {
+    const entryIds = options.entryTargetIds || targets.map(target => target.id);
+    const reentryIds = options.reentryTargetIds || targets.filter(target => target.sceneType === 'offscene').map(target => target.id);
+    const candidateIds = new Set([...entryIds, ...reentryIds]);
+    const identityRows = (options.entryTargets || targets).filter(target => candidateIds.has(target.id)).map(target => ({
+      id: target.id, name: target.name, scene: target.sceneType,
+      dead: typeof isCharacterDead === 'function' ? isCharacterDead(target.id, target.type, target.data) : null,
+      location: ceExtractLocationFromCol16(target.data?.['16'] || '')
+    }));
+    template += '\n【登退场身份候选，与后台演化名单不同】\n' + JSON.stringify(identityRows)
+      + '\n原有可退场ID：' + JSON.stringify(entryIds) + '；可返场ID：' + JSON.stringify(reentryIds)
+      + '。历史身份不等于存活；dead 为 true 的人物不得因列入候选而自动复活，死亡状态须服从已有档案及正文明确因果。候选仅供识别身份，不代表本轮出现，也不授予所有候选自由演化权。只有本轮正文实际出现的旧人物才能用原ID返场，不能把回忆、提及或计划当登场；没有实际返场就不生成其个人变量。冻结/轮转预算只限制后台自由演化，不阻止正文实际返场。'
+      + '本包合法创建或返场者若在同一段正文中又离开，可同时列入entries和exits；最终位置遵循正文结束时状态。名单之外的旧人物不得换新ID绕过范围；原著独占人物仍服从统一分工。';
+  }
+  const reentryBaselines = frMergedReentryBaselineTargets(options);
+  if (reentryBaselines.length) template += '\n【返场候选只读前态，不授予演化权限】\n'
+    + reentryBaselines.map(target => '## ' + target.id + ' ' + target.name + '\n' + ceBuildPromptCharacterSnapshotText(target, true)).join('\n\n')
+    + '\n' + buildAllCharactersInventory(reentryBaselines) + '\n' + ceBuildItemManagementDynamicSnapshot(reentryBaselines)
+    + '\n仅本轮正文真实返场且entry合法通过的人物才能变更；资料被检索不等于实际登场，不得重建旧物品或覆盖无关既有字段。';
   template += '\n【本轮阶段开关】' + JSON.stringify(options.enabledPhases || {}) + '；关闭阶段必须返回空结果，不得顺带处理。';
   if (!options.canonVariables && !options.characterBatch) {
     template += '\n【合并输出逐项核对】先核对正文结束时的世界时间与所在地，再核对实际收受、交付、消耗及装备的物品（已知持有者与数量必须记录，未成交不入账），再按允许名单检查每位玩家与 NPC 的真实状态、行动地点、修为、关系和目标变化。最后核对任务进度、世界事件、地图和大小总结。有实际变化才写状态指令，不能用总结替代事实落地，也不要为填满名单虚构变化。';
@@ -65861,10 +65878,11 @@ async function requestMergedEvolutionPhase(options = {}) {
   let parseError = null;
   let parsePack = null;
   let commandRepair = null;
+  const reentryBaselineIds = new Set();
   for (const [routeIndex,api] of apiConfigs.entries()) {
     const hasNextRoute=routeIndex<apiConfigs.length-1;
     const preset = options.canonVariables ? fallbackPreset : await ceResolveEvolutionRoutePreset(api, fallbackPreset, config);
-    const prompt = await buildMergedEvolutionPrompt({...options,preset,requiredDeedsTargets});
+    let prompt = await buildMergedEvolutionPrompt({...options,preset,requiredDeedsTargets,reentryBaselineIds:[...reentryBaselineIds]});
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       ceThrowIfConcurrentEvolutionAborted(signal);
       const bridge = ceCreateRequestAbortBridge(Math.max(45000, Number(config.requestTimeout) || 120000), signal || null);
@@ -65901,12 +65919,37 @@ async function requestMergedEvolutionPhase(options = {}) {
             parseCharacters: parseConcurrentEvolutionCommands, parseItems: parseItemManagementCommands,
             parseMisc: text => ceParseMiscCommandsBlock(text), resolveTarget: resolveConcurrentEvolutionOpId
           });
+          if (!options.canonVariables && !options.characterBatch && options.enabledPhases?.entry !== false) {
+            const provided = new Set([...targets, ...frMergedReentryBaselineTargets({...options,reentryBaselineIds:[...reentryBaselineIds]})].map(target => target.id));
+            const missing = JSON.parse(parsePack.entryResponse).entries.filter(row => row.type === 'reentry' && !provided.has(row.id)).map(row => row.id);
+            if (missing.length) {
+              missing.forEach(id => reentryBaselineIds.add(id));
+              prompt = await buildMergedEvolutionPrompt({...options,preset,requiredDeedsTargets,reentryBaselineIds:[...reentryBaselineIds]});
+              const error = new Error('合并演化：返场人物缺少模型已读取的前态：' + missing.join('、') + '；已定向补入原档案，请据此重新核对整包增量，不能重建既有物品、技能或猜测原数值。');
+              error.mergedParseFailure = true;
+              error.mergedDetail = {stage:'reentry-baseline',targetId:missing.join(','),correction:'只使用现有重试预算补齐，禁止无前态落地；以新附原档案为准重新计算本轮增量。'};
+              throw error;
+            }
+          }
           if (!options.canonVariables && !options.sharedOnly) frValidateMergedNewEntryProfiles(parsePack, targets);
           parseError = null;
           break;
         } catch (parseFailure) {
           parsePack = null;
           parseError = parseFailure;
+          // 标注既有请求记录，原始返回仍留在该记录，不另复制整包或写入存档。
+          if (typeof frCanonTraceSignals !== 'undefined') {
+            const diagnosticRun = frCanonTraceSignals.get(signal);
+            const diagnosticTargets = (options.sharedOnly ? targets : targets.filter(target => !(config.mergedIndependentTargetIds || []).includes(target.id))).map(target => target.id).sort().join(',');
+            const diagnosticRequest = diagnosticRun?.requests?.findLast(req => req.stageKey === mergedStage && req.status === 'returned' && (req.targetIds || []).slice().sort().join(',') === diagnosticTargets);
+            if (diagnosticRequest) {
+              diagnosticRequest.status = 'error';
+              diagnosticRequest.validationError = String(parseFailure.message || parseFailure);
+              diagnosticRequest.validationDetail = typeof FrMergedEvolution.describeFailure === 'function' ? FrMergedEvolution.describeFailure(parseFailure) : '';
+              diagnosticRequest.error = diagnosticRequest.validationError + (diagnosticRequest.validationDetail ? '；' + diagnosticRequest.validationDetail : '');
+              diagnosticRequest.validationAttempt = attempt + 1;
+            }
+          }
           if(parseFailure.commandRepair)commandRepair=parseFailure.commandRepair;
           else if(parseFailure.mergedParseFailure)commandRepair=null;
           console.warn('[合并演化] 第' + (attempt + 1) + '次解析失败：' + String(parseFailure && parseFailure.message || parseFailure)
@@ -65957,7 +66000,7 @@ async function requestMergedEvolutionPhase(options = {}) {
         && JSON.stringify(req.mergedPhases||null)===JSON.stringify(mergedPhases)).at(-1);
       if(request)request.mergedAccepted=true;
     }
-    return { ...pack, requiredDeedsTargets, deedIdentityTargets: targets };
+    return { ...pack, requiredDeedsTargets, deedIdentityTargets: [...new Map([...targets, ...(options.entryTargets || [])].map(target => [target.id, target])).values()] };
 }
 
 async function requestOrdinaryMergedEvolution(options) {
@@ -66348,9 +66391,10 @@ async function runConcurrentEvolution(options = {}) {
       mergedRoster = await ceResolveOffscreenActiveRoster({ config, storyText, userInput });
       let mergedTargets = await collectEvolutionTargets(config, { backgroundActiveIds: new Set(mergedRoster?.activeIds || []) });
       if (frTurnPlan && typeof frCanonOrdinaryTargets === 'function') mergedTargets = frCanonOrdinaryTargets(mergedTargets, frTurnPlan);
-      const entryTargets = mergedTargets;
-      const entryTargetIds = mergedTargets.map(target => target.id);
-      const reentryTargetIds = mergedTargets.filter(target => target.sceneType === 'offscene').map(target => target.id);
+      let entryTargets = await collectEvolutionTargets(config, { silent: true, entryCandidatesOnly: true });
+      if (frTurnPlan && typeof frCanonOrdinaryTargets === 'function') entryTargets = frCanonOrdinaryTargets(entryTargets, frTurnPlan);
+      const entryTargetIds = [...new Set([...mergedTargets.map(target => target.id), ...entryTargets.filter(target => target.sceneType === 'onscene').map(target => target.id)])];
+      const reentryTargetIds = entryTargets.filter(target => target.sceneType === 'offscene').map(target => target.id);
       if (!force) mergedTargets = mergedTargets.filter(target => target.sceneType === 'onscene' || ceShouldEvolveThisTurn(target.id));
       if (getFocusSelectionMode(config) === 'manual' && !ceIsFocusAllOnscreenEnabled(config)) {
         const selection = await showConcurrentEvolutionOnscreenSelectionModal({ config });
@@ -93770,17 +93814,19 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           if (isMainApiGenerating || frGenerationTasks.size) { frStopCurrentGeneration(); return; }
           const isSummaryRequest = options.isSummary || false;
           const isHiddenSystem = options.isHiddenSystem || false;
-          let messageText = branchText || messageInput.value.trim();
+          let messageText = options.preparedMain ? String(options.preparedMain.input || '') : (branchText || messageInput.value.trim());
           let messageTextForAI = messageText;
+          let frMainPermanentPromptTemplate = null;
 
           // 应用永久提示词 (仅当不是隐藏系统消息时)
-          if (!isHiddenSystem && messageText) {
+          if (!isHiddenSystem && messageText && !options.preparedMain) {
             try {
               const permPromptsData = await dbGet(PERMANENT_PROMPTS_KEY);
               if (permPromptsData && permPromptsData.activePromptId) {
                 const activePrompt = permPromptsData.prompts.find(p => p.id === permPromptsData.activePromptId);
                 if (activePrompt && activePrompt.content) {
                   // 替换占位符 {{userInput}}
+                  frMainPermanentPromptTemplate = activePrompt.content;
                   messageTextForAI = activePrompt.content.replace(/\{\{userInput\}\}/g, messageText);
                   console.log('[永久提示词] 已应用:', activePrompt.name);
                 }
@@ -93790,7 +93836,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
             }
           }
 
-          if (!messageText && actionQueue.length === 0 && !isSummaryRequest) {
+          if (!messageText && actionQueue.length === 0 && !isSummaryRequest && !options.preparedMain) {
             return;
           }
           // 停止生成、空输入、总结和隐藏系统请求不推进普通回合，不提示将丢失上一轮补演。
@@ -93813,6 +93859,8 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
             }catch(_){}
           }
           // A rejected/empty send is not a new turn. Clear only after both guards pass.
+          if (!isSummaryRequest && !isHiddenSystem && !options.mainReroll && !options.preparedMain) frFailedMainPrompt = null;
+          const frMainOriginalActions = JSON.parse(JSON.stringify(actionQueue || []));
           if (typeof frCanonDropTurnDerivedState === 'function') {
             try { frCanonDropTurnDerivedState('推进下一轮',{keepWorldview:isSummaryRequest||isHiddenSystem}); } catch (_) {}
           }
@@ -93860,7 +93908,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           const cleanMessageTextForAI = userInputTextForAI.replace(/<news_ref>[\s\S]*?<\/news_ref>/g, '').trim();
 
           try {
-            let frPreparedMain=options.preparedMain?.bundle;
+            let frPreparedMain=options.preparedMain?.bundle ? JSON.parse(JSON.stringify(options.preparedMain.bundle)) : null;
             if(frPreparedMain?.canonGuidance)await frCanonRestoreGuidanceDisplay(frPreparedMain.canonGuidance,{signal:frTurnController.signal});
             if(!frPreparedMain){
             let archive = await db.archives.get(currentArchiveName);
@@ -94099,8 +94147,10 @@ vectorContextString = await prepareVectorContext(cleanMessageTextForAI, archive,
             }
             let fullUserContentForAI = '';
             const userInputParts = [];
+            let frMainHiddenActionContext = '';
             if (typeof hiddenTheaterActions !== 'undefined' && hiddenTheaterActions.length > 0) {
               const hiddenContext = `【后台交互记录】:\n- ${hiddenTheaterActions.join('\n- ')}`;
+              frMainHiddenActionContext = hiddenContext;
               userInputParts.push(hiddenContext);
               console.log('已注入隐式指令:', hiddenContext);
             }
@@ -94548,6 +94598,7 @@ if (worldBookContext) {
             if (openingStart) {
               finalPrompt += `\n\n【玩家指定的开局时间】本轮故事从 ${openingStart} 开始。正文和状态栏从这个时间继续推进。`;
             }
+            const frMainPromptPrefix = finalPrompt;
             if (isSummaryRequest) {
               finalPrompt += `\n\n### 玩家输入：\n${cleanMessageText}`;
             } else {
@@ -94558,7 +94609,7 @@ if (worldBookContext) {
             frMainPromptWatch();
             frPreparedMain={geographyContext,systemNotificationsForThinking,initialState,logsForPrompt,worldBookContext,finalPrompt,openingStart,
               worldviewTrace:frWorldviewTurn?.trace,canonGuidance:frCanonGuidanceSnapshot(ceCanonGuidanceBlock,frTurnController.signal)};
-            if(!isSummaryRequest&&!isHiddenSystem&&userLogData)frFailedMainPrompt={archiveName:currentArchiveName,userLogId:userLogData.id,userLogContent:userLogData.content,input:cleanMessageText,stateText:JSON.stringify(currentState),actionsText:JSON.stringify(actionQueue),editRevision:frMainPromptEditRevision,bundle:frPreparedMain};
+            if(!isSummaryRequest&&!isHiddenSystem&&userLogData)frFailedMainPrompt={archiveName:currentArchiveName,userLogId:userLogData.id,userLogContent:userLogData.content,userLogData:JSON.parse(JSON.stringify(userLogData)),input:cleanMessageText,promptPrefix:frMainPromptPrefix,hiddenActionContext:frMainHiddenActionContext,permanentPromptTemplate:frMainPermanentPromptTemplate,actionQueue:frMainOriginalActions,baselineLogId:(archive?.data?.logs||[]).slice().reverse().find(row=>row.stateSnapshot)?.id||null,bundle:JSON.parse(JSON.stringify(frPreparedMain))};
             }
             let {geographyContext,systemNotificationsForThinking,initialState,logsForPrompt,worldBookContext,finalPrompt}=frPreparedMain;
             const useStreaming = regexConfig.enableStreaming && window.parent?.TavernHelper?.generate;
@@ -94599,7 +94650,7 @@ if (worldBookContext) {
               addMessageToLog({content:'[天机紊乱] API调用失败: 主API返回为空，请使用右键重新发送。'},'error').classList.add('fr-main-request-error');
               return;
             }
-            frFailedMainPrompt=null;
+            // Keep this turn's immutable preparation through success, failure and repeated rerolls.
             if (isSummaryRequest) {
               if (thinkingMessage && thinkingMessage.parentNode) mainContentArea.removeChild(thinkingMessage);
               timers.mainResponse.active = false;
@@ -98096,11 +98147,11 @@ let value = '未知';
 switch (field.key) {
 case 'linggen': value = currentPlayerData.linggen; break;
 case 'gender': value = currentPlayerData.gender; break;
-case 'age': value = currentPlayerData.age; break;
-case 'shouyuan': value = currentPlayerData.shouyuan; break;
+case 'age': value = formatNumber(currentPlayerData.age); break;
+case 'shouyuan': value = formatNumber(currentPlayerData.shouyuan); break;
 case 'realm': value = currentPlayerData.realm; break;
 case 'location': value = currentPlayerData.location; break;
-case 'spiritStones': value = frSpiritStoneWalletText(currentPlayerData.spiritStoneWallet || frReadSpiritStoneWallet({26:currentPlayerData.spiritStones}),'\n'); break;
+case 'spiritStones': value = frDisplaySpiritStoneWallet(currentPlayerData.spiritStoneWallet || frReadSpiritStoneWallet({26:currentPlayerData.spiritStones}),'\n'); break;
 }
 
 if (value !== undefined && value !== null) {
@@ -99008,7 +99059,7 @@ console.log('【调试】renderInventory 被调用');
             <div class="item-detail-name-large" style="color:${itemPresentation.color}">${escape(item.name || item['1'])}</div>
             <div class="item-detail-tags">
                 <span class="item-tag">${escape(type)}</span>
-                <span class="item-tag">数量: ${escape(quantity)}</span>
+                <span class="item-tag">数量: ${escape(formatNumber(quantity))}</span>
                 ${grade ? `<span class="item-tag rarity">${escape(grade)}</span>` : ''}
             </div>
         </div>
@@ -99733,7 +99784,7 @@ console.log('【调试】renderInventory 被调用');
                             if (/[\u4e00-\u9fa5]/.test(_n[_i])) { _cc++; if (_cc > 5) { _ti = _i; break; } }
                         }
                         return _cc > 5 ? '<span style="color:'+_c+'">'+_n.substring(0,_ti)+'..</span>' : '<span style="color:'+_c+'">'+_n+'</span>';
-                    })()}</span><span class="inventory-slot-quantity">${item.quantity}</span>`;
+                    })()}</span><span class="inventory-slot-quantity" title="${item.quantity}">${formatNumber(item.quantity)}</span>`;
               slot.addEventListener('click', () => {
                 addAction('gift', item, { charName: char.name });
                 const itemInState = currentState['1'][item.id];
@@ -102467,6 +102518,10 @@ characterDetailView.classList.remove('hidden');
                */
               let targetLogId = currentActiveLogEntry.dataset.logId || '';
               let targetLogIndex = targetLogId ? logs.findIndex((log) => log.id === targetLogId) : -1;
+              if (targetLogIndex === -1 && frFailedMainPrompt?.archiveName === currentArchiveName) {
+                const cachedIndex = logs.findIndex(log => log.id === frFailedMainPrompt.userLogId);
+                if (cachedIndex >= 0 && !logs.slice(cachedIndex + 1).some(log => log.type === 'user')) { targetLogIndex = cachedIndex; targetLogId = logs[cachedIndex].id; }
+              }
               if (targetLogIndex === -1) {
                 for (let i = logs.length - 1; i >= 0; i--) {
                   if (logs[i].type === 'ai') { targetLogIndex = i; targetLogId = logs[i].id; break; }
@@ -106253,7 +106308,7 @@ newConfirmBtn.addEventListener('click', handleConfirm);
                 </div>
                 <div class="char-detail-hp-bar"><div class="char-detail-hp-fill" style="width: ${hpPercent}%;"></div></div>
                 <div class="char-detail-mana-bar"><div class="char-detail-mana-fill" style="width: ${mpPercent}%;"></div></div>
-                <div class="char-detail-meta" style="margin-top: 5px;"><span>年龄: ${char.age}</span> | <span>寿元: ${
+                <div class="char-detail-meta" style="margin-top: 5px;"><span>年龄: ${formatNumber(char.age)}</span> | <span>寿元: ${
             char.shouyuan
           }</span></div>
                 ${relationshipStatsHtml}
@@ -106730,7 +106785,7 @@ if (!isReadOnly) {
               secretsHtml += `
                 <div class="secret-card">
                     <div class="secret-header"><i class="fas fa-id-card"></i> 基础档案</div>
-                    ${npcDisplaySettings.showSpiritStones ? `<div class="secret-row"><span class="secret-label">当前灵石</span><span class="secret-value fr-wallet-value">${frSpiritStoneWalletText(char.spiritStoneWallet || frReadSpiritStoneWallet({26:char.spiritStones}),'\n')}</span></div>` : ''}
+                    ${npcDisplaySettings.showSpiritStones ? `<div class="secret-row"><span class="secret-label">当前灵石</span><span class="secret-value fr-wallet-value">${frDisplaySpiritStoneWallet(char.spiritStoneWallet || frReadSpiritStoneWallet({26:char.spiritStones}),'\n')}</span></div>` : ''}
                     ${npcDisplaySettings.showLinggen ? `<div class="secret-row"><span class="secret-label">灵根资质</span><span class="secret-value">${char.linggen || '未知'}</span></div>` : ''}
                     ${npcDisplaySettings.showSpecialConstitution ? `<div class="secret-row"><span class="secret-label">特殊体质</span><span class="secret-value">${char.specialConstitution || '无'}</span></div>` : ''}
                     <div class="secret-row"><span class="secret-label">对你称呼</span><span class="secret-value">${char.appellation || '道友'}</span></div>
@@ -107046,7 +107101,7 @@ if (!isReadOnly) {
                             if (/[\u4e00-\u9fa5]/.test(_n[_i])) { _cc++; if (_cc > 5) { _ti = _i; break; } }
                         }
                         return _cc > 5 ? '<span style="color:'+_c+'">'+_n.substring(0,_ti)+'..</span>' : '<span style="color:'+_c+'">'+_n+'</span>';
-                    })()}</span><span class="inventory-slot-quantity">${item.quantity}</span>`;
+                    })()}</span><span class="inventory-slot-quantity" title="${item.quantity}">${formatNumber(item.quantity)}</span>`;
               slot.addEventListener('click', () => {
                 addAction('gift', item, { charName: char.name });
 
@@ -112915,7 +112970,7 @@ async function getCustomTraits() {
                         }
                         return _cc > 5 ? '<span style="color:'+_c+'">'+_n.substring(0,_ti)+'..</span>' : '<span style="color:'+_c+'">'+_n+'</span>';
                     })()}</span>
-                    <span class="inventory-slot-quantity">${item.quantity}</span>
+                    <span class="inventory-slot-quantity" title="${item.quantity}">${formatNumber(item.quantity)}</span>
                 `;
               container.appendChild(slot);
             });
@@ -116486,7 +116541,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   const previous = document.getElementById('attribute-tooltip');
   if (previous) { if (previous._frClose) previous._frClose(); else previous.remove(); }
   const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
-  const format = value => String(Number(number(value).toFixed(6)));
+  const format = value => formatNumber(number(value));
   const signed = value => (number(value) > 0 ? '+' : '') + format(value);
   const total = (key, rows, legacy) => typeof sources[key] === 'number' ? sources[key] : rows.length ? rows.reduce((sum, row) => sum + number(row.value), 0) : number(legacy);
   const list = key => Array.isArray(sources[key]) ? sources[key].filter(Boolean) : [];
@@ -116582,7 +116637,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
   for(const item of equipment){const c=item.container;if(!c)continue;const line=node('div',null,null,detail);line.setAttribute('data-fr-container-source','');
     node('strong',item.name||'装备',null,line);
     if(!c.ok){node('p','容器未生效：'+(c.reason||c.error||'请查看装备详情'),null,line);continue;}
-    const fmt=value=>number(value).toLocaleString('zh-CN',{maximumFractionDigits:6});
+    const fmt=value=>formatNumber(number(value));
     node('p',String(c.sourceAttribute||'属性')+'白值 '+fmt(c.sourceValue)+' × '+format(c.rate)+' × '+format(c.factor),null,line);
     node('p','神识白值 '+fmt(c.consciousness)+'；门槛 '+fmt(c.minConsciousness)+' / '+fmt(c.perfectConsciousness)+'；单件硬锁 '+fmt(c.cap)+(c.clamped?'（已封顶）':''),null,line);
   }

@@ -123,7 +123,7 @@ function chaosDetailHtml(item){
 function containerDetailHtml(item,result){
  const parsed=core('container-equipment')?.parseItemContainerEquipment(item);
  if(!parsed?.recognized)return '';
- const format=value=>Number.isFinite(value)?Number(value.toFixed(6)).toLocaleString('zh-CN',{maximumFractionDigits:6}):'—';
+ const format=value=>Number.isFinite(value)?(core('numeric-display')?.formatDisplayNumber(value) ?? String(value)):'—';
  const metric=(label,value)=>'<div><dt>'+detailEscape(label)+'</dt><dd>'+detailEscape(value)+'</dd></div>';
  const reason=code=>({unknown_realm:'持有者境界不在已定义范围内',white_value_missing:'持有者缺少对应白值',white_value_invalid:'白值不是有效非负数',consciousness_missing:'缺少神识白值',consciousness_invalid:'神识白值无效',hard_cap_missing:'该属性硬锁尚未定义',hard_cap_invalid:'该属性硬锁配置无效',numeric_overflow:'计算结果超出有效数值范围',reserved_chaos_tier:'混沌之宝至高品阶专属混沌造化瓶'})[code]||'容器字段不合法，无法结算';
  if(!parsed.ok)return detailSection('容器传导','<p>'+detailEscape(reason(parsed.reason))+'</p>');

@@ -44,7 +44,7 @@ var FrMergedEvolution = (function () {
       else if (ch === '(') depth++;
       else if (ch === ')' && --depth === 0) break;
     }
-    if (depth || quoted || source.slice(end + 1).trim()) failure('每项必须是完整单条原生命令', {
+    if (depth || quoted || !/^;?$/.test(source.slice(end + 1).trim())) failure('每项必须是完整单条原生命令', {
       name: match[1],
       unclosedParens: depth,
       unclosedQuote: quoted,
@@ -67,6 +67,12 @@ var FrMergedEvolution = (function () {
       });
     }
     // 原角色入口用正则抽upstore，转义JSON字符串中的<防止内容提前截断标签。
+    function finite(value) {
+      if (typeof value === 'number' && !Number.isFinite(value)) failure('命令参数含非有限数值，不能规范化为 null', {name: match[1]});
+      if (Array.isArray(value)) value.forEach(finite);
+      else if (value && typeof value === 'object') Object.keys(value).forEach(function(key) { finite(value[key]); });
+    }
+    finite(args);
     var canonical = match[1] + '(' + args.map(function (arg) { return JSON.stringify(arg).replace(/</g, '\\u003c'); }).join(',') + ')';
     return { name: match[1], args: args, text: canonical };
   }
@@ -121,6 +127,10 @@ var FrMergedEvolution = (function () {
     if (!error || !error.mergedParseFailure) return '';
     var d = error.mergedDetail || {};
     var bits = [];
+    if (d.stage) bits.push('校验位置：' + d.stage);
+    if (d.targetId) bits.push('目标ID：' + d.targetId);
+    if (Array.isArray(d.allowedIds)) bits.push('本阶段允许ID：' + JSON.stringify(d.allowedIds));
+    if (d.correction) bits.push(d.correction);
     if (Number.isFinite(d.responseChars)) bits.push('响应共 ' + d.responseChars + ' 字符');
     if (d.name) bits.push('出错的命令是 ' + d.name + '(...)');
     if (d.jsonError) bits.push('JSON 解析器报：' + d.jsonError);
@@ -214,12 +224,14 @@ var FrMergedEvolution = (function () {
         var parsed = opts.parseCharacters(parsedCall.text);
         if (errors(parsed) || !(parsed.delta || []).some(function (op) { return op.command === 'set'; })) failure('登场骨架未被原生解析器消费');
         row.setCommand = parsedCall.text;
-      } else if (!reentryAllowed.has(row.id)) failure('返场人物超出本轮离场候选范围：' + row.id);
+      } else if (!reentryAllowed.has(row.id)) failure('返场人物超出本轮离场候选范围：' + row.id, { stage: 'entry.entries', targetId: row.id, allowedIds: Array.from(reentryAllowed), correction: '沿用明确列出的返场候选，不把后台目标名单当完整身份索引，也不把旧人重建为new。' });
       allowed.add(row.id);
+      // 本包已通过身份/命令校验的登场者可以在同段剧情中再次离场。
+      entryAllowed.add(row.id);
       var type = row.id === 'B1' ? 'player' : /^P(?:_|\d)/.test(row.id) ? 'beast' : 'npc';
       if (disabledTypes.has(type)) disabled.add(row.id);
     });
-    entry.exits.forEach(function (row) { if (!object(row) || !entryAllowed.has(String(row.id || ''))) failure('退场人物超出本轮范围'); });
+    entry.exits.forEach(function (row) { if (!object(row) || !entryAllowed.has(String(row.id || ''))) failure('退场人物超出本轮范围', { stage: 'entry.exits', targetId: row?.id, allowedIds: Array.from(entryAllowed), correction: '只能退出本轮可退场名单或本包合法登场者；先核对entries身份与最终场景。' }); });
     Object.keys(entry.deedsUpdates || {}).forEach(function (id) { if (!allowed.has(id)) failure('事迹人物超出本轮范围：' + id); });
     if (opts.timeLocationOwner === 'misc' && entry.globalCommands.length) failure('本轮时间地点由杂项接管，登场不得写入');
     entry.globalCommands = entry.globalCommands.map(function (text) {

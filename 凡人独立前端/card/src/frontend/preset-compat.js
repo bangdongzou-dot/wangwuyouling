@@ -498,24 +498,57 @@ function frEvolutionWirePrompt(prompt,preset,withCompletion=false) {
     '不输出 upstore、thinking、canon_completion 标签或 Markdown。';
 }
 
+// Validates syntax only; stage parsers retain all command and target permissions.
+function frEvolutionWireCommand(command,index) {
+  function fail(reason) { throw new Error('commands['+index+']（第'+(index+1)+'条）：'+reason); }
+  if(typeof command!=='string')fail('必须是原生命令字符串');
+  var source=command.trim(),match=source.match(/^([A-Za-z_$][\w$]*)\s*\(/);
+  if(!match)fail('必须是单条原生函数调用');
+  var depth=1,quoted=false,escaped=false,end=match[0].length;
+  for(;end<source.length;end++){
+    var ch=source[end];
+    if(quoted){if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch==='"')quoted=false;}
+    else if(ch==='"')quoted=true;
+    else if(ch==='(')depth++;
+    else if(ch===')'&&--depth===0)break;
+  }
+  if(depth||quoted)fail(match[1]+' 的括号或字符串未闭合');
+  if(!/^;?$/.test(source.slice(end+1).trim()))fail(match[1]+' 之后含多余内容；每项只能有一条命令及可选末尾分号');
+  var args;
+  try{args=JSON.parse('['+source.slice(match[0].length,end)+']');}
+  catch(_){fail(match[1]+' 的参数不是合法完整 JSON；检查引号、逗号与转义');}
+  // Reject overflow before JSON.stringify silently changes Infinity into null.
+  function finite(value) {
+    if(typeof value==='number'&&!Number.isFinite(value))fail(match[1]+' 的参数包含超出有限数值范围的数字');
+    if(value&&typeof value==='object')Object.keys(value).forEach(function(key){finite(value[key]);});
+  }
+  finite(args);
+  // Protect legacy tag/parenthesis extractors without changing decoded argument values.
+  return match[1]+'('+args.map(function(arg){return JSON.stringify(arg).replace(/</g,'\\u003c').replace(/\(/g,'\\u0028').replace(/\)/g,'\\u0029');}).join(',')+')';
+}
+
 function frEvolutionWireReply(response,preset,withCompletion=false) {
-  if (!frUsesDeepSeekEvolutionWire(preset)) return {text:response,error:''};
-  var error='DS 返回格式不符：需要完整 JSON 对象及 commands 指令列表'+(withCompletion?'、completion.actors 回执列表':'');
-  try {
+  if(!frUsesDeepSeekEvolutionWire(preset))return {text:response,error:''};
+  var prefix='DS 返回格式不符：';
+  try{
     var source=String(response||'').trim();
-    // Reused per-floor responses may already have been normalized by the previous installation.
-    if (/^(?:<think(?:ing)?>|<upstore>)/i.test(source) && typeof ceExtractUpstoreEnvelope==='function'){
+    // Existing per-floor responses may already have been normalized by a previous installation.
+    if(/^(?:<think(?:ing)?>|<upstore>)/i.test(source)&&typeof ceExtractUpstoreEnvelope==='function'){
       var legacy=withCompletion&&typeof frCanonCompletionTools==='function'?frCanonCompletionTools().strip(source):source;
-      if (!ceExtractUpstoreEnvelope(legacy).error && (!withCompletion||legacy!==source)) return {text:source,error:''};
+      if(!ceExtractUpstoreEnvelope(legacy).error&&(!withCompletion||legacy!==source))return {text:source,error:''};
     }
-    var value=JSON.parse(source.replace(/^\x60\x60\x60(?:json)?\s*([\s\S]*?)\s*\x60\x60\x60$/i,'$1'));
-    if (!value || !Array.isArray(value.commands) ||
-        !value.commands.every(command=>typeof command==='string'&&/^[a-z][a-z0-9_]*\([^\r\n]*\)$/i.test(command.trim())) ||
-        (withCompletion&&!Array.isArray(value.completion?.actors))) return {text:'',error:error};
-    var body='<upstore>'+value.commands.map(command=>command.trim()).join('\n')+'</upstore>';
-    if (withCompletion) body+='\n<canon_completion>'+JSON.stringify(value.completion).replace(/</g,'\\u003c')+'</canon_completion>';
-    return {text:body,error:'',commandCount:value.commands.length};
-  } catch (_) { return {text:'',error:error}; }
+    var value;
+    try{value=JSON.parse(source.replace(/^\x60\x60\x60(?:json)?\s*([\s\S]*?)\s*\x60\x60\x60$/i,'$1'));}
+    catch(_){return {text:'',error:prefix+'需要完整 JSON 对象；检查截断、引号与转义，不要输出标签或解释文字'};}
+    if(!value||typeof value!=='object'||Array.isArray(value))return {text:'',error:prefix+'最外层必须是 JSON 对象'};
+    if(!Array.isArray(value.commands))return {text:'',error:prefix+'commands 必须是数组；无变化时使用 []'};
+    if(withCompletion&&(!value.completion||typeof value.completion!=='object'||Array.isArray(value.completion)||!Array.isArray(value.completion.actors)))
+      return {text:'',error:prefix+'completion.actors 必须是回执数组'};
+    var commands=value.commands.map(frEvolutionWireCommand);
+    var body='<upstore>'+commands.join('\n')+'</upstore>';
+    if(withCompletion)body+='\n<canon_completion>'+JSON.stringify(value.completion).replace(/</g,'\\u003c')+'</canon_completion>';
+    return {text:body,error:'',commandCount:commands.length};
+  }catch(error){return {text:'',error:prefix+String(error.message||error)};}
 }
 
 function frNativeEvolutionStageContract(type, targetId, legacyClockContract = false) {
@@ -2547,6 +2580,16 @@ function frAdaptCurrentStageContracts(preset) {
       if(scope==='entry_all_focus'&&id==='entry-cot-start')
         rule.content=rule.content.replace(/^<\/?thinking>\s*$/gmu,'');
       if(frUsesDeepSeekEvolutionWire(preset)){
+        // Migrate only verified released text; retain appended or unknown custom rules.
+        if(scope==='misc_management'&&id==='misc-error-check-v2'){
+          var released=FR_PRESET_PROSE_FINAL_PATCHES.find(function(p){return p.scope===scope&&p.id===id;});
+          if((released&&(rule.content===released.oldText||rule.content.startsWith(released.oldText+'\n')))||
+            (frCompatSha256Hex(rule.content.slice(0,1467))==='088e4680f88368db210e785e9b8b99f715f0f179da5859e7eebc1a97e2b59d0a'&&(rule.content.length===1467||rule.content[1467]==='\n'))){
+            frPresetCompatBackup(meta,scope,rule);
+            rule.content=rule.content.replace(/\| 输出污染\s*\| 在upstore外输出解释文字\s*\| upstore外禁止任何文本\s*\|/,
+              '| 输出污染 | 在最终 JSON 外输出解释文字或标签 | 只返回本阶段 JSON，原生命令放入 commands |');
+          }
+        }
         if(outputRules.includes(id)){
           rule.content=rule.content
             .replace(/^<thinking>\s*\n[\s\S]*?^<\/thinking>\s*$/gmu,'在内部核对，最终只给本阶段 JSON。')

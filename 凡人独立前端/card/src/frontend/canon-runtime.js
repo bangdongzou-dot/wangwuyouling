@@ -1,6 +1,6 @@
 // 整个前端辅助AI请求共用预算，不另造API发送器。
 var frAiRequestBudget = null;
-// 只留当前页面最近一次失败正文的已拼装材料，不重做指导或检索。
+// 只留当前页面最近一轮已拼装正文材料；成功和失败均可重roll复用。
 var frFailedMainPrompt=null,frMainPromptEditRevision=0,frMainPromptWatching=false;
 function frMainPromptWatch(){
   if(frMainPromptWatching||typeof document==='undefined')return;
@@ -14,23 +14,81 @@ function frClearFailedMainRequestDisplay(){
     if(row.classList.contains('fr-main-request-error')||row.classList.contains('error')&&/^\[(?:天机紊乱\] API调用失败|流程未完成\] 正文模型请求)/.test(text)||row.classList.contains('system')&&/^(?:已保留本轮正文提示词。|正文未生成，可复用已准备提示词重试。)/.test(text))row.remove();
   });
 }
+var frMainPreparedRetryBusy=false;
 async function frRetryFailedMainPrompt(userLogId){
+  if(frMainPreparedRetryBusy)return true;
+  frMainPreparedRetryBusy=true;
+  try{return await frRetryPreparedMainPromptInternal(userLogId);}
+  finally{frMainPreparedRetryBusy=false;}
+}
+async function frRetryPreparedMainPromptInternal(userLogId){
   if(typeof isMainApiGenerating!=='undefined'&&isMainApiGenerating)return false;
   var cached=frFailedMainPrompt;if(!cached||cached.archiveName!==currentArchiveName)return false;
   if(userLogId&&userLogId!==cached.userLogId)return false;
-  var archive=await db.archives.get(currentArchiveName),logs=archive?.data?.logs||[],index=logs.findIndex(row=>row.id===cached.userLogId);
-  if(index<0||logs.slice(index+1).some(row=>row.type==='user'||row.type==='ai'))return false;
+  var archiveName=currentArchiveName;
+  var stillCurrent=()=>currentArchiveName===archiveName&&frFailedMainPrompt===cached;
+  var archive=await db.archives.get(archiveName);
+  if(!stillCurrent())return true;
+  var logs=archive?.data?.logs||[],index=logs.findIndex(row=>row.id===cached.userLogId);
+  if(index<0||logs.slice(index+1).some(row=>row.type==='user'))return false;
+  var hadStory=logs.slice(index+1).some(row=>row.type==='ai');
   var editedLog=cached.userLogContent!==undefined&&logs[index].content!==cached.userLogContent;
   var input=String(messageInput.value||'').trim()||(editedLog?String(logs[index].content||'').replace(/^> /,''):cached.input);
-  var changed=editedLog||input!==cached.input||frMainPromptEditRevision!==cached.editRevision||JSON.stringify(currentState)!==cached.stateText||(cached.actionsText!==undefined&&JSON.stringify(typeof actionQueue==='undefined'?[]:actionQueue)!==cached.actionsText);
-  var reuse=!changed||await showCustomDialog({title:'正文提示词已准备好',message:'检测到输入、状态或设置有修改。复用时保留原提示词及原行动；模型接口仍按当前配置请求。',buttons:[{text:'复用原提示词',value:()=>true},{text:'按修改从头生成',value:()=>false}]});
-  if(reuse){frClearFailedMainRequestDisplay();await sendMessage(cached.input,{preparedMain:cached});return true;}
-  var previous=logs.slice(0,index).reverse().find(row=>row.stateSnapshot);
-  if(!previous)throw new Error('找不到原回合快照，无法从头生成');
-  frClearFailedMainRequestDisplay();
-  frFailedMainPrompt=null;
-  if(!await loadStateFromLog(previous.id,true))throw new Error('回退原回合失败');
-  await sendMessage(input);return true;
+  var queued=JSON.parse(JSON.stringify(typeof actionQueue==='undefined'?[]:actionQueue));
+  var changed=editedLog||input!==cached.input||(queued.length>0&&JSON.stringify(queued)!==JSON.stringify(cached.actionQueue||[]));
+  var choice=changed?await showCustomDialog({title:'正文提示词已准备好',message:'行动已修改。可沿用已准备的资料并使用新行动，也可以重新准备全部流程。模型接口使用当前配置。',buttons:[{text:'复用准备材料（使用新行动）',value:()=> 'reuse'},{text:'重新准备全部流程',value:()=> 'rebuild'},{text:'取消',value:()=> 'cancel'}]}):'reuse';
+  if(!stillCurrent())return true;
+  if(choice!=='reuse'&&choice!=='rebuild')return true;
+  // Recheck the floor after the dialog; never roll back a newly advanced turn.
+  archive=await db.archives.get(archiveName);
+  if(!stillCurrent())return true;
+  logs=archive?.data?.logs||[];index=logs.findIndex(row=>row.id===cached.userLogId);
+  if(index<0||logs.slice(index+1).some(row=>row.type==='user'))return true;
+  hadStory=logs.slice(index+1).some(row=>row.type==='ai');
+  var nextCache=cached;
+  if(choice==='reuse'&&changed){
+    if(typeof cached.promptPrefix!=='string')throw new Error('缺少可安全替换行动的准备材料，请选择重新准备全部流程');
+    nextCache=JSON.parse(JSON.stringify(cached));
+    var actions=queued.length?queued:(cached.actionQueue||[]);
+    var aiInput=cached.permanentPromptTemplate?String(cached.permanentPromptTemplate).replace(/\{\{userInput\}\}/g,()=>input):input;
+    var parts=[];
+    if(cached.hiddenActionContext)parts.push(String(cached.hiddenActionContext));
+    if(actions.length)parts.push('[执行指令]\n'+actions.map(a=>a.text).join('\n'));
+    if(aiInput)parts.push('> '+aiInput);
+    var fullAction=parts.join('\n').trim();
+    var visible=actions.filter(a=>!a.isSilent).map(a=>a.text).join('\n');
+    var content=[visible?'[执行指令]\n'+visible:'',input?'> '+input:''].filter(Boolean).join('\n');
+    nextCache.bundle.finalPrompt=processTextWithRules(cached.promptPrefix+'\n\n### 玩家输入：\n'+fullAction,PLACEMENT_MAP.PROMPT_HISTORY,'regular')+'\n{{setvar::玩家输入::'+fullAction+'}}';
+    nextCache.input=input;nextCache.actionQueue=JSON.parse(JSON.stringify(actions));
+    nextCache.userLogContent=content;
+    nextCache.userLogData={...(nextCache.userLogData||logs[index]),id:cached.userLogId,content};
+  }
+  var originalUser=JSON.parse(JSON.stringify(nextCache.userLogData||{...logs[index],content:nextCache.userLogContent??logs[index].content}));
+  var previous=logs.slice(0,index).reverse().find(row=>row.stateSnapshot&&(!cached.baselineLogId||row.id===cached.baselineLogId));
+  if(hadStory||choice==='rebuild'||changed&&choice==='reuse'){
+    if(!previous)throw new Error('找不到原回合快照，无法安全重roll');
+    if(!await loadStateFromLog(previous.id,true))throw new Error('回退原回合失败');
+    if(!stillCurrent())return true;
+  }
+  if(choice==='reuse'){
+    // The rollback removes the old input too; prepared sends deliberately skip input creation.
+    var restored=await db.archives.get(archiveName);
+    if(!stillCurrent())return true;
+    if(!(restored?.data?.logs||[]).some(row=>row.id===cached.userLogId)){
+      await saveToLog(archiveName,originalUser);
+      if(!stillCurrent())return true;
+      if(typeof addMessageToLog==='function')addMessageToLog(originalUser,'user');
+    }
+    if(typeof actionQueue!=='undefined')actionQueue=[];
+    if(typeof renderActionQueue==='function')renderActionQueue();
+    frClearFailedMainRequestDisplay();
+    frFailedMainPrompt=nextCache;
+    await sendMessage(nextCache.input,{preparedMain:nextCache,mainReroll:true});return true;
+  }
+  if(typeof actionQueue!=='undefined')actionQueue=queued;
+  if(typeof renderActionQueue==='function')renderActionQueue();
+  frClearFailedMainRequestDisplay();frFailedMainPrompt=null;
+  await sendMessage(input,{mainReroll:true});return true;
 }
 var frAiRequestWaits = new WeakMap();
 function frErrorText(error){
