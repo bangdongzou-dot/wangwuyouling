@@ -6,6 +6,10 @@ Windows PC 版游戏源码。安装包与更新说明请见仓库的 Releases。
 
 进入「凡人独立前端」，运行 `npm ci` 安装依赖，再运行 `npm run dist:win` 生成 Windows x64 安装包。项目采用 Node.js 24 和 Electron 33 完成此次构建。
 
+## 1.2.0 更新方式
+
+已有玩家可在游戏内更新，也可正常退出后用 [1.2.0 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.0) 覆盖原安装位置。更新内容见 [PC 版更新日志](发布包/版本更新日志/v1.2.0-PC版对外更新日志.md)。
+
 ## 1.1.9 更新方式
 
 已有玩家可在游戏内更新，也可正常退出后用 [1.1.9 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.1.9) 覆盖原安装位置。更新内容见 [PC 版更新日志](发布包/版本更新日志/v1.1.9-PC版对外更新日志.md)。

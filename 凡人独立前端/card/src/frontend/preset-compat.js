@@ -1291,7 +1291,7 @@ var FR_NATIVE_DOMAIN_PATCHES = [
   },
   {
     "oldText": "## Step 4.7: 出生年与额外寿元校验（强制）\n\n读取数据源：`${current_time}`、主角第10列背景、正文明确寿元事件、当前 `identity.extraShouyuan`。\n\n执行顺序：\n1. 检查第10列是否包含`[出生：XX年]`。\n2. 若存在出生年：禁止改写该出生年，不输出第9列年龄修正。\n3. 若缺失出生年且有明确年龄来源：可反推出生年并补写第10列开头；无明确来源则保持不改，禁止臆造。\n4. 检查本轮是否发生明确增加/减少寿元的事实（丹药、剧情、体质、诅咒等）。若发生，只输出 `<state>character.B1.identity.extraShouyuan = 数字</state>` 写入累计额外寿元。\n5. 禁止输出第9列`年龄`或`寿元`作为手算结果。\n\n输出要求：\n- 在<thinking>中必须显式输出一行“出生年/额外寿元校验结论：......”。\n- 若写 extraShouyuan，必须说明“旧额外寿元 / 本轮变化依据 / 新额外寿元”。\n- 若维护外貌年龄：用 `<state>character.B1.identity.appearanceAge = 数字</state>`、`<state>character.B1.identity.youthRetentionReason = \"\"</state>` 写入；有明确驻颜丹/驻颜功法/易容化形等原因时，`youthRetentionReason` 必须写明驻颜后的外貌年龄和理由，且不得低于成年下限。\n",
-    "newText": "【本地年龄与寿元】年龄和寿元保存在第9列备注“年龄”“寿元”，沿原生add(\"C1\",{\"9\":{\"年龄\":25,\"寿元\":75}})按真实经过时间及已确认延寿/减寿事实计算后写最终值。已有明确出生年保持不变；无可靠年龄来源不编造出生年。没有extraShouyuan自动派生器，不把年龄/寿元改写到陌生identity路径；保持已有备注其他字段。"
+    "newText": "【本地年龄与寿元】年龄是已活年数，寿元是从当前时点起还能活的年数。由总寿命首次推算时减去年龄，从已知剩余寿元继续推进时只扣新经过的时间，并计入已确认的延寿或折寿。第9列用原生add(\"C1\",{\"9\":{\"年龄\":25,\"寿元\":75}})写终态。保留已知出生年和其他备注。明确与天地同寿、不死不灭的设定沿用原值。"
   },
   {
     "oldText": "| 4   | 当前状态/Buffs | 格式\"状态名:Emoji(效果\\|激活条件\\|结束条件\\|来源)\"，无状态填\"一切正常\"；效果只写玩家可读语义，不写`属性名+数字`或`属性名+数字%`；需要数值化时同一条 add 必须同时输出 `buffs` 数组，使用结构化 `buffs[].numeric.kind=\"buff\"`                                                                                                                                                                                                                                                                                                                                                                                                                                              |",
@@ -3674,6 +3674,18 @@ function frCurrencyProfileRuleText(text) {
     .replace(/、善恶值|善恶值、|、善恶|善恶、/gu,'');
 }
 
+function frRemainingLifespanRuleText(text) {
+  return text
+    .replace(/(\| 寿元\s*\| )整数，(?:主角|角色)存活年龄上限（岁），必须 >0，未死亡时不得写 0(?:。由种族与天资决定，仅在境界突破、功法特性、延寿\/折寿事件时增减；年龄 ≥ 寿元 时角色死亡)?(?= \|)/gu,
+      '$1从当前时点起还能活的整年数。首次估算用总寿命减去年龄，已有剩余值只扣本次经过的时间并计入已确认的延寿或折寿。寿尽归零。')
+    .replace(/^【本地年龄与寿元】(?:年龄和寿元保存在第9列备注“年龄”“寿元”，沿原生add\("C1",\{"9":\{"年龄":25,"寿元":75\}\}\)按真实经过时间及已确认延寿\/减寿事实计算后写最终值。已有明确出生年保持不变；无可靠年龄来源不编造出生年。没有extraShouyuan自动派生器，不把年龄\/寿元改写到陌生identity路径；保持已有备注其他字段。|年龄是已活年数，寿元是从当前时点起还能活的年数。由总寿命首次推算时减去年龄，从已知剩余寿元继续推进时只扣新经过的时间，并计入已确认的延寿或折寿。第9列用原生add\("C1",\{"9":\{"年龄":25,"寿元":75\}\}\)写终态。保留已知出生年和其他备注。明确与天地同寿、不死不灭的设定沿用原值。)$/gmu,
+      '【本地年龄与寿元】年龄是已活年数，寿元是从当前时点起还能活的整年数。首次估算用总寿命减去年龄，已有剩余值只扣本次经过的时间，再计入已确认的延寿或折寿。写本阶段目标第9列「年龄」「寿元」终态，保留已知出生年和其他备注。明确与天地同寿、不死不灭的设定沿用原值。')
+    .replaceAll('最终剩余寿元归零由代码在同批突破和延寿变化全部结算后直接处理。','按已成立的突破、延寿和实际经过的时间核对剩余寿元。')
+    .replaceAll('不要手算或改写年龄/剩余寿元；代码会在同批突破与 extraShouyuan 变化全部结算后，将最终剩余寿元为0的普通人物直接判为寿尽死亡',
+      '先核对已成立的突破、延寿或折寿，再按当前剩余寿元核对寿尽事实，并同步第4列状态及第9列寿元')
+    .replaceAll('删除；只允许在明确寿元事件时维护 extraShouyuan','核对第9列年龄和剩余寿元是否与真实经过时间及已确认变化相符');
+}
+
 function frBasicProfileRuleText(text) {
   var value=frCurrencyProfileRuleText(String(text||''));
   value=value.replace(/^## (?:主角|NPC)第8列[^\n]*\n[\s\S]*?(?=^## |(?![\s\S]))/gm,'');
@@ -3699,8 +3711,17 @@ function frAdaptBasicProfileRules(preset) {
     phase.rules=phase.rules.filter(function(rule){
       if(frIsRetiredProfileRule(rule)){frPresetCompatBackup(meta,scope,rule);return false;}
       var text=String(rule&&rule.content||'');
-      var clean=frBasicProfileRuleText(text);
-      if(clean!==text){frPresetCompatBackup(meta,scope,rule);rule.content=clean;}
+      var clean=frRemainingLifespanRuleText(frBasicProfileRuleText(text));
+      if(clean!==text){
+        frPresetCompatBackup(meta,scope,rule);
+        var key=scope+':'+rule.id;
+        var tracked=meta.stageWireRevisions?.[key]===frCompatSha256Hex(text);
+        var knownFortune=FR_FORTUNE_TRAIT_RULE_PATCHES.some(function(p){
+          return p.scope===scope&&p.id===rule.id&&text.length>=p.newLength&&frCompatSha256Hex(text.slice(0,p.newLength))===p.newHash;
+        });
+        if(tracked||knownFortune)(meta.stageWireRevisions||(meta.stageWireRevisions={}))[key]=frCompatSha256Hex(clean);
+        rule.content=clean;
+      }
       return true;
     });
   });
@@ -4080,7 +4101,7 @@ function frAdaptEvolutionPreset(preset, referencePreset) {
       id:'fr-npc-cultivation-outcome',name:'NPC 修为与功法进展判定',enabled:true,
       content:[
         '逐人先确认已到达的境界与功法层数，再核对该层进度。领口诀、试着吐纳、初察气感、普通武学内力、象甲功等炼体层数均不代表炼气入门。已确认引气入体，或明确能够用修仙功法稳定引动体内灵气循经运转，至少落实为炼气一层。长春功明确练成第N层时落实为炼气相应层数，接近突破或功法总层数不算达成。',
-        '人物境界与身份彼此独立。按本轮原生命令合同写入 NPC 第2列，例如「炼气一层(5%)|神手谷学徒」。已证实突破但没有具体层内进度时，以5%作保守起点。同层增长须有已完成修炼、实际收益或剧情依据，按当前小境界的百分比更新，已有更高境界或合法同层进度不能被早期里程碑覆盖。仅时间经过、功法入包或装备更换不能作为修为增加依据。'
+        '人物境界与身份彼此独立。明确入门、突破或原著权威终态按原合同写第2列，例如「炼气一层(5%)|神手谷学徒」。已证实突破但没有具体层内进度时，以5%作保守起点。炼气至化神的普通吐纳和修炼丹使用 cultivationPractice，由本地更新同层进度。已有的更高境界和合法同层进度继续有效。仅时间经过、功法入包或装备更换不增加修为。'
       ].join('\n')
     };
     var npcColumnTypes = {

@@ -1,7 +1,7 @@
 {
   "name": "fanren-standalone",
   "private": true,
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "凡人修仙传 · 原著补演（独立桌面版）",
   "author": "原著补演",
   "main": "electron/main.cjs",

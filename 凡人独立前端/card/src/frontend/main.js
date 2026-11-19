@@ -966,7 +966,7 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 | 变量名 (键名) | 格式/说明 | 示例 |
 |---|---|---|
 | 年龄  | 整数。 | {"年龄": 21} |
-| 寿元  | 整数。 | {"寿元": 149} |
+| 寿元  | 从当前时点起还能活的整年数。按实际经过时间和已确认的寿元变化更新。 | {"寿元": 149} |
 | 修为进度  | 整数，0-100，不带百分号。 | {"修为进度": 75} |
 | 灵根 | 完整的灵根描述字符串。 | {"灵根": "天灵根 火"} |
 | traits | 为词条对象数组，其中rarity为词条的稀有度，必须是 平庸, 普通, 稀有, 史诗, 传说, 神迹, 负面状态 之一。 | {"traits": [{"name":"新特性","desc":"描述","rarity":"稀有"}]} |
@@ -977,7 +977,7 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 | 变量名 (键名) | 格式/说明 | 示例 |
 |---|---|---|
 | 年龄  | 整数。随着时间推进年龄会增加 | {"年龄": 52} |
-| 寿元  | 整数。随着时间推进寿元会减少，寿元为0会死亡 | {"寿元": 20} |
+| 寿元  | 从当前时点起还能活的整年数。随着时间推进会减少，耗尽时为0。 | {"寿元": 20} |
 | isBonded| true 或 false，不是字符串。true表示为{{user}}的羁绊人物，不能删除 | {"isBonded": true} |
 | deeds | 用分号 ; 分隔的事件记录。记录与{{user}}经历的事件 | {"deeds": "0030年:赠予丹药;0031年:共同探险"} |必须是印象深刻的才可以记录
 
@@ -2060,7 +2060,7 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 
 | 变量名 (键名) | 格式/说明 | 示例 |
 | 年龄  | 整数。 | {"年龄": 21} | 更新玩家年龄：add("B1", {"9": {"年龄": "21"}})
-| 寿元  | 整数。 | {"寿元": 149} | 更新玩家寿元：add("B1", {"9": {"寿元": "149"}})
+| 寿元  | 从当前时点起还能活的整年数。按实际经过时间和已确认的寿元变化更新。 | {"寿元": 149} | 更新玩家寿元：add("B1", {"9": {"寿元": "149"}})
 | 修为进度  | 整数，0-100，不带百分号。 | {"修为进度": 75} | 更新玩家修为进度：add("B1", {"9": {"修为进度": "95"}})
 | 灵根 | 完整的灵根描述字符串。 | {"灵根": "天灵根 火"} |
 
@@ -2069,7 +2069,7 @@ currentState 是一个包含多个变量的对象，每个变量以其索引为�
 | 变量名 (键名) | 格式/说明 | 示例 |
 
 | 年龄  | 整数。随着时间推进年龄会增加 | {"年龄": 52} | 更新玩家年龄：add("C1", {"9": {"年龄": "52"}})
-| 寿元  | 整数。随着时间推进寿元会减少，寿元为0会死亡 | {"寿元": 20} | 更新玩家寿元：add("C1", {"9": {"寿元": "20"}})
+| 寿元  | 从当前时点起还能活的整年数。随着时间推进会减少，耗尽时为0。 | {"寿元": 20} | 更新人物寿元：add("C1", {"9": {"寿元": "20"}})
 | isBonded| true 或 false，不是字符串。true表示为{{user}}的羁绊人物，不能删除 | {"isBonded": true} |
 | deeds | 用分号 ; 分隔的事件记录。记录与{{user}}经历的事件 | {"deeds": "0030年:赠予丹药;0031年:共同探险"} |
 
@@ -12357,6 +12357,29 @@ function _portraitSplitUniqueKey(uniqueKey) {
   };
 }
 
+function frPortraitLogIndices(logs) {
+  const indices = new Map();
+  for (const [index,log] of logs.entries()) {
+    if (log?.id == null) continue;
+    for (const id of log.portraitSourceLogIds || []) if (!indices.has(String(id))) indices.set(String(id),index);
+    indices.set(String(log.id),index);
+  }
+  return indices;
+}
+
+function frSetPortraitSummarySources(state, summary, removedLogs) {
+  const removed = new Set(removedLogs.flatMap(log=>[String(log.id),...(log.portraitSourceLogIds || [])]));
+  const sources = new Set();
+  for (const timeline of [state?.npcAvatarTimeline,state?.npcSceneAvatarTimeline]) {
+    for (const entries of Object.values(timeline || {})) {
+      for (const entry of entries || []) {
+        if (entry?.logId != null && removed.has(String(entry.logId))) sources.add(String(entry.logId));
+      }
+    }
+  }
+  if (sources.size) summary.portraitSourceLogIds = [...sources];
+}
+
 function _portraitGetBestTimelineAvatarFromTimelines(timelineMap, keys, layer, options) {
   var opts = options || {};
   var exactKey = String(opts.exactKey || '');
@@ -12365,6 +12388,8 @@ function _portraitGetBestTimelineAvatarFromTimelines(timelineMap, keys, layer, o
   if (!Array.isArray(keys) || keys.length === 0) return null;
 
   var best = null;
+  let bestLayer = -Infinity;
+  const boundLayers = opts.portraitLogIndices || (logs ? frPortraitLogIndices(logs) : null);
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
     var timeline = timelineMap[key];
@@ -12372,19 +12397,15 @@ function _portraitGetBestTimelineAvatarFromTimelines(timelineMap, keys, layer, o
     for (var j = timeline.length - 1; j >= 0; j--) {
       var entry = timeline[j];
       if (!entry || typeof entry.layer !== 'number' || (!entry.imageData && entry.imageData !== '')) continue;
-      if (entry.layer > layer) continue;
+      const entryLayer = entry.logId && boundLayers ? boundLayers.get(String(entry.logId)) : entry.layer;
+      if (entryLayer === undefined || entryLayer > layer) continue;
       // 同一层仅允许使用当前名字的精确 key，避免回溯重发后新角色复用旧分支头像
-      if (entry.layer === layer && exactKey && key !== exactKey) continue;
-      // 新数据写入了 logId，则仅当该层 log 仍匹配时生效（分支重写后旧头像自动失效）
-      if (entry.logId && logs && entry.layer >= 0 && entry.layer < logs.length) {
-        var layerLog = logs[entry.layer];
-        var layerLogId = layerLog && layerLog.id ? String(layerLog.id) : '';
-        if (!layerLogId || layerLogId !== String(entry.logId)) continue;
-      }
-      if (!best || entry.layer >= best.layer) {
+      if (entryLayer === layer && exactKey && key !== exactKey &&
+          !(key === opts.stableKey && entry.logId && String(logs?.[layer]?.id) === String(entry.logId))) continue;
+      if (!best || entryLayer > bestLayer) {
         best = entry;
+        bestLayer = entryLayer;
       }
-      break;
     }
   }
   return best ? best.imageData : null;
@@ -12426,16 +12447,16 @@ function _portraitPruneTimelineMapToLayer(timelineMap, targetLayer, logs) {
   }
 
   var timelineKeys = Object.keys(timelineMap);
+  const boundLayers = frPortraitLogIndices(logs);
   for (var i = 0; i < timelineKeys.length; i++) {
     var key = timelineKeys[i];
     var timeline = Array.isArray(timelineMap[key]) ? timelineMap[key] : [];
     var filtered = [];
     for (var j = 0; j < timeline.length; j++) {
       var entry = timeline[j];
-      if (!entry || typeof entry.layer !== 'number' || entry.layer > targetLayer) continue;
-      if (entry.logId && logs[entry.layer] && logs[entry.layer].id && String(logs[entry.layer].id) !== String(entry.logId)) {
-        continue;
-      }
+      if (!entry || typeof entry.layer !== 'number') continue;
+      const entryLayer = entry.logId ? boundLayers.get(String(entry.logId)) : entry.layer;
+      if (entryLayer === undefined || entryLayer > targetLayer) continue;
       filtered.push(entry);
     }
     if (filtered.length !== timeline.length) changed = true;
@@ -12463,51 +12484,31 @@ function _portraitPruneTimelineMapToLayer(timelineMap, targetLayer, logs) {
 async function applyGeneratedPortrait(charId, charName, imageDataUrl, options) {
   const archiveName=options?.archiveName || currentArchiveName;
   const checkGeneration=options?.checkTurn || frGenerationGuard(options?.signal,archiveName);
-  checkGeneration();
-  var archive = await db.archives.get(archiveName);
-  checkGeneration();
-  if (!archive || !archive.data) throw new Error('无法获取当前存档');
-  if (!archive.data.state) archive.data.state = {};
-
-  var uniqueKeys = _portraitBuildUniqueKeyCandidates(charId, charName, { includeStable: true });
+  const uniqueKeys = _portraitBuildUniqueKeyCandidates(charId, charName, { includeStable: true });
   if (uniqueKeys.length === 0) throw new Error('角色标识无效，无法保存头像');
-  var currentLayer = (archive.data.logs || []).length - 1;
-  if (currentLayer < 0) currentLayer = 0;
-  _commercialAutoPortraitDebugLog('applyGeneratedPortrait:start', {
-    charId: String(charId || ''),
-    charName: String(charName || ''),
-    keys: uniqueKeys,
-    layer: currentLayer,
-    imageType: String(imageDataUrl || '').indexOf('data:') === 0 ? 'data-url' : 'url',
-    imageLen: String(imageDataUrl || '').length
-  });
-
-  // 写入 timeline（用于回溯）
-  if (!archive.data.state.npcAvatarTimeline) {
-    archive.data.state.npcAvatarTimeline = {};
-  }
-  var currentLog = (archive.data.logs || [])[currentLayer] || null;
-  var currentLogId = currentLog && currentLog.id ? String(currentLog.id) : '';
-  for (var i = 0; i < uniqueKeys.length; i++) {
-    var timelineKey = uniqueKeys[i];
-    if (!archive.data.state.npcAvatarTimeline[timelineKey]) {
-      archive.data.state.npcAvatarTimeline[timelineKey] = [];
-    }
-    archive.data.state.npcAvatarTimeline[timelineKey].push({
-      layer: currentLayer,
-      logId: currentLogId,
-      imageData: imageDataUrl
-    });
-  }
-
-  // 同时写入 npcAvatars（保持现有系统兼容）
-  if (!archive.data.state.npcAvatars) archive.data.state.npcAvatars = {};
-  for (var j = 0; j < uniqueKeys.length; j++) {
-    archive.data.state.npcAvatars[uniqueKeys[j]] = imageDataUrl;
-  }
-
   checkGeneration();
-  await db.archives.put(archive);
+  const currentLayer = await db.transaction('rw',db.archives,async()=>{
+    const archive = await db.archives.get(archiveName);
+    checkGeneration();
+    if (!archive?.data) throw new Error('无法获取当前存档');
+    const logs = archive.data.logs || [];
+    const latestStory = options?.bindToLatestStory ? logs.findLastIndex(frIsDialogueStoryFloor) : -1;
+    const layer = latestStory >= 0 ? latestStory : Math.max(0,logs.length-1);
+    const logId = String(logs[layer]?.id ?? '');
+    const state = archive.data.state ||= {};
+    const timeline = state.npcAvatarTimeline ||= {};
+    const avatars = state.npcAvatars ||= {};
+    _commercialAutoPortraitDebugLog('applyGeneratedPortrait:start', {
+      charId:String(charId||''),charName:String(charName||''),keys:uniqueKeys,layer,
+      imageType:String(imageDataUrl||'').startsWith('data:')?'data-url':'url',imageLen:String(imageDataUrl||'').length
+    });
+    for (const key of uniqueKeys) {
+      (timeline[key] ||= []).push({layer,logId,imageData:imageDataUrl});
+      avatars[key] = imageDataUrl;
+    }
+    await db.archives.put(archive);
+    return layer;
+  });
   checkGeneration();
   _commercialAutoPortraitDebugLog('applyGeneratedPortrait:archive_put_done', {
     charId: String(charId || ''),
@@ -12517,10 +12518,11 @@ async function applyGeneratedPortrait(charId, charName, imageDataUrl, options) {
 
   // 刷新显示
   await updateNpcAvatarDisplay(charId);
-  showDanmaku(imageDataUrl ? '肖像已应用' : '已解除主肖像绑定', 'success');
+  if (options?.notify !== false) showDanmaku(imageDataUrl ? '肖像已应用' : '已解除主肖像绑定', 'success');
   if (typeof refreshSceneAvatarStrip === 'function') {
     refreshSceneAvatarStrip();
   }
+  void frRefreshDialogueAvatarImages(archiveName).catch(error=>console.warn('[对白头像]',error.message));
   try {
     var cropBtn = document.getElementById('portrait-crop-btn');
     if (
@@ -12702,10 +12704,11 @@ function frShowImageExamples(host, labels) {
   }
 }
 
-function frFillBuiltinPortraitPrompt(kind, row, values, config = {}) {
+function frFillBuiltinPortraitPrompt(kind, row, values, config = {}, assets) {
   const template = config.portraitImageTemplate || frImageMaterials().portrait;
   if (!template) return '';
-  const [, attire, location, figure, appearance] = String(row?.['16'] || '').split(/[|｜]/);
+  const [action, attire, location, figure, appearance] = String(row?.['16'] || '').split(/[|｜]/);
+  const designBound = frPortraitHasDesign(assets);
   const [, gender] = String(row?.['1'] || '').split(/[|｜]/);
   const subjectType = /妖兽|灵兽/u.test(String(row?.['2'] || ''))
     ? '非人类灵兽，保留现有形态' : '按角色资料呈现的人物';
@@ -12716,10 +12719,11 @@ function frFillBuiltinPortraitPrompt(kind, row, values, config = {}) {
     ...values,
     subject_type: subjectType,
     gender: gender || '按角色资料',
-    appearance: appearance || '角色已知的外貌',
-    appearance_details: '现有角色资料及其参考图',
-    attire: attire || '角色现有服饰',
-    figure: figure || '角色已知的身形',
+    action_info: designBound ? [action,location].filter(Boolean).join('，') : values.action_info,
+    appearance: designBound ? '绑定设定图' : appearance || '角色已知的外貌',
+    appearance_details: designBound ? '图中的人物建模' : '现有角色资料及其参考图',
+    attire: designBound ? '设定图所示服装' : attire || '角色现有服饰',
+    figure: designBound ? '设定图中的身形' : figure || '角色已知的身形',
     location: location || '角色所在场景'
   }).replace(/世界观单人全身角色肖像/u, '世界观单人角色图');
 }
@@ -12729,20 +12733,79 @@ function _portraitIsReferenceData(src) {
 }
 
 function frImageReferencesWithExample(kind, references, limit = Infinity) {
-  const src = frImageMaterials().examples?.[kind];
+  const exampleKey = kind === 'story' ? 'storyScene' : kind;
+  const src = frImageMaterials().examples?.[exampleKey];
   if (!_portraitIsReferenceData(src)) throw new Error('缺少本次生图使用的内置示例图，请重新构建游戏。');
-  const label = {story:'正文插图',portrait:'普通肖像',photo:'证件照',design:'人物设定图'}[kind];
+  const label = {story:'场景画风示例',portrait:'普通肖像',photo:'证件照',design:'人物设定图'}[kind];
   const example = {src,name:label,type:'内置画风示例',
-    guide:'只参考画风、材质、光影质感与该类图的构图规律。人物身份、长相和服饰以本次角色资料及其专属参考图为准，场景以本次画面内容为准。'};
-  const required = [...new Map(references.filter(ref=>ref.required).map(ref=>[ref.name+'\n'+ref.src,ref])).values()];
-  const optional = [...new Map(references.filter(ref=>!ref.required && ref.src!==src && !required.some(sheet=>sheet.src===ref.src))
-    .map(ref=>[ref.src,ref])).values()];
-  return [example,...required,...optional.slice(0,Math.max(0,limit-1-required.length))];
+    guide:kind === 'story'
+      ? '仅参考材质、色彩、光影与渲染质感。地点、构图和人物由本格分镜及对应人物参考确定。'
+      : '只参考画风、材质、光影质感与该类图的构图规律。人物身份、长相和服饰以本次角色资料及其专属参考图为准，场景以本次画面内容为准。'};
+  const required = [...new Map(references.filter(ref=>ref.required).map(ref=>[(ref.actorId || ref.name)+'\n'+ref.src,ref])).values()];
+  const optional = references.filter(ref=>!ref.required && ref.src!==src && !required.some(sheet=>sheet.src===ref.src));
+  if (kind === 'story') {
+    const portraits = [...new Map(optional.filter(ref=>ref.type === '肖像')
+      .map(ref=>[(ref.actorId || ref.name)+'\n'+ref.src,ref])).values()].slice(0,Math.max(0,limit-required.length));
+    const identities = [...required,...portraits];
+    if (identities.length >= limit) return identities;
+    const remaining = [...new Map(optional.filter(ref=>ref.type !== '肖像' && !portraits.some(portrait=>portrait.src===ref.src))
+      .map(ref=>[ref.src,ref])).values()];
+    return [...identities,...remaining.slice(0,limit-identities.length-1),example];
+  }
+  return [example,...required,...new Map(optional.map(ref=>[ref.src,ref])).values()].slice(0,Math.max(limit,required.length+1));
+}
+
+function frCanonGallerySubject(archive, char) {
+  if (!char?.id || char.id === 'B1') return null;
+  const state = archive?.data?.state;
+  let row = state?.currentState?.['0']?.[char.id];
+  if (!row) {
+    const stored = state?.worldBookEntries?.find(item => item.key === char.id || item.id === char.id);
+    row = parseNestedJsonString(stored?.content, null);
+  }
+  if (!row) return null;
+  const name = String(row['1'] || '').split(/[|｜]/)[0].trim();
+  const identity = frReadBondedRemarks(row['9']).canonActorId;
+  const actorId = CE_CORE['role-roster'].canonActorId;
+  const entries = frCanonGalleryPeople().filter(item => {
+    const names = [item.name, ...(item.aliases || [])];
+    return identity ? names.some(value => actorId(value) === identity) : names.includes(name);
+  });
+  return entries.length === 1 ? { entry:entries[0], row, state:state.currentState } : null;
+}
+
+function frCanonGallerySet(archive, char) {
+  if (localStorage.getItem(FR_CANON_PORTRAIT_GALLERY_KEY) !== '1') return null;
+  const subject = frCanonGallerySubject(archive, char);
+  if (!subject) return null;
+  const {entry,row,state} = subject;
+  const day = wtParseTimelinePointStrict(frStatusWorldTime(state));
+  if (!day?.hasDay) return null;
+  const realmKey = value => String(value || '').trim().replace(/^练气/u,'炼气').replace(/^金丹/u,'结丹');
+  const realm = realmKey(String(row['2'] || '').split(/[|｜（(]/)[0]);
+  let best;
+  for (const set of entry.sets) {
+    if (!set.portrait || !set.design) continue;
+    const start = wtParseTimelinePointStrict(set.from), end = wtParseTimelinePointStrict(set.to);
+    if (!start?.hasDay || !end?.hasDay || day.dayIndex < start.dayIndex || day.dayIndex > end.dayIndex) continue;
+    const specificity = Math.max(0,...set.realms.map(realmKey).filter(tier=>realm.startsWith(tier)).map(tier=>tier.length));
+    if (!specificity) continue;
+    const span = end.dayIndex - start.dayIndex;
+    if (!best || span < best.span || (span === best.span && specificity >= best.specificity)) best = {set,span,specificity};
+  }
+  return best?.set || null;
+}
+
+function frCanonGalleryPortrait(archive, char) {
+  return frCanonGallerySet(archive, char)?.portrait || '';
 }
 
 function _portraitGetCharacterAssets(archive, char) {
   const key = _portraitBuildStableUniqueKey(char.id);
-  return archive?.data?.state?.characterImageAssets?.[key] || {};
+  const stored = archive?.data?.state?.characterImageAssets?.[key] || {};
+  if (Object.hasOwn(stored, 'design')) return stored;
+  const design = frCanonGallerySet(archive, char)?.design;
+  return design ? { ...stored, design } : stored;
 }
 
 async function _portraitUpdateCharacterAssets(archiveName, char, update) {
@@ -12761,14 +12824,24 @@ async function _portraitUpdateCharacterAssets(archiveName, char, update) {
 
 async function _portraitWriteCharacterAsset(archiveName, char, kind, src) {
   if (src && !_portraitIsReferenceData(src)) throw new Error('请选择 PNG、JPEG 或 WebP 图片');
+  const keepUnbound = !src && kind === 'design' && !!frCanonGallerySubject(await db.archives.get(archiveName), char);
   return _portraitUpdateCharacterAssets(archiveName, char, assets => {
-    if (src) assets[kind] = src;
+    if (src || keepUnbound) assets[kind] = src;
     else delete assets[kind];
   });
 }
 
 function frPortraitAppearanceText(value) {
   return typeof value === 'string' && !/<img\b|^\s*(?:暂无|未知|未详|无)\s*$/iu.test(value) ? value.trim() : '';
+}
+
+function frPortraitHasDesign(assets) {
+  return _portraitIsReferenceData(assets?.design);
+}
+
+function frPortraitArchiveAtState(archive, state, id, row, table = '0') {
+  const currentState = id ? {...state,[table]:{...state?.[table],[id]:row}} : state;
+  return {data:{state:{...archive?.data?.state,currentState}}};
 }
 
 function frPortraitVisualFacts(row) {
@@ -12783,8 +12856,14 @@ function frPortraitAppearanceFromRow(row, legacyPrompt) {
   return frPortraitAppearanceText(row?.['19']) || frPortraitAppearanceText(legacyPrompt) || frPortraitVisualFacts(row);
 }
 
-function frUpdatePortraitAppearance(row, previous) {
+function frUpdatePortraitAppearance(row, previous, assets) {
   if (!row) return false;
+  if (frPortraitHasDesign(assets)) {
+    if (typeof row['19'] === 'string' && /<img\b/i.test(row['19'])) return false;
+    if (previous?.['19'] === undefined) delete row['19'];
+    else row['19'] = previous['19'];
+    return false;
+  }
   const current = frPortraitAppearanceText(row['19']);
   const before = frPortraitAppearanceText(previous?.['19']);
   if (current && current !== before) return false;
@@ -12810,6 +12889,23 @@ function frPortraitAppearanceSupplement(assets, appearance) {
 
 const frPortraitVariableRule = '【持续维护角色画像】每轮核对本次负责的玩家和NPC第19列。为空时依据当前资料补全；年龄感、身形、发型、样貌或常驻造型变化时，与第16列及当前年龄同步更新第19列，移除已过时的外观。其余细节沿用，动作、位置、临时情绪和光影不写进画像。只维护允许演化的角色，不提交生图指令。';
 
+const frPortraitEvolutionArchives = new WeakMap();
+async function frPortraitEvolutionGuidance(targets, sharedContext) {
+  const people = targets.filter(target=>target.type === 'player' || target.type === 'npc');
+  if (!people.length) return {ids:[],text:''};
+  if (currentArchiveName && !frPortraitEvolutionArchives.has(sharedContext)) {
+    frPortraitEvolutionArchives.set(sharedContext,db.archives.get(currentArchiveName).catch(error => {
+      frPortraitEvolutionArchives.delete(sharedContext);
+      console.warn('[画像提示词] 读取绑定资料失败',error.message);
+      return null;
+    }));
+  }
+  const archive = frPortraitArchiveAtState(await frPortraitEvolutionArchives.get(sharedContext),currentState);
+  const ids = people.filter(target=>frPortraitHasDesign(_portraitGetCharacterAssets(archive,target))).map(target=>target.id);
+  const exception = ids.length ? '\n【已绑定设定图】' + ids.join('、') + '。这些人物的外观由设定图提供，不生成或改写第19列，仍按原规则维护其他变量。本条优先于任何要求补写第19列的规则。' : '';
+  return {ids,text:frPortraitVariableRule + exception};
+}
+
 async function frRequestPortraitAppearance(row, name) {
   if (!row) throw new Error('当前角色没有可用的变量资料');
   const config = await loadConcurrentEvolutionConfig();
@@ -12829,6 +12925,7 @@ async function frRequestPortraitAppearance(row, name) {
 }
 
 function _portraitWithAppearance(prompt, assets, row) {
+  if (frPortraitHasDesign(assets)) return prompt;
   const appearance = frResolvePortraitAppearance(row,assets);
   const supplement = frPortraitAppearanceSupplement(assets,appearance);
   return [prompt, appearance && (assets?.appearanceLocked ? '【锁定的角色外观】\n' : '【角色当前画像】\n') + appearance,
@@ -12842,25 +12939,28 @@ function frCharacterDesignReference(archive,char) {
     guide:'保持该角色自身的脸型、五官、发型、身形与稳定造型。本次动作、表情、视角和背景服从本次画面。'};
 }
 
-async function _portraitCollectCharacterReferences(archive, char, signal, includePortrait = false) {
+async function _portraitCollectCharacterReferences(archive, char, signal, includePortrait = false, layer, story) {
   if (!char || !archive) return [];
   const assets = _portraitGetCharacterAssets(archive, char);
   const references = [];
   const design = frCharacterDesignReference(archive,char);
   if (design) references.push(design);
-  if (_portraitIsReferenceData(assets.reference)) references.push({ src: assets.reference, type: '上传参考图' });
+  const upload = _portraitIsReferenceData(assets.reference) ? { src:assets.reference,type:'上传参考图' } : null;
+  if (!story && upload) references.push(upload);
   if (includePortrait || !references.length) {
-    const avatar = await _portraitResolveExistingAvatar(char, archive);
+    const avatar = await _portraitResolveExistingAvatar(char, archive, layer);
     const src = await _portraitEnsureImageDataUrl(avatar.src, { requireDataUrl: true, signal });
-    if (_portraitIsReferenceData(src) && !references.some(reference=>reference.src === src)) references.push({ src, type: '肖像' });
+    if (_portraitIsReferenceData(src) && !references.some(reference=>reference.src === src)) references.push({ src, type:'肖像',
+      guide:story && '保持这名角色的面部、年龄观感与发型，动作及镜头按本格分镜。' });
   }
-  return references.map(reference => ({ ...reference, name: char.name || char.id }));
+  if (story?.includeUpload && upload && !references.some(reference=>reference.src === upload.src)) references.push(upload);
+  return references.map(reference => ({ ...reference, name: char.name || char.id, ...(story && {actorId:char.id}) }));
 }
 
 function _portraitAppendReferenceGuide(prompt, references, guide) {
   if (!references.length) return prompt;
   const labels = references.map((reference, index) =>
-    `参考图 ${index + 1} · ${reference.name} · ${reference.type}` + (reference.guide ? ' · ' + reference.guide : ''));
+    `参考图 ${index + 1} · ${reference.name}${reference.actorId ? '（'+reference.actorId+'）' : ''} · ${reference.type}` + (reference.guide ? ' · ' + reference.guide : ''));
   return [prompt, ...labels, String(guide || '').trim() || CHARACTER_REFERENCE_GUIDE].join('\n');
 }
 
@@ -12900,6 +13000,8 @@ async function _portraitResolveExistingAvatar(char, archive, currentLayer) {
   var visualAvatar = _portraitResolveVisualAvatar(char);
   if (visualAvatar) return { src: visualAvatar, source: 'visualData' };
 
+  const gallery = timelineAvatar === '' ? '' : frCanonGalleryPortrait(localArchive, char);
+  if (gallery) return { src: gallery, source: 'canon-gallery' };
   return { src: '', source: 'none' };
 }
 
@@ -12931,6 +13033,8 @@ async function _portraitResolveExistingAvatarForAutoGen(char, archive, currentLa
   var visualAvatar = _portraitResolveVisualAvatar(char);
   if (visualAvatar) return { src: visualAvatar, source: 'visualData' };
 
+  const gallery = timelineAvatar === '' ? '' : frCanonGalleryPortrait(localArchive, char);
+  if (gallery) return { src: gallery, source: 'canon-gallery' };
   return { src: '', source: 'none' };
 }
 
@@ -12972,6 +13076,7 @@ async function applySceneStripAvatar(charId, charName, imageDataUrl) {
   if (typeof refreshSceneAvatarStrip === 'function') {
     await refreshSceneAvatarStrip();
   }
+  void frRefreshDialogueAvatarImages(archive.name).catch(error=>console.warn('[对白头像]',error.message));
   showDanmaku('头像条小头像已应用', 'success');
 }
 
@@ -13265,8 +13370,9 @@ async function _commercialAutoPortraitGenerateForChar(char, triggerLayer) {
     const design = frCharacterDesignReference(currentArchive,subject);
     const references = frImageReferencesWithExample('portrait',config.autoCharacterReferences === true
       ? await _portraitCollectCharacterReferences(currentArchive,subject,controller.signal) : [design].filter(Boolean));
-    const finalPrompt = _portraitAppendReferenceGuide(_portraitWithAppearance(frFillBuiltinPortraitPrompt('portrait',charRow,values,config),
-      _portraitGetCharacterAssets(currentArchive,subject),charRow),
+    const subjectAssets = _portraitGetCharacterAssets(currentArchive,subject);
+    const finalPrompt = _portraitAppendReferenceGuide(_portraitWithAppearance(
+      frFillBuiltinPortraitPrompt('portrait',charRow,values,config,subjectAssets),subjectAssets,charRow),
       references,config.characterReferenceGuide);
     _commercialAutoPortraitRecordPrompt({charId:task.charId,charName,finalPrompt});
     _commercialAutoPortraitSetStatusStage(task,'肖像生成中…');
@@ -14236,6 +14342,18 @@ function _portraitReadProviderConfigFromForm(overlay, config, provider) {
   _portraitSyncLegacyConfigFields(config);
 }
 
+async function frReadPortraitUpload(file) {
+  if (!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('请选择 PNG、JPEG 或 WebP 图片');
+  const src = await new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('无法读取图片'));
+    reader.readAsDataURL(file);
+  });
+  const image = new Image(); image.src = src; await image.decode();
+  return src;
+}
+
 async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'portrait' } = {}) {
   const archiveName = currentArchiveName;
   const config = await loadPortraitGenConfig();
@@ -14307,7 +14425,7 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
   selector.value = kind;
   const fillPrompt = () => {
     const latestRow = currentState?.['0']?.[char?.id] || currentState?.['7']?.[char?.id] || row;
-    prompt.value = _portraitWithAppearance(frFillBuiltinPortraitPrompt(selector.value, row, values, editedTemplates()),
+    prompt.value = _portraitWithAppearance(frFillBuiltinPortraitPrompt(selector.value,latestRow,values,editedTemplates(),assets),
       assets,{...latestRow,'19':frPortraitAppearanceFromRow(latestRow,char?.imageGenPrompt)});
     title.textContent = (selector.value === 'design' ? 'AI 设定图生成' : 'AI 肖像生成') + ' · ' + displayName;
   };
@@ -14360,6 +14478,7 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
     else if (char.id === 'B1') {
       await dbSet(CUSTOM_AVATAR_KEY + '_' + archiveName, src);
       await updateAvatar(currentPlayerData);
+      await frRefreshDialogueAvatarImages(archiveName);
     } else await applyGeneratedPortrait(char.id,char.name,src);
     await refreshWorkspace();
     await renderReferences();
@@ -14369,17 +14488,6 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
       await action();
       if (active()) workspaceStatus.textContent = message;
     } catch (error) { if (active()) workspaceStatus.textContent = error.message; }
-  }
-  async function readImage(file) {
-    if (!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('请选择 PNG、JPEG 或 WebP 图片');
-    const src = await new Promise((resolve,reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('无法读取图片'));
-      reader.readAsDataURL(file);
-    });
-    const image = new Image(); image.src = src; await image.decode();
-    return src;
   }
   function renderHistory(host, type) {
     host.replaceChildren();
@@ -14415,7 +14523,9 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
   async function refreshWorkspace(loadAppearance = false) {
     const archive = await currentArchive();
     if (!char || !archive || !active()) return;
+    const previousDesignBound = frPortraitHasDesign(assets);
     assets = _portraitGetCharacterAssets(archive,char);
+    const designBound = frPortraitHasDesign(assets);
     const avatar = await _portraitResolveExistingAvatar(char,archive);
     if (!active()) return;
     const small = _portraitGetSceneStripAvatarFromArchive(archive, _portraitBuildLegacyUniqueKey(char.id, char.name));
@@ -14426,7 +14536,9 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
     field('pg-crop-avatar').disabled = !avatar.src;
     field('pg-unbind-portrait').disabled = !avatar.src || avatar.source === 'visualData';
     field('pg-unbind-design').disabled = !assets.design;
-    if (loadAppearance) {
+    field('pg-appearance-bound').hidden = !designBound;
+    field('pg-appearance-fields').hidden = designBound;
+    if (!designBound && (loadAppearance || previousDesignBound)) {
       const latestRow = currentState?.['0']?.[char.id] || currentState?.['7']?.[char.id] || row;
       appearance.value = frResolvePortraitAppearance(latestRow,assets,char.imageGenPrompt);
       field('pg-appearance-supplement').value = frPortraitAppearanceSupplement(assets,appearance.value);
@@ -14435,6 +14547,8 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
     renderHistory(field('pg-image-history'),pickType);
   }
   async function start(type) {
+    await refreshWorkspace();
+    if (!active()) return;
     workspace.hidden = true; editor.hidden = false;
     renderRouteChoices();
     selector.value = type; generated = null; references = []; manualReferences = [];
@@ -14457,7 +14571,7 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
     const input = field('pg-upload-' + type);
     input.onchange = () => {
       const file = input.files?.[0]; input.value = '';
-      if (file) void runWorkspaceAction(async () => bindImage(type,await readImage(file)),'图片已上传并应用');
+      if (file) void runWorkspaceAction(async () => bindImage(type,await frReadPortraitUpload(file)),'图片已上传并应用');
     };
     field('pg-unbind-' + type).onclick = async () => {
       if (await _portraitConfirm('解除这张图的当前绑定？')) await runWorkspaceAction(() => bindImage(type,''),'已解除绑定');
@@ -14557,6 +14671,10 @@ async function openPortraitGenModal(char, { fromImageSettings = false, kind = 'p
     if (fromImageSettings) showConcurrentEvolutionOverlay(document.getElementById('concurrent-evo-image-prompt-overlay'));
   }
   overlay.querySelector('.portrait-gen-close-btn').onclick = close;
+  field('pg-open-canon-gallery').onclick = () => {
+    close();
+    void openConcurrentEvolutionImagePromptModal({tab:'gallery',preferredKey:frCanonGallerySubject(archiveAtOpen,char)?.entry.key});
+  };
   overlay.onclick = event => { if (event.target === overlay) close(); };
   overlay.style.zIndex = String(Math.max(2000,...[...document.querySelectorAll('.overlay.visible')]
     .filter(panel=>panel!==overlay).map(panel=>parseInt(getComputedStyle(panel).zIndex,10)||0))+1);
@@ -16755,32 +16873,110 @@ const textToSearch = storyText + (userInput || '');
         // Only concurrent loads are shared; no full archive is retained in a global cache.
         const frDialogueAvatarLoads = new Map();
         const frDialogueAvatarRevisions = new WeakMap();
-        function frCreateDialogueAvatarContext(archive, archiveName) {
+        let frDialogueAvatarVersion = 0;
+        function frDialogueName(value) {
+          return String(value || '').split(/[|｜]/u)[0].trim().replace(/[:：]$/u,'').trim().normalize('NFC');
+        }
+        function frIndexDialogueNames(records) {
+          const names = new Map();
+          for (const {id,name} of records) {
+            const key = frDialogueName(name);
+            if (!id || !key) continue;
+            if (!names.has(key)) names.set(key,id);
+            else if (names.get(key) !== id) names.set(key,null);
+          }
+          return names;
+        }
+        function frDialogueFloorNames(archive, liveFloorId) {
+          const floors = new Map();
+          for (const log of archive?.data?.logs || []) {
+            if (log.type !== 'ai' || (liveFloorId && String(log.id)!==liveFloorId) ||
+                !/【对白[｜|]|fr-story-speaker/u.test(log.content || '')) continue;
+            const snapshot = liveFloorId ? currentState : parseNestedJsonString(log.stateSnapshot,null);
+            const table = (snapshot?.currentState || snapshot)?.['0'] || {};
+            const names = frIndexDialogueNames(Object.entries(table).map(([id,row])=>({id,name:row?.['1']})));
+            if (names.size) floors.set(String(log.id),names);
+          }
+          return floors;
+        }
+        function frCanonGalleryDialogueFrames(archive, liveFloorId) {
+          const frames = new Map();
+          if (localStorage.getItem(FR_CANON_PORTRAIT_GALLERY_KEY) !== '1') return frames;
+          const subjects = frCanonGalleryPeople().flatMap(person => [person.name,...(person.aliases || [])]);
+          for (const log of archive?.data?.logs || []) {
+            if (log.type !== 'ai' || (liveFloorId && String(log.id)!==liveFloorId)) continue;
+            const text = String(log.content || '');
+            const speakerIds = new Set(Array.from(text.matchAll(/【对白[｜|]\s*(C\d+)\s*】/gu),match=>match[1]));
+            if (!speakerIds.size && !subjects.some(name=>text.includes(name))) continue;
+            let snapshot;
+            try { snapshot = liveFloorId ? currentState : parseNestedJsonString(log.stateSnapshot, null); } catch (_) { continue; }
+            const state = snapshot?.currentState || snapshot;
+            const floorArchive = { data:{ state:{currentState:state} } };
+            const byName = new Map();
+            for (const [id,row] of Object.entries(state?.['0'] || {})) {
+              const name = String(row?.['1'] || '').split(/[|｜]/)[0].trim();
+              if (!subjects.includes(name) && !speakerIds.has(id)) continue;
+              const src = frCanonGalleryPortrait(floorArchive,{id});
+              if (src) {
+                byName.set(name,byName.has(name) ? null : {id,src});
+                if (speakerIds.has(id)) byName.set(id,{id,src});
+              }
+            }
+            if (byName.size) frames.set(String(log.id),byName);
+          }
+          return frames;
+        }
+        function frIsDialogueStoryFloor(log) {
+          return log.type === 'ai' && !log.isGhost && !log.isDeepSummary && !log.isSnapshot && !log.isUndoSnapshot;
+        }
+        function frCreateDialogueAvatarContext(archive, archiveName, liveFloorId) {
           const sourceState = archive?.data?.state || {};
           const state = {};
           for (const key of ['npcAvatars', 'npcSceneAvatars', 'npcAvatarTimeline', 'npcSceneAvatarTimeline']) state[key] = sourceState[key];
           const isLive = archiveName === currentArchiveName;
-          const logs = (archive?.data?.logs || []).map(log => ({ id: log.id }));
+          const sourceLogs = archive?.data?.logs || [];
+          const latestStoryId = isLive ? sourceLogs.findLast(frIsDialogueStoryFloor)?.id : undefined;
+          const portraitLogIndices = frPortraitLogIndices(sourceLogs);
+          const logs = sourceLogs.map(log => ({ id: log.id }));
           const logIndices = new Map();
           logs.forEach((log, index) => { if (!logIndices.has(String(log.id))) logIndices.set(String(log.id), index); });
           const chars = new Map(Object.entries(isLive ? (characterDatabase || {}) : (sourceState.characterDatabase || {})).map(([id, char]) =>
             [id, { id, name: char.name, visualData: char.visualData }]));
+          const aliases = [];
+          for (const [id,char] of Object.entries(sourceState.bondedCharacters || {})) {
+            const name = frDialogueName(char?.name || char?.['1']);
+            if (!name) continue;
+            if (!chars.get(id)?.name) chars.set(id,{id,name,visualData:char.visualData});
+            aliases.push({id,name});
+          }
+          for (const entry of sourceState.worldBookEntries || []) {
+            const id = entry?.key || entry?.id;
+            if (!id || id === 'B1') continue;
+            const name = frDialogueName(entry.name || entry.title);
+            if (!name) continue;
+            if (!chars.get(id)?.name) chars.set(id,{id,name});
+            aliases.push({id,name});
+          }
           for (const [id, row] of Object.entries((isLive ? currentState : sourceState.currentState)?.['0'] || {})) {
             const char = chars.get(id) || { id };
-            const name = String(row?.['1'] || '').split(/[|｜]/)[0].trim();
+            const name = frDialogueName(row?.['1']);
             chars.set(id, { ...char, name: name || char.name });
           }
           for (const key of Object.keys({ ...state.npcAvatars, ...state.npcSceneAvatars,
             ...state.npcAvatarTimeline, ...state.npcSceneAvatarTimeline })) {
             const { charId, charName } = _portraitSplitUniqueKey(key);
             if (charName && !chars.get(charId)?.name) chars.set(charId, { id: charId, name: charName });
+            if (charName) aliases.push({id:charId,name:charName});
           }
-          const names = new Map();
-          for (const char of chars.values()) {
-            if (!char.name) continue;
-            names.set(char.name, names.has(char.name) ? null : char);
-          }
-          return { archiveName, state, logs, logIndices, chars, names, playerName: isLive ? currentPlayerData?.name : chars.get('B1')?.name };
+          const names = frIndexDialogueNames([...chars.values(),...aliases]);
+          const cultivationReceipts=new Map((archive?.data?.logs||[]).filter(log=>log.cultivationReceipt?.logId===String(log.id))
+            .map(log=>[String(log.id),log.cultivationReceipt]));
+          return { archiveName, state, logs, logIndices, portraitLogIndices, latestStoryId, chars, names, cultivationReceipts,
+            version:frDialogueAvatarVersion, floorNames:frDialogueFloorNames(archive,liveFloorId),
+            galleryFrames:frCanonGalleryDialogueFrames(archive,liveFloorId),
+            spiritMap:isLive?WORLD_MAP_DATA:sourceState.worldMap||DEFAULT_WORLD_MAP_DATA,
+            spiritPlayer:(isLive?currentState:sourceState.currentState)?.['0']?.B1,
+            playerName: isLive ? currentPlayerData?.name : chars.get('B1')?.name };
         }
         function frLoadDialogueAvatarContext(archiveName) {
           if (!frDialogueAvatarLoads.has(archiveName)) {
@@ -16791,6 +16987,26 @@ const textToSearch = storyText + (userInput || '');
             load.then(release, release);
           }
           return frDialogueAvatarLoads.get(archiveName);
+        }
+        async function frRefreshDialogueAvatarImages(archiveName, liveFloorId) {
+          if (!archiveName || archiveName !== currentArchiveName) return;
+          if (!liveFloorId) {
+            frDialogueAvatarVersion++;
+            frDialogueAvatarLoads.delete(archiveName);
+          }
+          const rows = [...document.querySelectorAll('#main-content-area .log-entry.ai[data-log-id]')]
+            .filter(row => (!liveFloorId || row.dataset.logId === liveFloorId) && row.querySelector('.fr-story-speaker'));
+          if (!rows.length) return;
+          const archive = await db.archives.get(archiveName);
+          if (!archive || currentArchiveName !== archiveName) return;
+          const context = frCreateDialogueAvatarContext(archive,archiveName,liveFloorId);
+          await Promise.all(rows.map(row=>{
+            for (const image of row.querySelectorAll('.fr-story-quote-avatar')) {
+              image.parentElement.classList.remove('fr-story-quote-with-avatar');
+              image.remove();
+            }
+            return frAttachDialogueAvatars(row,{context});
+          }));
         }
         function frInitializeLazyHistory(container, contentDiv, logs, avatarOptions) {
           // Keep display fields only: hidden history must not retain turn snapshots/prompts.
@@ -16819,37 +17035,60 @@ const textToSearch = storyText + (userInput || '');
             && element.isConnected !== false
             && (options.isCurrent ? options.isCurrent() : currentArchiveName === archiveName);
           if (!archiveName || !quotes.length) return;
-          const context = await (options.context || frLoadDialogueAvatarContext(archiveName));
+          const supplied = options.context;
+          const context = await (supplied?.version === frDialogueAvatarVersion ? supplied : frLoadDialogueAvatarContext(archiveName));
           if (!context || !isCurrent()) return;
           const { state, logs, chars, names } = context;
           const logId = options.logId ?? element.closest('[data-log-id]')?.dataset.logId;
           const logIndex = logId != null ? (context.logIndices.get(String(logId)) ?? -1) : -1;
           const layer = logIndex < 0 ? logs.length - 1 : logIndex;
+          const gallery = context.galleryFrames?.get(String(logId ?? logs[layer]?.id));
+          const floorNames = context.floorNames?.get(String(logId ?? logs[layer]?.id));
           const sources = new Map();
           for (const speaker of quotes) {
-            const name = speaker.textContent.trim();
-            const char = /^(?:我|你|玩家|B1)$/u.test(name) ? { id: 'B1', name: context.playerName || name }
-              : chars.get(name) || names.get(name);
-            if (!char) continue;
-            if (!sources.has(char.id)) {
-              const keys = _portraitBuildUniqueKeyCandidates(char.id, char.name, { includeStable: true });
-              const info = { exactKey: keys[0], logs };
-              const savedAvatar = (timeline, cache) =>
-                _portraitGetBestTimelineAvatarFromTimelines(timeline, keys, layer, info)
-                || (keys.some(key => timeline?.[key]?.length) ? ''
-                  : _portraitGetMapAvatarByKeyFallback(cache, char.id, char.name, { includeStable: true }));
+            const name = frDialogueName(speaker.textContent);
+            const galleryEntry = gallery?.get(name);
+            const localId = floorNames?.has(name) ? floorNames.get(name) : undefined;
+            const id = /^(?:我|你|玩家|B1)$/u.test(name) ? 'B1'
+              : localId !== undefined ? localId
+                : chars.has(name) ? name : names.has(name) ? names.get(name) : galleryEntry?.id;
+            if (!id) continue;
+            const char = chars.get(id) || {id,name};
+            const card = speaker.parentElement;
+            if (card.querySelector(':scope > .fr-story-quote-avatar')) continue;
+            const namedKey = id + '_' + name;
+            const savedNamed = [state.npcAvatars,state.npcSceneAvatars,state.npcAvatarTimeline,state.npcSceneAvatarTimeline]
+              .some(store=>store && Object.hasOwn(store,namedKey));
+            const bindingName = localId === id || savedNamed ? name : char.name || name;
+            const sourceKey = id + '\n' + bindingName;
+            if (!sources.has(sourceKey)) {
+              const keys = _portraitBuildUniqueKeyCandidates(id,bindingName,{includeStable:true});
+              const info = { exactKey: keys[0], logs, portraitLogIndices:context.portraitLogIndices, stableKey:id };
+              const savedAvatar = (timeline, cache) => {
+                const historical = _portraitGetBestTimelineAvatarFromTimelines(timeline, keys, layer, info);
+                if (historical !== null) return historical;
+                const entries = keys.flatMap(key => timeline?.[key] || []);
+                if (!entries.length) return _portraitGetMapAvatarByKeyFallback(cache,id,bindingName,{includeStable:true});
+                // Legacy uploads only wrote the exact-name cache. Other cached images can belong to a discarded branch.
+                const uploaded = cache?.[keys[0]];
+                return logIndex >= 0 && String(logId) === String(context.latestStoryId) &&
+                  uploaded && !entries.some(entry => entry?.imageData === uploaded) ? uploaded : '';
+              };
               const src = savedAvatar(state.npcSceneAvatarTimeline, state.npcSceneAvatars)
                 || savedAvatar(state.npcAvatarTimeline, state.npcAvatars)
                 || (char.id === 'B1' ? await dbGet(`${CUSTOM_AVATAR_KEY}_${archiveName}`) : '')
                 || _portraitResolveVisualAvatar(char);
-              sources.set(char.id, src);
+              const portrait = !src && galleryEntry?.id === char.id
+                && _portraitGetBestTimelineAvatarFromTimelines(state.npcAvatarTimeline,keys,layer,info) !== ''
+                ? galleryEntry.src : '';
+              sources.set(sourceKey, { src:src || portrait, fromGallery:!!portrait });
             }
-            const src = sources.get(char.id);
+            const {src,fromGallery} = sources.get(sourceKey);
             if (!isCurrent() || !element.contains(speaker)
                 || !/^data:image\/(?:png|jpe?g|webp|gif);base64,|^(?:https?:|blob:)/i.test(String(src || ''))) continue;
-            const card = speaker.parentElement;
             const image = document.createElement('img');
             image.className = 'fr-story-quote-avatar';
+            if (fromGallery) image.dataset.canonGalleryAvatar = '1';
             image.alt = '';
             image.loading = 'lazy';
             image.onerror = () => {
@@ -16887,9 +17126,257 @@ const textToSearch = storyText + (userInput || '');
           return text.slice(0,match.index) + block + text.slice(after);
         }
 
+        function frNormalizeStoryMarkerBoundaries(value) {
+          return String(value||'')
+            .replace(/(<content>|<br\s*\/?>)[ \t]*(?=【(?:灵景】|对白[｜|]|转场[｜|]))/giu,'$1\n')
+            .replace(/(^[ \t]*【(?:灵景】|对白[｜|]|转场[｜|])[^<>\r\n]*?)[ \t]*(?=<\/content>|<br\s*\/?>)/gimu,'$1\n')
+            .replace(/<p>[ \t]*(【(?:灵景】|对白[｜|]|转场[｜|])[^<>\r\n]*?)\s*<\/p>/giu,'\n$1\n');
+        }
+
+        function frLocationSpiritData(place, time, map=WORLD_MAP_DATA, player=currentState?.['0']?.B1) {
+          const core=frSpiritCore();
+          const raw=String(place||'').replace(/^\s*(?:📍|所在地\s*[:：])\s*/u,'').trim();
+          if (!core||!raw||/^(?:未知|未详|无|同上|不变)$/u.test(raw)) return null;
+          const point=frSpiritPlace(raw);
+          const site=frResolveSpiritSite(map,point);
+          if (!site || (!site.known && !site.sources.length)) {
+            return { place:point.name, label:'灵气', value:'未探明' };
+          }
+          const notes=frReadBondedRemarks(player?.['9']);
+          const qi=parseNestedJsonString(notes.cultivationCompatibleQi,[]);
+          const clock=String(time||'').match(/\d{1,6}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s*\d{1,2}[:：]\d{2})?|\d{1,6}[.-]\d{1,2}[.-]\d{1,2}(?:\s*\d{1,2}[:：]\d{2})?/u)?.[0];
+          if (!clock && site.sources.some(source=>source.start!=null||source.end!=null)) {
+            return { place:point.name, label:'灵气底值', value:site.base, note:'时刻未定' };
+          }
+          const spirit=core.calculateSpiritConcentration(site,{ at:clock, actorId:'B1', compatible:['普通',...(Array.isArray(qi)?qi:[])] });
+          const display=(value,precision=2)=>Number(value.toFixed(precision));
+          return {
+            place:point.name, label:'灵气', value:display(spirit.raw),
+            details:[['可用灵气',display(spirit.usable)],['吐纳倍率',display(spirit.multiplier,3)+'×']],
+            base:site.known ? site.base : null, sourceCount:site.sources.length
+          };
+        }
+
+        function frStoryMetricList(metrics,highlight='') {
+          const list=document.createElement('dl');
+          list.className='fr-story-metrics';
+          for (const [label,value] of metrics) {
+            const metric=document.createElement('div');
+            metric.className='fr-story-metric';
+            if (label===highlight) metric.classList.add('fr-story-metric-highlight');
+            const name=document.createElement('dt');
+            name.textContent=label;
+            const number=document.createElement('dd');
+            number.textContent=value;
+            metric.append(name,number);
+            list.append(metric);
+          }
+          return list;
+        }
+
+        function frDrawLocationSpirit(node,data) {
+          node.querySelector('.fr-spirit-popover:popover-open')?.hidePopover();
+          node.hidden=!data;
+          if (!data) {
+            node.replaceChildren();
+            return;
+          }
+          const detail=data.details?.length>0;
+          const face=document.createElement(detail?'button':'span');
+          face.className='fr-spirit-face';
+          const label=document.createElement('span');
+          label.className='fr-spirit-label';
+          label.textContent=data.label;
+          const amount=document.createElement('strong');
+          amount.className='fr-spirit-amount';
+          amount.textContent=data.value;
+          face.append(label,amount);
+          if (detail) {
+            face.type='button';
+            face.setAttribute('aria-haspopup','dialog');
+            face.setAttribute('aria-expanded','false');
+            face.setAttribute('aria-label',(data.place?data.place+'，':'')+data.label+' '+data.value+'，查看灵气详情');
+            face.addEventListener('click',event=>{
+              event.preventDefault();
+              if (face.popoverTargetElement?.matches(':popover-open')) face.popoverTargetElement.hidePopover();
+              else frOpenSpiritDetails(data,face);
+            });
+          }
+          node.replaceChildren(face);
+          if (data.note) {
+            const note=document.createElement('span');
+            note.className='fr-location-spirit-note';
+            note.textContent=data.note;
+            node.append(note);
+          }
+        }
+
+        function frOpenSpiritDetails(data,trigger) {
+          const dialog=document.createElement('section');
+          dialog.className='fr-spirit-popover';
+          dialog.setAttribute('popover','auto');
+          dialog.setAttribute('role','dialog');
+          dialog.setAttribute('aria-label','环境灵气'+(data.place?' · '+data.place:''));
+          const heading=document.createElement('header');
+          const title=document.createElement('h2');
+          title.textContent='环境灵气';
+          const close=document.createElement('button');
+          close.className='fr-spirit-dismiss';
+          close.type='button';
+          close.setAttribute('aria-label','关闭灵气详情');
+          close.textContent='×';
+          close.addEventListener('click',()=>dialog.hidePopover());
+          heading.append(title,close);
+          dialog.append(heading);
+          if (data.place) {
+            const place=document.createElement('p');
+            place.className='fr-spirit-dialog-place';
+            place.textContent=data.place;
+            dialog.append(place);
+          }
+          const metrics=frStoryMetricList([['浓度',data.value],...data.details],'浓度');
+          dialog.append(metrics);
+          trigger.after(dialog);
+          trigger.popoverTargetElement=dialog;
+          const listeners=new AbortController();
+          const position=()=>{
+            if (!dialog.matches(':popover-open')) return;
+            const rect=trigger.getBoundingClientRect();
+            const {clientWidth,clientHeight}=document.documentElement;
+            if (!rect.width || !rect.height || rect.bottom<=0 || rect.top>=clientHeight || rect.right<=0 || rect.left>=clientWidth) {
+              dialog.hidePopover();
+              return;
+            }
+            const gap=8, edge=8;
+            const below=clientHeight-rect.bottom-gap-edge;
+            const above=rect.top-gap-edge;
+            const opensAbove=dialog.scrollHeight+2>below && above>below;
+            dialog.style.maxHeight=Math.max(0,opensAbove?above:below)+'px';
+            const left=Math.max(edge,Math.min(rect.left,clientWidth-dialog.offsetWidth-edge));
+            const top=opensAbove?rect.top-gap-dialog.offsetHeight:rect.bottom+gap;
+            dialog.style.left=left+'px';
+            dialog.style.top=top+'px';
+          };
+          const outsideView=new IntersectionObserver(([entry])=>{
+            if (!trigger.isConnected) { cleanup(); return; }
+            if (!entry.isIntersecting && dialog.matches(':popover-open')) dialog.hidePopover();
+          });
+          const cleanup=()=>{
+            listeners.abort();
+            outsideView.disconnect();
+            trigger.setAttribute('aria-expanded','false');
+          };
+          dialog.addEventListener('beforetoggle',event=>{
+            if (event.newState==='closed') cleanup();
+          });
+          dialog.addEventListener('toggle',event=>{
+            if (event.newState==='closed') dialog.remove();
+          });
+          outsideView.observe(trigger);
+          window.addEventListener('resize',position,{signal:listeners.signal});
+          window.addEventListener('scroll',position,{capture:true,passive:true,signal:listeners.signal});
+          dialog.showPopover();
+          trigger.setAttribute('aria-expanded','true');
+          position();
+        }
+
+        function frDecorateStorySpirit(element,map,receipt,player) {
+          const blocks=element.querySelectorAll('.fr-story-turn,.fr-story-status');
+          let currentPlace='';
+          for (const block of blocks) {
+            const transition=block.classList.contains('fr-story-turn');
+            const place=block.querySelector(transition?'.fr-story-turn-place':'.fr-story-status-place')?.textContent.trim();
+            const time=block.querySelector(transition?'.fr-story-turn-clock':'.fr-story-status-time')?.textContent.trim();
+            if (place) currentPlace=place;
+            const data=frLocationSpiritData(currentPlace,time,map,player);
+            let line=block.querySelector('.fr-location-spirit');
+            if (!data) { line?.remove(); continue; }
+            if (!line) {
+              line=document.createElement('div');
+              line.className='fr-location-spirit';
+              (block.querySelector('.fr-story-status-details')||block).append(line);
+            }
+            frDrawLocationSpirit(line,data);
+          }
+          const legacyCards=[...element.querySelectorAll('.fr-story-cultivation,cultivation_card')];
+          for (const legacy of legacyCards) {
+            if (!legacy.textContent.trim()) legacy.hidden=true;
+          }
+          if (!receipt || ![receipt.startingProgress,receipt.progress,receipt.gain].every(Number.isFinite)) return;
+          let card=element.querySelector('.fr-cultivation-card');
+          if (!card) {
+            card=document.createElement('section');
+            card.className='fr-cultivation-card';
+            const closing=[...element.querySelectorAll('.fr-story-ending')].at(-1) ||
+              [...element.querySelectorAll('.fr-story-status')].at(-1);
+            if (legacyCards.length) legacyCards[0].before(card);
+            else if (closing) closing.before(card); else element.append(card);
+          }
+          const heading=document.createElement('header');
+          const title=document.createElement('strong');
+          title.textContent='修炼结算';
+          heading.append(title);
+          if (receipt.realm) {
+            const realm=document.createElement('span');
+            realm.className='fr-cultivation-realm';
+            realm.textContent=receipt.realm;
+            heading.append(realm);
+          }
+          const fmt=value=>Number(value.toFixed(4));
+          const capped=receipt.rawGain>receipt.gain+1e-8;
+          const totals=frStoryMetricList([
+            ['修为进度',fmt(receipt.startingProgress)+'% → '+fmt(receipt.progress)+'%'],
+            ['本轮实得','+'+fmt(receipt.gain)+' 点']
+          ],'本轮实得');
+          totals.classList.add('fr-cultivation-totals');
+          const breakdown=[];
+          if (receipt.days>0) breakdown.push(['吐纳时长',fmt(receipt.days)+' 天']);
+          if (receipt.naturalGain>0) breakdown.push([capped?'吐纳候选':'吐纳贡献','+'+fmt(receipt.naturalGain)]);
+          if (receipt.directGain>0) breakdown.push([capped?'丹药候选':'丹药贡献','+'+fmt(receipt.directGain)]);
+          card.replaceChildren(heading,totals);
+          if (breakdown.length || capped) {
+            const details=document.createElement('details');
+            const summary=document.createElement('summary');
+            summary.textContent='结算详情';
+            details.append(summary);
+            if (breakdown.length) {
+              const list=frStoryMetricList(breakdown);
+              list.classList.add('fr-cultivation-breakdown');
+              details.append(list);
+            }
+            if (capped) {
+              const note=document.createElement('p');
+              note.className='fr-cultivation-note';
+              note.textContent='受同层上限影响';
+              details.append(note);
+            }
+            card.append(details);
+          }
+          legacyCards.forEach(card=>card.remove());
+        }
+
+        function frRefreshStorySpirit(floorId) {
+          if (typeof document==='undefined'||typeof window==='undefined') return;
+          const logId=String(floorId||window._ceCurrentLogId||'');
+          const activeLog=[...document.querySelectorAll('#main-content-area .log-entry.ai[data-log-id]')]
+            .reverse().find(row=>row.dataset.logId===logId);
+          if (!activeLog) return;
+          const notes=frReadBondedRemarks(currentState?.['0']?.B1?.['9']);
+          const receipt=parseNestedJsonString(notes.lastCultivationSession,null);
+          frDecorateStorySpirit(activeLog,WORLD_MAP_DATA,receipt?.logId===logId?receipt:null);
+          const archiveName = currentArchiveName;
+          if (archiveName && activeLog.querySelector('.fr-story-speaker')) {
+            void frRefreshDialogueAvatarImages(archiveName,logId)
+              .catch(error=>console.warn('[对白头像]',error?.message));
+          }
+        }
+
         function frRenderStoryHtml(element, html, avatarOptions = {}) {
-          const normalized = frNormalizeProseEnvelope(typeof frStoryImagePrepareHtml === 'function' ? frStoryImagePrepareHtml(html) : html);
-          const withStatus = normalized.replace(/<ui_sys>([\s\S]*?)<\/ui_sys>/gi, (_, source) => {
+          const normalized = frNormalizeStoryMarkerBoundaries(frNormalizeProseEnvelope(
+            typeof frStoryImagePrepareHtml === 'function' ? frStoryImagePrepareHtml(html) : html));
+          const withCards=normalized.replace(/<(c1|tupo_daily|tupo_break)>[\s\S]*?<\/\1>/giu,
+            block=>processTextWithRules(block,PLACEMENT_MAP.AI_OUTPUT,'regular'));
+          const withStatus = withCards.replace(/<ui_sys>([\s\S]*?)<\/ui_sys>/gi, (_, source) => {
             const fields = { ti:'time', li:'place', sect_stat:'mood', ei:'mood', env:'env', warn:'note' };
             return '<div class="fr-story-status">' + source.replace(/<(ti|li|sect_stat|ei|env|warn)>([^<]*)<\/\1>/gi,
               (_, tag, value) => '<span class="fr-story-status-' + fields[tag.toLowerCase()] + '">' + value + '</span>') + '</div>';
@@ -17016,6 +17503,8 @@ const textToSearch = storyText + (userInput || '');
               if (field?.textContent.trim() && !field.textContent.trimStart().startsWith(icon)) field.prepend(icon + ' ');
             }
           }
+          frDecorateStorySpirit(element,avatarOptions.context?.spiritMap,
+            avatarOptions.context?.cultivationReceipts?.get(String(avatarOptions.logId ?? '')),avatarOptions.context?.spiritPlayer);
           // Block components already provide their own vertical margins.
           for (const container of new Set([element, body])) {
             container.normalize();
@@ -17201,7 +17690,7 @@ return processedText;
             }
           }
 
-          if (type === 'ai') frRenderStoryHtml(logEntry, finalContent, avatarOptions);
+          if (type === 'ai') frRenderStoryHtml(logEntry, finalContent, { ...avatarOptions, logId:id });
           else logEntry.innerHTML = sanitizeHTML(finalContent);
 
           logEntry.querySelectorAll('div[data-library-image-placeholder]').forEach(placeholder => {
@@ -17461,16 +17950,307 @@ function frReadBondedRemarks(value) {
   return parseRemarksString(value || '');
 }
 
-function frProtectBondedRemarks(existingRemarks, incomingRemarks) {
+function frUsesOrdinaryNpcLifespan(row, remarks) {
+  const identity = String(row?.['0'] || '');
+  return /^C\d+(?:_\d+)?$/u.test(identity) && !remarks.canonActorId &&
+    !parseNestedJsonString(remarks.offscreenTags,null)?.canonOriginalRoleName &&
+    frReadBondedFlag(remarks.isBonded) !== true
+    && !/延寿|折寿|夺舍|长生种|特殊血脉|寿元(?:只|仅|将)/u.test(String(row?.['10'] || '') + String(remarks.traits || ''));
+}
+
+function frWriteLifespanRemarks(row, previous, patch, newNpc = false, beforeRealm) {
+  const life = typeof CE_CORE === 'object' && CE_CORE['initial-realm'];
+  if (!life) return patch;
+  return life.lifespanRemarksPatch(frReadBondedRemarks(previous),patch,frCultivationRealmKey(row['2']),
+    {useOrdinaryDefault:newNpc && frUsesOrdinaryNpcLifespan(row,patch), previousRealm:beforeRealm && frCultivationRealmKey(beforeRealm)});
+}
+
+function frProtectBondedRemarks(existingRemarks, incomingRemarks, lifespanRow, newNpc = false, beforeRealm) {
   const next = frReadBondedRemarks(incomingRemarks);
   delete next['善恶值'];
   delete next.shanE;
   const stored = frReadBondedRemarks(existingRemarks);
+  delete next.lastCultivationSession;
+  delete next.cultivationActiveAids;
+  delete next.pendingCultivationPractice;
+  if (stored.lastCultivationSession) next.lastCultivationSession=stored.lastCultivationSession;
+  if (stored.cultivationActiveAids) next.cultivationActiveAids=stored.cultivationActiveAids;
   const previous = frReadBondedFlag(stored.isBonded);
   next.isBonded = previous === null ? false : previous;
   if (stored.canonActorId) next.canonActorId = stored.canonActorId;
   else delete next.canonActorId;
-  return next;
+  return lifespanRow && (Object.hasOwn(next,'年龄') || Object.hasOwn(next,'寿元') || (beforeRealm && lifespanRow['2'] !== beforeRealm))
+    ? frWriteLifespanRemarks(lifespanRow,stored,next,newNpc,beforeRealm) : next;
+}
+
+function frSpiritCore() {
+  return typeof CE_CORE === 'object' && CE_CORE ? CE_CORE['cultivation-environment'] : null;
+}
+
+function frHasSpiritMapPatch(data) {
+  return data && (Object.hasOwn(data,'spiritConcentration')||Object.hasOwn(data,'spiritSources'));
+}
+
+function frFindSpiritMapTarget(map,data) {
+  const regions=[...(map?.main_regions||[]),...(map?.sub_regions||[])];
+  if (!data) return null;
+  if (frHasSpiritMapPatch(data) && !Object.hasOwn(data,'points')) {
+    const points=[...(map?.rooms||[]),...(map?.points_of_interest||[])];
+    return [...points,...regions].find(entry=>entry.name===data.name) || null;
+  }
+  return regions.find(entry=>entry.name===data.name) || null;
+}
+
+function frApplySpiritMapPatch(target,data,state) {
+  const core=frSpiritCore();
+  if (Object.hasOwn(data,'points')) target.points=data.points;
+  if (!core || !frHasSpiritMapPatch(data)) return;
+  if (data.spiritConcentration===null) delete target.spiritConcentration;
+  else if ((typeof data.spiritConcentration==='number' && Number.isFinite(data.spiritConcentration) && data.spiritConcentration>=0) ||
+      (typeof data.spiritConcentration==='string' && Object.hasOwn(core.SPIRIT_BANDS,data.spiritConcentration))) {
+    target.spiritConcentration=data.spiritConcentration;
+  }
+  if (!Array.isArray(data.spiritSources)) return;
+  const records=new Map((Array.isArray(target.spiritSources)?target.spiritSources:[])
+    .filter(source=>source?.id).map(source=>[source.id,source]));
+  for (const patch of data.spiritSources) {
+    if (!patch || typeof patch.id!=='string' || !patch.id.trim()) continue;
+    const source={ ...records.get(patch.id), ...patch };
+    if (!Object.hasOwn(core.SPIRIT_SOURCE_RATINGS,source.kind) && source.kind!=='transfer') continue;
+    if (source.kind==='array' && source.itemId && (patch.itemId || !records.has(patch.id))) {
+      const owner=source.ownerId && state?.['0']?.[source.ownerId];
+      const inventory=source.ownerId==='B1'?Object.values(state?.['1']||{}):parseNestedJsonString(parseRemarksString(owner?.['9']||'').inventory,[]);
+      const item=Array.isArray(inventory)?inventory.find(row=>String(row?.['0']||row?.id)===String(source.itemId)):null;
+      const aid=core.cultivationAidValues(item);
+      if (aid?.kind!=='array') continue;
+      source.tier=aid.tier;
+      delete source.rate;
+    }
+    records.set(source.id,source);
+  }
+  target.spiritSources=[...records.values()];
+}
+
+function frSpiritPlace(raw, fallback={}) {
+  const match=String(raw||'').match(/(-?\d+)\s*[,，]\s*(-?\d+)\s*$/u);
+  const name=String(raw||'').replace(/(?:\s*\|\s*|\s*)-?\d+\s*[,，]\s*-?\d+\s*$/u,'').split(/[/／>＞|｜]/u).at(-1)?.trim();
+  return match ? { name, x:Number(match[1]), y:Number(match[2]) } : name ? { name } : fallback;
+}
+
+function frResolveSpiritSite(map,point) {
+  const core=frSpiritCore();
+  const names=String(point.name||'').split(/[·・›→]/u).map(name=>name.trim()).filter(Boolean).reverse();
+  const sites=(names.length?names:[point.name]).map(name=>core.resolveSpiritLocation(map,{ ...point,name }));
+  return sites.find((site,i)=>site.name===names[i] && (site.known||site.sources.length)) ||
+    sites.find(site=>site.known||site.sources.length)||sites[0];
+}
+
+function frCharacterSpiritPlace(character, state) {
+  const id=character?.['0']||character?.id;
+  if (id==='B1') {
+    const current=ceGetAuthoritativeTimeLocationInfo(state);
+    return frSpiritPlace(current.locationText+' '+current.coordinates);
+  }
+  return frSpiritPlace(ceExtractLocationFromCol16(character?.['16']) || character?.fullLocationString || character?.location);
+}
+
+function frRealmProgressLabel(realm, progress) {
+  if (typeof realm!=='string') return realm;
+  const [stage,...rest]=realm.split('|');
+  const value=Number(progress.toFixed(4));
+  const label=stage.replace(/\s*[（(]\s*\d+(?:\.\d+)?\s*[%％]\s*[）)]\s*$/u,'').trim();
+  return [label+'('+value+'%)',...rest].join('|');
+}
+
+function frCultivationRealmKey(realm) {
+  return ceNormalizeCultivationBridgeRealm(String(realm||'').split('|')[0]
+    .replace(/\s*[（(]\s*\d+(?:\.\d+)?\s*[%％]\s*[）)]\s*$/u,''));
+}
+
+function frCanSettleOrdinaryCultivation(realm) {
+  return /^(?:炼气|练气|筑基|结丹|金丹|元婴|化神)/u.test(frCultivationRealmKey(realm));
+}
+
+function frResolveCultivationSession(character, remarks, practice, state, currentItems, itemResults, logId) {
+  const environment=frSpiritCore(), cultivation=frCultivationCore();
+  if (!environment||!cultivation||!practice||typeof practice!=='object') return null;
+  const { spiritClock, formatSpiritClock, calculateSpiritConcentration, splitSpiritPeriod }=environment;
+  const worldTime=ceGetCultivationAuthoritativeTimeText(state), now=spiritClock(worldTime);
+  const previous=parseNestedJsonString(remarks.lastCultivationSession,{});
+  const fromSaved=spiritClock(previous?.end);
+  const realm=frCultivationRealmKey(character['2']);
+  const newFloor=!!(logId&&previous?.logId&&previous.logId!==logId);
+  const sameTimeNewUse=newFloor&&now===fromSaved&&!practice.segments?.length;
+  if (now===null || (fromSaved!==null && now<=fromSaved && !sameTimeNewUse)) return null;
+  const id=character['0'], actorRank=environment.cultivationItemRank(realm);
+  const actorPlace=frCharacterSpiritPlace(character,state);
+  const map=WORLD_MAP_DATA || state?.worldMap;
+  const resolvePlace=place=>{
+    if (!place) return frResolveSpiritSite(map,actorPlace);
+    const point=frSpiritPlace(place,actorPlace);
+    const site=frResolveSpiritSite(map,point);
+    if (point.name && !String(point.name).split(/[·・›→]/u).some(name=>name.trim()===site.name) && point.name!==actorPlace.name) return null;
+    return site;
+  };
+  const storedAids=parseNestedJsonString(remarks.cultivationActiveAids,[]);
+  const aids=Array.isArray(storedAids)?storedAids.filter(aid=>aid?.end>=(fromSaved??-Infinity)):[];
+  const elixirs=[], spent=new Map();
+  const inventory=Array.isArray(currentItems)?currentItems:[];
+  const consumed=new Map();
+  for (const outcome of itemResults||[]) {
+    const op=outcome.operation;
+    if (!outcome.success||op?.type!=='consumeItem'||op.owner!==id||!outcome.cultivationAid||!(outcome.consumed>0)) continue;
+    const itemId=String(op.itemId);
+    consumed.set(itemId,{ aid:outcome.cultivationAid, count:(consumed.get(itemId)?.count||0)+outcome.consumed });
+  }
+  for (const use of Array.isArray(practice.aids)?practice.aids:[]) {
+    const count=Number(use?.count), at=spiritClock(use?.at||worldTime);
+    if (!Number.isSafeInteger(count)||count<1||at===null||at>now||
+        (fromSaved!==null&&(at<fromSaved||(at===fromSaved&&!newFloor)))) return null;
+    const itemId=String(use.itemId||'');
+    const liveItem=inventory.find(row=>String(row?.['0']||row?.id)===itemId);
+    const prepaid=consumed.get(itemId);
+    const item=liveItem||(prepaid&&{ cultivationAid:prepaid.aid });
+    if (!item) return null;
+    const amount=(liveItem?Number(liveItem['5']??liveItem.quantity??1):0)+(prepaid?.count||0);
+    const total=(spent.get(itemId)||0)+count;
+    if (!Number.isSafeInteger(amount)||total>amount) return null;
+    const value=environment.cultivationAidValues({ ...item, count },actorRank);
+    if (!value || value.kind==='array') return null;
+    const site=resolvePlace(use.place);
+    if (!site || site.sources.some(source=>source.blocksRefining===true && source.enabled!==false &&
+        (source.start==null||at>=spiritClock(source.start)) && (source.end==null||at<spiritClock(source.end)))) return null;
+    if (value.kind==='elixir') elixirs.push({ ...environment.readCultivationAid(item), count, actorRank });
+    else {
+      const until=spiritClock(use.until);
+      if (until===null||until<=at) return null;
+      aids.push({ start:at, end:until, raw:value.rawEfficiency });
+    }
+    spent.set(itemId,total);
+  }
+  const periods=(Array.isArray(practice.segments)?practice.segments:[]).map(segment=>({
+    from:spiritClock(segment?.start), to:spiritClock(segment?.end), place:segment?.place,
+  })).sort((a,b)=>a.from-b.from);
+  let last=fromSaved;
+  const segments=[];
+  const statusPeriods=CE_CORE['character-status'].cultivationStatusPeriods(character['4']);
+  const traits=parseNestedJsonString(remarks.traits,[]);
+  const exempt=(Array.isArray(traits)&&traits.some(trait=>trait?.name==='混沌仙胎')) ||
+    cultivation.resolveCultivationRootBase(character).reason==='chaos_root';
+  const specialQi=parseNestedJsonString(remarks.cultivationCompatibleQi,[]);
+  const compatible=['普通',...(Array.isArray(specialQi)?specialQi:[])];
+  for (const period of periods) {
+    if (period.from===null||period.to===null||period.to<=period.from||period.to>now||(last!==null&&period.from<last)) return null;
+    const site=resolvePlace(period.place);
+    if (!site) return null;
+    for (const part of splitSpiritPeriod(period.from,period.to,[...site.sources,...aids,...statusPeriods])) {
+      const at=formatSpiritClock(part.from);
+      const attributes=frNumericNativeCharacterAttributes(id,character,at);
+      const speed=attributes?.修炼速度?.current;
+      const spirit=calculateSpiritConcentration(site,{ at:part.from, compatible, actorId:id });
+      const materialRaw=aids.reduce((sum,aid)=>sum+(aid.start<=part.from&&aid.end>part.from?aid.raw:0),0);
+      const days=ceResolveCultivationElapsedDays(at,formatSpiritClock(part.to));
+      segments.push({ days, finalSpeed:speed, concentration:spirit.usable, materialRaw, place:site.name, at,
+        difficulty:!exempt&&ceIsCultivationMajorBarrierRealm(realm)?3:1 });
+    }
+    last=period.to;
+  }
+  if (!segments.length && !spent.size) return null;
+  const earliest=periods[0]?.from ?? now;
+  const availableDays=ceResolveCultivationElapsedDays(formatSpiritClock(earliest),formatSpiritClock(now));
+  const progress=ceGetCultivationAuthoritativeProgressFloor(null,{ remarks:{...remarks,
+    authoritativeStoryRealm:frCultivationRealmKey(remarks.authoritativeStoryRealm) }, realmRaw:realm });
+  const columnProgress=String(character['2']||'').split('|')[0].match(/[（(]\s*(\d+(?:\.\d+)?)\s*[%％]\s*[）)]\s*$/u)?.[1];
+  const stored=ceNormalizeCultivationBridgeProgress(remarks['修为进度']??remarks.cultivationProgressSnapshot??remarks.cultivationProgress??columnProgress,0);
+  const result=cultivation.calculateCultivationSession({ realm, startingProgress:Math.max(stored,Number.isFinite(progress)?progress:0),
+    availableDays, segments, elixirs });
+  if (!result.ok) return null;
+  const items=inventory.flatMap(item=>{
+    const itemId=String(item?.['0']||item?.id);
+    const used=Math.max(0,(spent.get(itemId)||0)-(consumed.get(itemId)?.count||0));
+    if (!used) return [item];
+    const remain=Number(item['5']??item.quantity??1)-used;
+    return remain?[{ ...item, quantity:remain, '5':String(remain) }]:[];
+  });
+  remarks['修为进度']=result.progress;
+  remarks.lastCultivationProgressTime=worldTime;
+  remarks.lastCultivationProgressRealm=realm;
+  remarks.cultivationActiveAids=aids.filter(aid=>aid.end>now);
+  remarks.lastCultivationSession={ end:worldTime, realm, startingProgress:result.startingProgress, gain:result.appliedGain,
+    rawGain:result.rawGain, naturalGain:Math.max(0,result.rawGain-result.directGain), directGain:result.directGain,
+    days:segments.reduce((sum,segment)=>sum+segment.days,0), progress:result.progress };
+  delete remarks.cultivationProgressSnapshot;
+  delete remarks.cultivationProgress;
+  return items;
+}
+
+function frApplyCultivationPractice(character, remarks, patch, state, itemResults, floorId) {
+  const practice=parseNestedJsonString(patch.cultivationPractice,null);
+  delete patch.cultivationPractice;
+  delete patch.lastCultivationSession;
+  delete patch.cultivationActiveAids;
+  if (!practice || !frCanSettleOrdinaryCultivation(character['2'])) return false;
+  const authoritative=['storyProgress','authoritativeStoryProgress','storyRealm','authoritativeStoryRealm'].some(key=>Object.hasOwn(patch,key));
+  if (authoritative) return false;
+  const key=character['0']==='B1'?'1':null;
+  const items=key?Object.values(state?.[key]||{}):parseNestedJsonString(remarks.inventory,[]);
+  const logId=floorId||(typeof window==='undefined'?'':String(window._ceCurrentLogId||''));
+  const remaining=frResolveCultivationSession(character,remarks,practice,state,items,itemResults,logId);
+  for (const field of ['修为进度','cultivationProgress','cultivationProgressSnapshot','lastCultivationProgressTime','lastCultivationProgressRealm']) delete patch[field];
+  if (!remaining) return false;
+  if (logId) remarks.lastCultivationSession.logId=logId;
+  character['2']=frRealmProgressLabel(character['2'],remarks['修为进度']);
+  if (key) state[key]=Object.fromEntries(remaining.map(item=>[item['0']||item.id,item]));
+  else remarks.inventory=JSON.stringify(remaining);
+  return true;
+}
+
+function frQueueCultivationPractice(character, remarks, patch) {
+  const practice=parseNestedJsonString(patch.cultivationPractice,null);
+  delete patch.cultivationPractice;
+  if (!practice || typeof practice!=='object'||!frCanSettleOrdinaryCultivation(character['2'])) return;
+  if (['storyProgress','authoritativeStoryProgress','storyRealm','authoritativeStoryRealm'].some(key=>Object.hasOwn(patch,key))) return;
+  for (const key of ['修为进度','cultivationProgress','cultivationProgressSnapshot','lastCultivationProgressTime','lastCultivationProgressRealm']) delete patch[key];
+  const original=frReadBondedRemarks(character['9']);
+  const numericNotes=Object.fromEntries(['equipment','traits','灵根'].filter(key=>Object.hasOwn(original,key)).map(key=>[key,original[key]]));
+  const columns=Object.fromEntries(['0','2','4','5','11'].map(key=>[key,character[key]]));
+  const logId=typeof window==='undefined'?'':String(window._ceCurrentLogId||'');
+  remarks.pendingCultivationPractice={ practice, columns, numericNotes, logId };
+}
+
+async function frSettlePendingCultivation(targetMap, checkExecution, itemExecution, floorId) {
+  const rows=new Map();
+  if (targetMap instanceof Map) for (const [id,target] of targetMap) {
+    const row=parseNestedJsonString(target?.biography?.content,target?.data);
+    if (row) rows.set(id,row);
+  }
+  for (const [id,row] of Object.entries(currentState?.['0']||{})) rows.set(id,row);
+  let count=0;
+  for (const [id,row] of rows) {
+    checkExecution?.();
+    const remarks=parseRemarksString(row?.['9']||'');
+    const pending=parseNestedJsonString(remarks.pendingCultivationPractice,null);
+    if (!pending?.practice) continue;
+    const character={ ...row,...pending.columns,'9':serializeRemarksObject(pending.numericNotes||{}) };
+    if (frCultivationRealmKey(character['2'])!==frCultivationRealmKey(row['2'])) continue;
+    if (!frApplyCultivationPractice(character,remarks,{ cultivationPractice:pending.practice },currentState,itemExecution?.executedOps,floorId||pending.logId)) continue;
+    delete remarks.pendingCultivationPractice;
+    row['2']=frRealmProgressLabel(row['2'],remarks['修为进度']);
+    row['9']=serializeRemarksObject(remarks);
+    if (id!=='B1') {
+      await updateConcurrentEvolutionArchiveEntry(id,row,{ silent:true });
+      const target=targetMap?.get?.(id);
+      if (target?.biography) target.biography.content=JSON.stringify(row);
+    }
+    count++;
+  }
+  if (count>0) {
+    checkExecution?.();
+    syncStateFromTables();
+    await _internalSaveCurrentState(floorId);
+  }
+  if (typeof frRefreshStorySpirit==='function') frRefreshStorySpirit(floorId);
+  return count;
 }
 
 function frFindBondedSourceRow(state, archive, id) {
@@ -17533,7 +18313,8 @@ bioSnapshot = archive.data.logs[lastLogWithBioIndex].biographySnapshot;
 const bioMap = new Map((bioSnapshot || []).map(bio => [bio.key, bio]));
 let bioHasChanged = false;
 
-for (const rawOp of delta) {
+const lifeCore = !frStrict && typeof CE_CORE === 'object' && CE_CORE['initial-realm'];
+for (const rawOp of lifeCore ? lifeCore.alignTerminalLifespanWrites(delta,frReadBondedRemarks) : delta) {
 checkExecution();
 if (frStrict) frAssertCanonCommit();
 const op = typeof frCleanVariableCommand === 'function' ? frCleanVariableCommand(rawOp) : rawOp;
@@ -17546,7 +18327,7 @@ if (!supported.includes(command)) throw new Error('补演提交：未知原卡�
 const objectData = v => !!v && typeof v === 'object' && !Array.isArray(v);
 if (['set','add','updateWorldEvent'].includes(command) && !objectData(data)) throw new Error('补演提交：'+command+' 缺少合法载荷');
 if (command === 'createLocation' && (!objectData(op.locationData) || !['poi','sub_region','main_region'].includes(op.locationData.type) || !objectData(op.locationData.data))) throw new Error('补演提交：地点载荷无效');
-if (command === 'updateRegion' && (!objectData(regionData) || ![...(WORLD_MAP_DATA.main_regions || []),...(WORLD_MAP_DATA.sub_regions || [])].some(r=>r.name===regionData.name))) throw new Error('补演提交：区域目标不存在');
+if (command === 'updateRegion' && (!objectData(regionData) || !frFindSpiritMapTarget(WORLD_MAP_DATA,regionData))) throw new Error('补演提交：区域目标不存在');
 if (command === 'deleteLocation' && !locationId) throw new Error('补演提交：删除地点缺少目标');
 if (command === 'addWorldEvent' && !objectData(eventData)) throw new Error('补演提交：世界事件载荷无效');
 if (command === 'updateWorldEvent' && !(newState['5'] || []).some(e=>e.id===id)) throw new Error('补演提交：世界事件目标不存在');
@@ -17586,20 +18367,24 @@ charRow['9'] = serializeRemarksObject(remarks);
 if (command === 'add' && id === TIME_LOCATION_ROW_ID) {
 const timeRow =
 (newState['4'] || []).find(row => row.id === TIME_LOCATION_ROW_ID) || newState['4']?.[0];
+const timeData = ceCompleteTimeLocationDelta([op],newState)[0].data;
 if (timeRow) {
-Object.assign(timeRow, { id: TIME_LOCATION_ROW_ID, ...data });
+Object.assign(timeRow, { id: TIME_LOCATION_ROW_ID, ...timeData });
 } else if (newState['4']) {
-newState['4'][0] = { id: TIME_LOCATION_ROW_ID, ...data };
+newState['4'][0] = { id: TIME_LOCATION_ROW_ID, ...timeData };
 }
 } else if (op.command === 'createLocation' && op.locationData) {
-if (op.locationData.type === 'poi') WORLD_MAP_DATA.points_of_interest.push(op.locationData.data);
-else if (op.locationData.type === 'sub_region') WORLD_MAP_DATA.sub_regions.push(op.locationData.data);
-else if (op.locationData.type === 'main_region') WORLD_MAP_DATA.main_regions.push(op.locationData.data);
+const { type, data:placeData }=op.locationData;
+const place={...placeData};
+delete place.spiritSources;
+delete place.spiritConcentration;
+if (frHasSpiritMapPatch(placeData)) frApplySpiritMapPatch(place,placeData,newState);
+if (type === 'poi') WORLD_MAP_DATA.points_of_interest.push(place);
+else if (type === 'sub_region') WORLD_MAP_DATA.sub_regions.push(place);
+else if (type === 'main_region') WORLD_MAP_DATA.main_regions.push(place);
 } else if (op.command === 'updateRegion' && op.regionData) {
-const regionToUpdate =
-WORLD_MAP_DATA.main_regions.find(r => r.name === op.regionData.name) ||
-WORLD_MAP_DATA.sub_regions.find(r => r.name === op.regionData.name);
-if (regionToUpdate) regionToUpdate.points = op.regionData.points;
+const regionToUpdate = frFindSpiritMapTarget(WORLD_MAP_DATA,op.regionData);
+if (regionToUpdate) frApplySpiritMapPatch(regionToUpdate,op.regionData,newState);
 } else if (op.command === 'deleteLocation' && op.locationId) {
 WORLD_MAP_DATA.points_of_interest = WORLD_MAP_DATA.points_of_interest.filter(
 p => p.name !== op.locationId,
@@ -17650,7 +18435,8 @@ const existingBondedRow = frFindBondedSourceRow(newState, archive, idToSet);
 for (const key of Object.keys(existingBondedRow || {})) {
   if (frIsRetiredCharacterColumn(key)) processedData[key] = existingBondedRow[key];
 }
-processedData['9'] = frProtectBondedRemarks(existingBondedRow && existingBondedRow['9'], processedData['9']);
+processedData['9'] = frProtectBondedRemarks(existingBondedRow?.['9'],processedData['9'],
+  frStrict ? null : processedData,!existingBondedRow,existingBondedRow?.['2']);
 if (typeof frPrepareCultivationArtsRemarks === 'function') processedData['9'] = frPrepareCultivationArtsRemarks(existingBondedRow && existingBondedRow['9'], processedData['9']);
 }
 if (idToSet !== 'SCENE_MAP' && processedData['9'] && typeof processedData['9'] === 'object') {
@@ -17698,9 +18484,15 @@ if (attributeKey==='法力' && oldAttributes[attributeKey].skillBonusSpent)
 targetRow['11'] = JSON.stringify(oldAttributes);
 }
 
-if (data['9'] && isCharacter) {
+if (isCharacter && (data['9'] || (!frStrict && data['2'] && data['2'] !== targetRow['2']))) {
 const originalRemarks = parseRemarksString(targetRow['9'] || '');
-const newRemarksData = frProtectBondedRemarks(originalRemarks, recursivelyParseJsonStrings(data['9']));
+const newRemarksData = frProtectBondedRemarks(originalRemarks,recursivelyParseJsonStrings(data['9']),
+  frStrict ? null : {...targetRow,...data},false,targetRow['2']);
+if (data['9'] || Object.hasOwn(newRemarksData,'寿元')) {
+if (Object.hasOwn(newRemarksData,'cultivationPractice')) {
+  if (executionOptions?.deferCultivation) frQueueCultivationPractice(targetRow,originalRemarks,newRemarksData);
+  else frApplyCultivationPractice(targetRow,originalRemarks,newRemarksData,newState,undefined,executionOptions?.cultivationFloorId);
+}
 if (Object.prototype.hasOwnProperty.call(newRemarksData, 'cultivationArts')) newRemarksData.cultivationArts = frMergeCultivationArts(originalRemarks.cultivationArts, newRemarksData.cultivationArts);
 const arrayKeys = ['traits', 'skills', 'inventory'];
 for (const key in newRemarksData) {
@@ -17716,6 +18508,7 @@ originalRemarks[key] = newRemarksData[key];
 }
 }
 targetRow['9'] = serializeRemarksObject(originalRemarks);
+}
 }
 
 for (const key in data) {
@@ -17889,14 +18682,18 @@ checkExecution();
 if (frStrict) frAssertCanonCommit();
 }
 const statusTime = frStatusWorldTime(newState);
+const portraitArchive = frPortraitArchiveAtState(archive,newState);
 for (const operation of delta) {
   const id = operation?.command === 'set' ? operation.data?.['0'] : operation?.id;
   if (!id) continue;
   const row = newState['0']?.[id];
   if (row) frPreserveSpiritStoneGrades(row,baseState['0']?.[id]);
-  if (frUpdatePortraitAppearance(row || newState['7']?.[id],baseState['0']?.[id] || baseState['7']?.[id])) updatedCharacterIds.add(id);
+  const portraitRow = row || newState['7']?.[id];
+  if (portraitRow && frUpdatePortraitAppearance(portraitRow,baseState['0']?.[id] || baseState['7']?.[id],
+    _portraitGetCharacterAssets(portraitArchive,{id}))) updatedCharacterIds.add(id);
 }
-if (delta.length && frUpdatePortraitAppearance(newState['0']?.B1,baseState['0']?.B1)) updatedCharacterIds.add('B1');
+if (delta.length && frUpdatePortraitAppearance(newState['0']?.B1,baseState['0']?.B1,
+  _portraitGetCharacterAssets(portraitArchive,{id:'B1'}))) updatedCharacterIds.add('B1');
 for (const [id, row] of Object.entries(newState['0'] || {})) {
   if (!row || id === 'SCENE_MAP' || typeof row['4'] !== 'string') continue;
   const status = frNormalizeStatusText(row['4'], statusTime);
@@ -18268,52 +19065,39 @@ const commands = [];
 let match;
 while ((match = commandRegex.exec(processedCommandsString)) !== null) {
 const commandName = match[1];
-const startIndex = match.index + commandName.length;
-let openParens = 0;
+const startIndex = commandRegex.lastIndex;
+let openParens = 1;
+let quoted = false;
+let escaped = false;
 let endIndex = -1;
 for (let i = startIndex; i < processedCommandsString.length; i++) {
-if (processedCommandsString[i] === '(') openParens++;
-else if (processedCommandsString[i] === ')') {
-openParens--;
-if (openParens === 0) {
-endIndex = i;
-break;
-}
-}
+const ch=processedCommandsString[i];
+if (quoted) {
+  if (escaped) escaped=false;
+  else if (ch==='\\') escaped=true;
+  else if (ch==='"') quoted=false;
+} else if (ch==='"') quoted=true;
+else if (ch==='(') openParens++;
+else if (ch===')' && --openParens===0) { endIndex=i; break; }
 }
 if (endIndex !== -1) {
 commands.push(processedCommandsString.substring(match.index, endIndex + 1));
-commandRegex.lastIndex = endIndex;
+commandRegex.lastIndex = endIndex+1;
+} else {
+errorMessages.push({ title: `指令 "${commandName}" 解析失败`, details: '缺少匹配的右括号' });
+break;
 }
 }
 
 commands.forEach((commandStr, index) => {
-let match = commandStr.match(/^(\w+)\(([\s\S]*)\)$/);
+let match = commandStr.match(/^(\w+)\s*\(([\s\S]*)\)$/);
 if (!match) return;
 
 let command = match[1];
 let argsString = match[2].trim();
 
 try {
-const args = [];
-if (argsString) {
-let depth = 0;
-let lastSplit = 0;
-let inString = false;
-for (let i = 0; i < argsString.length; i++) {
-const char = argsString[i];
-if (char === '"' && (i === 0 || argsString[i - 1] !== '\\')) inString = !inString;
-if (!inString) {
-if (char === '{' || char === '[' || char === '(') depth++;
-if (char === '}' || char === ']' || char === ')') depth--;
-}
-if (char === ',' && depth === 0 && !inString) {
-args.push(JSON.parse(argsString.substring(lastSplit, i).trim()));
-lastSplit = i + 1;
-}
-}
-args.push(JSON.parse(argsString.substring(lastSplit).trim()));
-}
+const args = JSON.parse('['+argsString+']');
 
 if (command === 'set' && args.length === 2 && typeof args[0] === 'string') command = 'add';
 
@@ -19974,7 +20758,7 @@ return { delta, smallSummary, largeSummary };
               appearance: actionParts[4] || '未知',
               imageGenPrompt: row['19'],
               age: remarks['年龄'] || '未知',
-              shouyuan: remarks['寿元'] || '未知',
+              shouyuan: remarks['寿元'] ?? '未知',
               spiritStones: String(frReadSpiritStoneWallet(row).下品),
               spiritStoneWallet: frReadSpiritStoneWallet(row),
               27: row['27'],
@@ -20008,7 +20792,7 @@ return { delta, smallSummary, largeSummary };
               const finalPlayerData = {
                 ...charData,
                 linggen: remarks['灵根'] || '无',
-                progress: (remarks['修为进度'] || '0%').replace('%', ''),
+                progress: String(remarks['修为进度'] ?? '0%').replace('%', ''),
                 hp: charData.detailedAttributes['血量'],
                 playerTraits: parseNestedJsonString(remarks['traits'], []),
                 avatarAppearance: remarks['avatar'] || 'auto',
@@ -25481,6 +26265,13 @@ function ceStripGeneratedImageBlocksFromHtml(html) {
     .replace(/<p[^>]*data-ce-generated-image-error[^>]*>[\s\S]*?<\/p>/gi, '');
 }
 
+function cePreserveGeneratedStoryImages(savedHtml, incomingHtml) {
+  if (!savedHtml?.includes('data-ce-generated-image')) return incomingHtml;
+  const base = document.createElement('div');
+  base.innerHTML = ceStripGeneratedImageBlocksFromHtml(ceStripImagePromptBlocksFromHtml(incomingHtml));
+  return ceStripGeneratedImageBlocksFromHtml(savedHtml) === base.innerHTML ? savedHtml : incomingHtml;
+}
+
 function ceStoryImageParagraphs(body) {
   const paragraphs = [];
   let text = '', endpoint;
@@ -28398,17 +29189,43 @@ function ceIndependentStoryImageCount(config) {
   return Math.min(9, Math.max(1, Math.floor(Number(config.imageIndependentCount) || 2)));
 }
 
-async function ceIndependentStoryImageCandidates(archive, config) {
+function ceStoryUsesCanonGallery(storyText) {
+  if (localStorage.getItem(FR_CANON_PORTRAIT_GALLERY_KEY) !== '1') return false;
+  const text = String(storyText || '');
+  return frCanonGalleryPeople().some(person=>person.sets.some(set=>set.portrait && set.design) &&
+    [person.name,...(person.aliases || [])].some(name=>name && text.includes(name)));
+}
+
+function ceStoryImageReferenceFrame(archive, floor) {
+  if (localStorage.getItem(FR_CANON_PORTRAIT_GALLERY_KEY) !== '1') return null;
+  const snapshot = parseNestedJsonString(floor?.stateSnapshot,null);
+  const state = snapshot?.currentState || snapshot;
+  if (!state?.['0']) return null;
+  const layer = archive.data.logs.findIndex(log=>String(log.id)===String(floor.id));
+  if (layer < 0) return null;
+  const referenceArchive = { ...archive,data:{ ...archive.data,state:{ ...archive.data.state,currentState:state } } };
+  if (!ceStoryUsesCanonGallery(floor.content) && !ceStoryHasGalleryActors(referenceArchive,Object.keys(state['0']))) return null;
+  return { state,layer,archive:referenceArchive };
+}
+
+function ceStoryHasGalleryActors(archive, ids) {
+  return ids.some(id=>frCanonGallerySubject(archive,{id})?.entry.sets.some(set=>set.portrait && set.design));
+}
+
+async function ceIndependentStoryImageCandidates(archive, config, frame) {
   if (!archive) return [];
   const includeOptional = config.imageSendReferences !== false && config.imageReferenceCharacters !== false;
   const candidates = [];
-  for (const [id, row] of Object.entries(currentState?.['0'] || {})) {
+  const state = frame?.state || currentState;
+  for (const [id, row] of Object.entries({...state?.['0'],...state?.['7']})) {
     if (!row || /离场|退场|死亡/.test(row['4'] || '')) continue;
-    const char = _portraitResolveCharacterForAvatarDisplay(id);
-    if (!char) continue;
+    const live = _portraitResolveCharacterForAvatarDisplay(id);
+    const name = String(row['1'] || '').split(/[|｜]/u)[0].trim() || id;
+    const char = {id,name,visualData:live?.name === name ? live.visualData : null};
     const assets = _portraitGetCharacterAssets(archive, char);
-    if (_portraitIsReferenceData(assets.design) || (includeOptional &&
-        (assets.reference || (await _portraitResolveExistingAvatar(char, archive)).src))) candidates.push(char);
+    const designBound = frPortraitHasDesign(assets);
+    if (designBound || (includeOptional &&
+        (assets.reference || (await _portraitResolveExistingAvatar(char, archive,frame?.layer)).src))) candidates.push({...char,designBound});
   }
   return candidates;
 }
@@ -28436,13 +29253,30 @@ async function ceSliceStoryImageGrid(imageUrl, ordered, columns) {
   }
 }
 
+function ceStoryImageIdentity(row) {
+  const [name, sex] = String(row?.['1'] || '').split(/[|｜]/u).map(value=>value.trim());
+  if (/^男(?:性)?$/u.test(sex)) return {name, sex:'男性'};
+  if (/^女(?:性)?$/u.test(sex)) return {name, sex:'女性'};
+  return null;
+}
+
 async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveName, archive, floor, signal, context = {}) {
   const plain = document.createElement('div');
   plain.innerHTML = ceStripImagePromptBlocksFromHtml(ceStripGeneratedImageBlocksFromHtml(String(floor.content || '')));
   for (const block of plain.querySelectorAll('think,script,style,[hidden],[data-evolution-detail]')) block.remove();
   const paragraphs = ceStoryImageParagraphs(plain.querySelector('content') || plain);
   const storyText = paragraphs.map(paragraph=>paragraph.text).join('\n').trim();
-  const candidates = new Map((await ceIndependentStoryImageCandidates(archive, config)).map(char => [char.id, char]));
+  const frame = context.referenceFrame;
+  const referenceArchive = frame?.archive || archive;
+  const snapshot = parseNestedJsonString(floor?.stateSnapshot,null);
+  const identityState = frame?.state || snapshot?.currentState || snapshot || currentState;
+  const playerIdentity = ceStoryImageIdentity(identityState?.['0']?.B1);
+  const floorLayer = archive?.data?.logs?.findIndex(log=>String(log.id)===String(floor.id));
+  const referenceLayer = frame?.layer ?? (floorLayer >= 0 ? floorLayer : undefined);
+  const candidates = new Map((await ceIndependentStoryImageCandidates(referenceArchive, config,{state:identityState,layer:referenceLayer}))
+    .map(char => [char.id, char]));
+  const includeCharacterReferences = config.imageSendReferences !== false && config.imageReferenceCharacters !== false;
+  const continuityGuide = '只参考环境、光线和空间的延续。角色脸、发型及稳定造型以对应人物图为准。';
   const uploadCopies = new Map();
   const readStoryImageReference = src => {
     if (!uploadCopies.has(src)) uploadCopies.set(src, frStoryImageReferenceCopy(src,signal));
@@ -28463,7 +29297,7 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
         if (typeof frStoryAssetsCore === 'function' && frStoryAssetsCore()?.isStoryImageRef(src)) {
           try { src = await frStoryImageReadDataUrl(src); } catch (_) { continue; }
         }
-        if (_portraitIsReferenceData(src)) earlierFigures.push({src,name:'上一个有插图的回合',type:'场景延续'});
+        if (_portraitIsReferenceData(src)) earlierFigures.push({src,name:'上一个有插图的回合',type:'场景延续',guide:continuityGuide});
       }
       if (earlierFigures.length) break;
     }
@@ -28476,13 +29310,32 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
   });
   const prepare = async (item, previous, shareFullStory = false) => {
       const visible = new Set(item.visibleActorIds || []), locked = [];
-      const references = [], notes = [];
+      const requestedExtras = new Set(item.referenceIds || []);
+      const references = [], notes = [], identities = [];
+      const state = frame?.state || currentState;
+      if (playerIdentity) {
+        const playerName = playerIdentity.name && playerIdentity.name !== '我' ? '（' + playerIdentity.name + '）' : '';
+        identities.push('玩家 B1 / 正文里的「我」' + playerName + ' · ' + playerIdentity.sex
+          + '。若出镜，按该身份与对应角色参考描绘。');
+      }
       for (const id of visible) {
-        const assets = _portraitGetCharacterAssets(archive, {id});
-        const row = currentState?.['0']?.[id] || currentState?.['7']?.[id];
+        const assets = _portraitGetCharacterAssets(referenceArchive, {id});
+        const row = identityState?.['0']?.[id] || identityState?.['7']?.[id] || state?.['0']?.[id] || state?.['7']?.[id];
+        const identity = ceStoryImageIdentity(row);
+        if (identity && id !== 'B1') {
+          identities.push((identity.name || id) + '（' + id + '） · ' + identity.sex);
+        }
         const name = String(row?.['1'] || id).split(/[|｜]/)[0];
-        const design = frCharacterDesignReference(archive,{id,name});
-        if (design) references.push(design);
+        const design = frCharacterDesignReference(referenceArchive,{id,name});
+        if (includeCharacterReferences && candidates.has(id)) {
+          references.push(...await _portraitCollectCharacterReferences(referenceArchive,candidates.get(id),signal,
+            config.imageReferenceBothPortraits,referenceLayer,{includeUpload:requestedExtras.has(id)}));
+        }
+        if (design) {
+          references.push({...design,actorId:id});
+          locked.push(name);
+          continue;
+        }
         const appearance = frResolvePortraitAppearance(row,assets);
         const supplement = frPortraitAppearanceSupplement(assets,appearance);
         if (appearance) {
@@ -28491,25 +29344,22 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
         }
         if (supplement) notes.push(name + ' · 玩家自定义补充（只采用与当前画像相容的细节） · ' + supplement);
       }
-      for (const id of new Set(item.referenceIds || [])) {
-        if (config.imageSendReferences !== false && config.imageReferenceCharacters !== false && visible.has(id) && candidates.has(id)) {
-          references.push(...await _portraitCollectCharacterReferences(archive, candidates.get(id), signal,config.imageReferenceBothPortraits));
-        }
-      }
       if (config.imageSendReferences !== false && previous?.imageUrl && _portraitIsReferenceData(previous.imageUrl)) {
-        references.unshift({src:previous.imageUrl,name:'同轮上一张插图',type:'场景延续',guide:'只参考共同背景、画风及仍在场角色；严格遵循本张的正文动作、位置和构图。'});
+        references.push({src:previous.imageUrl,name:'同轮上一张插图',type:'场景延续',guide:continuityGuide});
       }
       references.push(...earlierFigures);
       const facts = config.imageSceneFacts ? ['【画面事实】',context.currentTime && '时间：' + context.currentTime,
         context.currentLocation && '地点：' + context.currentLocation,'锚点：' + item.anchor].filter(Boolean).join('\n') : '';
       const fullStory = config.imageSendFullStory && !locked.length && storyText;
-      const prompt = [item.prompt,facts,!shareFullStory && fullStory && '【本回合可见正文】\n' + fullStory,
+      const prompt = [identities.length && '【已知人物身份】\n' + identities.join('\n'),
+        item.prompt,facts,!shareFullStory && fullStory && '【本回合可见正文】\n' + fullStory,
         notes.length && '【人物外观】\n' + notes.join('\n')].filter(Boolean).join('\n\n');
       return {prompt,references,fullStory};
   };
   const generate = (prompt,references) => {
     const attached = frImageReferencesWithExample('story',references,16);
-    return ceCallImageGeneration(providerConfig,_portraitAppendReferenceGuide(prompt,attached,
+    const priorities = '【参考图用途】人物的身份和稳定外形优先由对应编号的设定图与主肖像决定。场景延续图和画风示例只负责环境或材质光影；本格的出镜人物、地点和构图由分镜决定。';
+    return ceCallImageGeneration(providerConfig,_portraitAppendReferenceGuide(priorities+'\n\n'+prompt,attached,
       config.imageReferenceGuide || frImageMaterials().storyReference),signal,attached);
   };
   const draw = async (item, previous) => {
@@ -28539,9 +29389,6 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
   signal?.throwIfAborted();
   const ready = results.filter(item => item.imageUrl);
   if (!ready.length) return { inserted: 0, error: results[0]?.error || '未找到可用的正文锚点' };
-  // 出图可与变量、补演并行。楼层写入收尾后才改正文 HTML，以免被快照覆盖或误判为改稿。
-  if (context.waitForFloorWrites) await context.waitForFloorWrites();
-  signal?.throwIfAborted();
   const inserted = await ceSaveGeneratedStoryImages(archiveName, floor.id, ready, floor.content, signal);
   return { inserted, results };
 }
@@ -28549,7 +29396,7 @@ async function ceGenerateIndependentStoryImages(imagePrompts, config, archiveNam
 async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedContent, signal) {
   signal?.throwIfAborted();
   if (typeof frStoryImageLocalizeResults === 'function') results = await frStoryImageLocalizeResults(results,signal);
-  let updatedLog, insertedCount = 0;
+  let updatedLog, updatedArchive, insertedCount = 0;
   await db.archives.where('name').equals(archiveName).modify(archive => {
     signal?.throwIfAborted();
     const log = archive?.data?.logs?.find(entry => entry.id === logId);
@@ -28560,6 +29407,7 @@ async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedC
     log.content = result.html;
     insertedCount = result.insertedCount;
     updatedLog = log;
+    updatedArchive = archive;
   });
   if (!insertedCount) return 0;
   const logEl = currentArchiveName === archiveName
@@ -28571,7 +29419,7 @@ async function ceSaveGeneratedStoryImages(archiveName, logId, results, expectedC
     } catch (e) {}
     const safeDetailHtml = ceBuildSafeDetailedEvolutionHtmlFragment(updatedLog.detailedEvolutionHtml);
     if (safeDetailHtml && !rendered.includes('data-evolution-detail')) rendered += '\n' + safeDetailHtml;
-    frRenderStoryHtml(logEl, rendered);
+    frRenderStoryHtml(logEl, rendered, {context:frCreateDialogueAvatarContext(updatedArchive,archiveName),logId});
   }
   return insertedCount;
 }
@@ -28595,7 +29443,7 @@ async function ceGenerateAndInsertImagesToLatestLog(imagePrompts, config, signal
   }
 }
 
-async function ceRunStoryImageJob({archiveName, logId, config, automatic = false, waitForFloorWrites, signal: parentSignal}) {
+async function ceRunStoryImageJob({archiveName, logId, config, automatic = false, signal: parentSignal, galleryTurnSettled}) {
   const controller = new AbortController();
   const {signal} = controller;
   const releaseGeneration = frTrackGeneration(controller, parentSignal);
@@ -28609,29 +29457,50 @@ async function ceRunStoryImageJob({archiveName, logId, config, automatic = false
     bubble = showDanmaku('正文插图 · ' + text,'status',controller,true);
   };
   try {
-    const archive = await db.archives.get(archiveName);
-    const floor = archive?.data?.logs?.find(row => row.id === logId && row.type === 'ai');
+    let archive = await db.archives.get(archiveName);
+    let floor = archive?.data?.logs?.find(row => row.id === logId && row.type === 'ai');
     if (!floor) throw new Error('找不到指定的本轮正文');
+    const waitForGalleryTurn = async () => {
+      await galleryTurnSettled;
+      signal.throwIfAborted();
+      archive = await db.archives.get(archiveName);
+      floor = archive?.data?.logs?.find(row=>row.id===logId && row.type==='ai');
+      if (!floor) throw new Error('找不到指定的本轮正文');
+    };
+    if (galleryTurnSettled && ceStoryUsesCanonGallery(floor.content)) {
+      showProgress('等待本轮人物形象');
+      await waitForGalleryTurn();
+    }
     const storyText = ceStripGeneratedImageBlocksFromHtml(String(floor.content || ''));
     const markup = document.createElement('template');
     markup.innerHTML = storyText;
-    const fallback = ceExtractOriginalTimelineTimeLocationInfoFromStateLike(currentState);
+    let referenceFrame = ceStoryImageReferenceFrame(archive,floor);
+    const fallback = ceExtractOriginalTimelineTimeLocationInfoFromStateLike(referenceFrame?.state || currentState);
     const currentTime = [...markup.content.querySelectorAll('ui_sys ti,.fr-story-status-time,ti')].at(-1)?.textContent?.trim() || fallback.timeText;
     const currentLocation = [...markup.content.querySelectorAll('ui_sys li,.fr-story-status-place')].at(-1)?.textContent?.trim() || fallback.locationText;
     signal.throwIfAborted();
     showProgress('正在规划分镜');
     const plan = await requestImageEvolutionPhase({storyText,archiveName,manual:!automatic,currentTime,currentLocation,signal,
-      config,archive,entryDecisionEntries:automatic ? [] : undefined});
+      config,archive,referenceFrame,entryDecisionEntries:automatic || referenceFrame ? [] : undefined});
     signal.throwIfAborted();
     if (plan.skipped) return;
     if (plan.error) throw new Error(plan.error);
+    // 正文只用代称时，分镜的可见人物编号仍能确认它需要本轮图库资料。
+    if (galleryTurnSettled && !referenceFrame &&
+        ceStoryHasGalleryActors(archive,plan.imagePrompts.flatMap(item=>item.visibleActorIds || []))) {
+      showProgress('等待本轮人物形象');
+      await waitForGalleryTurn();
+      if (ceStripGeneratedImageBlocksFromHtml(String(floor.content || '')) !== storyText) {
+        throw new Error('本轮正文已修改');
+      }
+      referenceFrame = ceStoryImageReferenceFrame(archive,floor);
+    }
     stage = '出图';
     const expected = ceIndependentStoryImageCount(config);
     showProgress('正在出图（计划 ' + plan.imagePrompts.length + ' 张）');
     const result = await ceGenerateAndInsertImagesToLatestLog(plan.imagePrompts,config,signal,{
-      archiveName,logId,archive,currentTime,currentLocation,
-      onStoryImageUpload:info=>showProgress('正在上传 · ' + frStoryImageUploadLabel(info)),
-      waitForFloorWrites:waitForFloorWrites && (()=>waitForFloorWrites(()=>showProgress('已收到图片，等待保存到本轮正文')))
+      archiveName,logId,archive,currentTime,currentLocation,referenceFrame,
+      onStoryImageUpload:info=>showProgress('正在上传 · ' + frStoryImageUploadLabel(info))
     });
     signal.throwIfAborted();
     if (!result.inserted) throw new Error(result.error || '本轮正文已修改或找不到可插入的位置');
@@ -32648,7 +33517,7 @@ function ceExtractCultivationBridgeNumber(value, fallback = 0) {
 
 function ceNormalizeCultivationBridgeProgress(value, fallback = 0) {
   const normalized = ceExtractCultivationBridgeNumber(value, fallback);
-  return Math.max(0, Math.min(100, Math.round(normalized)));
+  return Math.max(0, Math.min(100, normalized));
 }
 
 function ceNormalizeCultivationBridgeReserve(value, fallback = 0) {
@@ -39680,9 +40549,18 @@ async function ceBuildWorldTimelinePromptBlock(options) {
 // 正文优化只替换中间故事；时间、UI标记和尾部结构仍由原卡正则处理。
 function frReplaceStoryBody(original,body) {
   const source=String(original || ''),text=String(body || '');
+  const cardPattern=/<(c1|tupo_daily|tupo_break|cultivation_card)>[\s\S]*?<\/\1>/giu;
+  const replace=before=>{
+    const originalCards=[...before.matchAll(cardPattern)];
+    const outputCards=[...text.matchAll(cardPattern)];
+    if (originalCards.length!==outputCards.length ||
+        originalCards.some((card,index)=>card[1].toLowerCase()!==outputCards[index][1].toLowerCase())) return before;
+    let index=0;
+    return text.replace(cardPattern,()=>originalCards[index++][0]);
+  };
   return /<content>[\s\S]*?<\/content>/i.test(source)
-    ? source.replace(/(<content>)[\s\S]*?(<\/content>)/i,(_,open,close)=>open+text+close)
-    : text;
+    ? source.replace(/(<content>)([\s\S]*?)(<\/content>)/i,(_,open,before,close)=>open+replace(before)+close)
+    : replace(source);
 }
 
 async function ceBuildCanonGuidanceForStory(ctx) {
@@ -40386,7 +41264,8 @@ async function buildCharacterEvolutionPrompt(target, preset, sharedContext) {
       });
     }
 
-    return ['player','npc'].includes(promptKey) ? prompt + '\n\n' + frPortraitVariableRule : prompt;
+    const portrait = await frPortraitEvolutionGuidance([target],sharedContext);
+    return portrait.text ? prompt + '\n\n' + portrait.text : prompt;
   }
 
   // 回退：使用 systemPrompt 字符串
@@ -40534,7 +41413,9 @@ async function buildCharacterEvolutionPrompt(target, preset, sharedContext) {
     }
   }
 
-  return prompt && ['player','npc'].includes(promptKey) ? prompt + '\n\n' + frPortraitVariableRule : prompt || null;
+  if (!prompt) return null;
+  const portrait = await frPortraitEvolutionGuidance([target],sharedContext);
+  return portrait.text ? prompt + '\n\n' + portrait.text : prompt;
 }
 
 // ===== 并发执行函数 =====
@@ -42053,6 +42934,8 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
   if (typeof normalizeEquipItemOps === 'function') {
     normalizeEquipItemOps(delta, { context: 'concurrent-evolution-batch' });
   }
+  const lifeCore = !frStrict && typeof CE_CORE === 'object' && CE_CORE['initial-realm'];
+  if (lifeCore) delta = lifeCore.alignTerminalLifespanWrites(delta,frReadBondedRemarks);
 
   // === 对delta进行排序，确保 de 指令最后执行 ===
   // 这样其他指令（如 add）可以先同步数据到 worldBook，然后 de 再删除 currentState 中的角色
@@ -42106,7 +42989,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
       await ceDumpStateAndWorldbookNow('CE_DELTA_BATCH_START', ceGetLastUserAction());
 
       checkAbort();
-      const applyResult = await applyChanges(currentState, ops);
+      const applyResult = await applyChanges(currentState, ops, options.deferCultivation ? {deferCultivation:true} : undefined);
       checkAbort();
       if (strictApply && (!applyResult || !applyResult.newState)) throw new Error('合并人物批量应用未返回状态');
       if (frStrict) { frAssertCanonCommit(); if (!applyResult || !applyResult.newState) throw new Error('补演提交：人物批量应用未返回状态'); }
@@ -42183,6 +43066,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
       checkAbort();
 
       const appliedOps = [];
+      const previousAppearance = {...archiveWorkingCharData};
       for (const op of ops) {
         mergeAppendBiographyForAdd(op, archiveWorkingCharData);
         const modified = applyConcurrentEvolutionBioChanges(archiveWorkingCharData, op);
@@ -42197,6 +43081,11 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
         return { ok: true, appliedOps: [] };
       }
 
+      const archive = currentArchiveName ? await db.archives.get(currentArchiveName) : null;
+      checkAbort();
+      const table = ceIsBeastId(mergeTargetId) ? '7' : '0';
+      const imageArchive = frPortraitArchiveAtState(archive,currentState,mergeTargetId,archiveWorkingCharData,table);
+      frUpdatePortraitAppearance(archiveWorkingCharData,previousAppearance,_portraitGetCharacterAssets(imageArchive,{id:mergeTargetId}));
       const updated = await updateConcurrentEvolutionArchiveEntry(mergeTargetId, archiveWorkingCharData, { silent: true });
       checkAbort();
       if (!updated) {
@@ -42247,7 +43136,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
             });
           } else {
             for (const fallbackOp of run) {
-              const fallbackApplied = await applyConcurrentEvolutionDelta(fallbackOp, result.target);
+              const fallbackApplied = await applyConcurrentEvolutionDelta(fallbackOp, result.target, options);
               if (fallbackApplied) {
                 hasChanges = true;
                 summary.appliedChanges.push({ target: result.target, operation: fallbackOp });
@@ -42283,7 +43172,7 @@ async function applyConcurrentEvolutionDeltaBatch(delta, result, summary, option
             }
           } else {
             for (const fallbackOp of run) {
-              const fallbackApplied = await applyConcurrentEvolutionDelta(fallbackOp, result.target);
+              const fallbackApplied = await applyConcurrentEvolutionDelta(fallbackOp, result.target, options);
               if (fallbackApplied) {
                 hasChanges = true;
                 summary.appliedChanges.push({ target: result.target, operation: fallbackOp });
@@ -42423,7 +43312,8 @@ function createConcurrentEvolutionResultProcessor(config, options = {}) {
       let applied = true;
       try {
         await applyConcurrentEvolutionDeltaBatch(task.delta, task.result, summary, {
-          strictApply: requireApplyReceipt, signal: abortController && abortController.signal
+          strictApply: requireApplyReceipt, signal: abortController && abortController.signal,
+          deferCultivation: options.deferCultivation
         });
       } catch (e) {
         applied = false;
@@ -47972,6 +48862,7 @@ ${textToSummarize}
     const idsToRemove = new Set(batchToCompress.map(function(log) {
       return log.id;
     }));
+    frSetPortraitSummarySources(archive.data.state,newDeepSummaryLog,batchToCompress);
     const ghostIdsToRemove = new Set();
     archive.data.logs.forEach(function(log) {
       if (
@@ -48945,7 +49836,7 @@ async function applyConcurrentEvolutionDelta(op, target, options = {}) {
   // 优先使用核心 applyChanges 逻辑，确保与变量思考一致
   if (shouldUseApplyChanges) {
     try {
-      const result = await applyChanges(currentState, [op]);
+      const result = await applyChanges(currentState, [op], options.deferCultivation ? {deferCultivation:true} : undefined);
       checkAbort();
       if (strictApply && (!result || !result.newState)) throw new Error('合并人物应用未返回状态');
       if (frStrict) { frAssertCanonCommit(); if (!result || !result.newState) throw new Error('补演提交：人物应用未返回状态'); }
@@ -49072,7 +49963,12 @@ async function applyConcurrentEvolutionDelta(op, target, options = {}) {
 
   if (modified) {
     if (tableKey === '0') frPreserveSpiritStoneGrades(charData,previousAppearance);
-    if (tableKey === '0' || tableKey === '7') frUpdatePortraitAppearance(charData,previousAppearance);
+    if (tableKey === '0' || tableKey === '7') {
+      const archive = currentArchiveName ? await db.archives.get(currentArchiveName) : null;
+      checkAbort();
+      const imageArchive = frPortraitArchiveAtState(archive,currentState,targetId,charData,tableKey);
+      frUpdatePortraitAppearance(charData,previousAppearance,_portraitGetCharacterAssets(imageArchive,{id:targetId}));
+    }
     console.log(`[并发演化-Delta][${targetId}] 准备保存修改: isFromArchive=${isFromArchive}`);
     if (isFromArchive) {
       const serialized = JSON.stringify(charData, null, 2);
@@ -49119,9 +50015,11 @@ function applyConcurrentEvolutionBioChanges(characterData, operation) {
   if (typeof frCleanVariableCommand === 'function') operation = frCleanVariableCommand(operation);
   const { id: opId = '', command, data, attribute, value, itemData, skillData, traitData, gongfaData, subId, oldSubId, biography } = operation;
   if (!characterData || typeof characterData !== 'object') return false;
+  const canonCommit = typeof frInCanonCommit === 'function' && frInCanonCommit();
   let modified = false;
 
   if (command === 'add' && data && typeof data === 'object') {
+    const cultivationBefore={ ...characterData };
     const patchData = { ...data };
     if (typeof patchData['4'] === 'string') patchData['4'] = frNormalizeStatusText(patchData['4'], '');
     let remarksPatch = patchData['9'];
@@ -49135,10 +50033,12 @@ function applyConcurrentEvolutionBioChanges(characterData, operation) {
       modified = true;
     }
 
-    if (remarksPatch !== undefined) {
+    if (remarksPatch !== undefined || (!canonCommit && data['2'] && data['2'] !== cultivationBefore['2'])) {
       const remarks = parseRemarksString(characterData['9'] || '');
       const rawPatchObj = frReadBondedRemarks(remarksPatch);
-      const patchObj = frProtectBondedRemarks(remarks, rawPatchObj);
+      const patchObj = frProtectBondedRemarks(remarks,rawPatchObj,canonCommit ? null : characterData,false,cultivationBefore['2']);
+      if (remarksPatch !== undefined || Object.hasOwn(patchObj,'寿元')) {
+      if (Object.hasOwn(patchObj,'cultivationPractice')) frQueueCultivationPractice(cultivationBefore,remarks,patchObj);
 
       Object.keys(patchObj || {}).forEach(rawKey => {
         const normalizedKey =
@@ -49298,6 +50198,7 @@ function applyConcurrentEvolutionBioChanges(characterData, operation) {
 
       characterData['9'] = serializeRemarksObject(remarks);
       modified = true;
+      }
     }
 
     if (detailPatch !== undefined) {
@@ -49441,7 +50342,8 @@ function applyConcurrentEvolutionBioChanges(characterData, operation) {
     characterData['11'] = JSON.stringify(attributes);
     modified = true;
   } else if (command === 'set' && data && typeof data === 'object') {
-    const nextNotes = frProtectBondedRemarks(characterData['9'], data['9']);
+    const nextNotes = frProtectBondedRemarks(characterData['9'],data['9'],
+      canonCommit ? null : {...characterData,...data},!characterData['9'],characterData['2']);
     const nextData = { ...data, '9': serializeRemarksObject(typeof frPrepareCultivationArtsRemarks === 'function' ? frPrepareCultivationArtsRemarks(characterData['9'], nextNotes) : nextNotes) };
     Object.assign(characterData, nextData);
     modified = true;
@@ -55145,10 +56047,11 @@ async function executeEntryGlobalCommands(globalCommands = [], options = {}) {
       }
       if (delta.length === 0) { errors.push({command:commandText,error:'未解析到可执行的全局指令'}); continue; }
       if (typeof applyChanges === 'function') {
-        const result = await applyChanges(currentState, delta);
+        const completed = ceCompleteTimeLocationDelta(delta,currentState,options.storyText);
+        const result = await applyChanges(currentState, completed);
         if (!result || !result.newState) throw new Error('全局指令没有返回实际状态');
         ceThrowIfConcurrentEvolutionAborted(options.signal);
-        frAssertTimeLocationDeltaApplied(delta,result.newState);
+        frAssertTimeLocationDeltaApplied(completed,result.newState);
         currentState = result.newState;
         await ceDumpStateAndWorldbookNow('ENTRY_GLOBAL', ceGetLastUserAction());
       } else {
@@ -55712,7 +56615,7 @@ async function requestEntryDecision(options = {}) {
     if (storyClock && !globalCommands.some(command => /\bTIME_LOCATION_ROW\b/.test(command))) {
       globalCommands.push('add(' + JSON.stringify(storyClock.id) + ', ' + JSON.stringify(storyClock.data) + ')');
     }
-    const globalResult = await executeEntryGlobalCommands(globalCommands,{signal:entryDecisionSignal});
+    const globalResult = await executeEntryGlobalCommands(globalCommands,{signal:entryDecisionSignal,storyText});
     ceThrowIfConcurrentEvolutionAborted(entryDecisionSignal);
     let globalError = globalResult.success === false
       ? '全局变量更新失败：' + (globalResult.errors || []).map(item => item.error || item.message || String(item)).join('；')
@@ -57467,10 +58370,10 @@ function ceIsMiscTaskId(id) {
  * 构建在场角色的完整信息摘要（含列16、列2、列1等关键外观信息）
  * @returns {string} 格式化的角色信息文本
  */
-function buildOnscreenCharactersFullSummary(referenceFirst = new Set()) {
-  if (!currentState || !currentState['0']) return '（无角色数据）';
+function buildOnscreenCharactersFullSummary(referenceFirst = new Set(), state = currentState) {
+  if (!state?.['0']) return '（无角色数据）';
 
-  const chars = currentState['0'];
+  const chars = state['0'];
   const lines = [];
 
   Object.keys(chars).forEach(function(id) {
@@ -57856,7 +58759,7 @@ function ceBuildRuntimeSceneCharacterPromptSnapshotBlock(char) {
   }
 
   const age = char.age || remarks['年龄'] || '未知';
-  const shouyuan = char.shouyuan || remarks['寿元'] || '未知';
+  const shouyuan = char.shouyuan ?? remarks['寿元'] ?? '未知';
   const linggen = char.linggen || char['5'] || remarks['灵根'] || '无';
   const constitution = char.constitution || char['6'] || '无';
   const spiritStones = frSpiritStoneWalletText(char.spiritStoneWallet || frReadSpiritStoneWallet({26:char['26'] ?? char.spiritStones,9:remarks}));
@@ -58084,7 +58987,10 @@ function buildImageEvolutionPrompt(context) {
     sequential:'按剧情顺序出图；上一张成功的图可作为下一张的场景参考。每张提示词独立完整。',
     parallel:'各张并发出图；同一回合其他成图不随请求发送，每张提示词独立完整。'
   };
-  const candidates = (context.referenceCandidates || []).map(char=>char.id + ' · ' + (char.name || char.id) + ' · 参考图: 有').join('\n') || '无';
+  const referenceCandidates = context.referenceCandidates || [];
+  const candidates = referenceCandidates.map(char=>char.id + ' · ' + (char.name || char.id)
+    + (char.designBound ? ' · 外观由设定图提供，分镜只写动作、位置与构图，不另写常驻外观。' : ' · 参考图: 有')).join('\n') || '无';
+  const referenceFirst = new Set(referenceCandidates.filter(char=>char.designBound || config.imageReferenceVisualPriority).map(char=>char.id));
   const referenceRules = config.imageReferenceGuide || frImageMaterials().storyReference || '';
   const sceneRules = config.imageSceneFacts ? '按锚点附近的正文还原动作、时间、地点与空间关系。' : '';
   const story = document.createElement('template');
@@ -58094,8 +59000,7 @@ function buildImageEvolutionPrompt(context) {
   const values = {
     story_text:ceStoryImageParagraphs(story.content.querySelector('content') || story.content).map(paragraph=>paragraph.text).join('\n').trim(),
     current_time:context.currentTime || '未知', current_location:context.currentLocation || '未知',
-    onscreen_characters_full:buildOnscreenCharactersFullSummary(config.imageReferenceVisualPriority
-      ? new Set((context.referenceCandidates || []).map(char=>char.id)) : undefined),
+    onscreen_characters_full:buildOnscreenCharactersFullSummary(referenceFirst,context.referenceFrame?.state),
     entry_decision_new_characters:(context.entryDecisionEntries ?? window.lastEntryDecisionResult?.entries ?? []).filter(entry=>entry.type==='new')
       .map(entry=>entry.id + ' · ' + entry.name).join('\n') || '无',
     image_count:String(imageCount), image_style_name:style.label, image_style_description:style.description,
@@ -58109,7 +59014,10 @@ function buildImageEvolutionPrompt(context) {
     openai_story_image_reference_rules:referenceRules,
     openai_story_image_scene_rules:sceneRules
   };
-  return replacePlaceholders(template,values) + '\n\n只返回 {"images":[{"anchor":"正文中的连续原文","prompt":"独立画面描述","visibleActorIds":[],"referenceIds":[]}]} 格式的 JSON，images 目标为 ' + imageCount + ' 张。';
+  return replacePlaceholders(template,values)
+    + '\n\n正在使用第一人称时，正文中的「我」对应玩家 B1；只有镜头真的拍到玩家时才把 B1 列进 visibleActorIds。人物性别以对应角色资料为准。'
+    + '\n程序按 visibleActorIds 绑定已有人物图。每格在画面描述中用对应角色编号和姓名区分人物，构图、动作和临时装束由本格分镜确定。'
+    + '\n\n只返回 {"images":[{"anchor":"正文中的连续原文","prompt":"独立画面描述","visibleActorIds":[],"referenceIds":[]}]} 格式的 JSON，images 目标为 ' + imageCount + ' 张。';
 }
 
 /**
@@ -58149,7 +59057,8 @@ async function requestImageEvolutionPhase(options = {}) {
   try {
     const archiveName = options.archiveName || currentArchiveName;
     const archive = options.archive || (archiveName ? await db.archives.get(archiveName) : null);
-    const candidates = await ceIndependentStoryImageCandidates(archive,config);
+    const frame = options.referenceFrame;
+    const candidates = await ceIndependentStoryImageCandidates(frame?.archive || archive,config,frame);
     const prompt = buildImageEvolutionPrompt({ ...options,config,referenceCandidates:candidates });
     if (!prompt) return {error:'未找到正文分镜模板'};
     const messages = [{role:'user',content:prompt}];
@@ -60894,7 +61803,7 @@ async function applyMiscEvolutionResult(result) {
     window._cePendingMiscSummary = null;
   }
 
-  const delta = Array.isArray(result.delta) ? result.delta : [];
+  const delta = ceCompleteTimeLocationDelta(Array.isArray(result.delta) ? result.delta : [],currentState,result.storyText);
   // 必须先看原载荷，防止小地图归一化把无效输入变成旧图而误报幂等成功。
   const scenePayloadCheck = ceValidateMiscSceneMapPayloads(delta);
   if (!scenePayloadCheck.ok) return {appliedCount:0,rejectedCount:delta.length,noOperations:false,skipped:false,error:'小地图原始载荷无效，整批未应用；' + scenePayloadCheck.error,errorType:'apply'};
@@ -60968,13 +61877,19 @@ async function applyMiscEvolutionResult(result) {
           var mapKey = {poi:'points_of_interest',sub_region:'sub_regions',main_region:'main_regions'}[data.type];
           if (!mapKey || !miscObject(data.data) || typeof data.data.name !== 'string' || !data.data.name.trim() || !Array.isArray(expectedWorldMap[mapKey])) throw new Error('新增地点载荷无效');
           if (Object.keys(data).some(function(key) { return key !== 'type' && key !== 'data'; })) throw new Error('新增地点含未消费字段');
-          expectedWorldMap[mapKey].push(data.data);
+          const place={...data.data};
+          delete place.spiritSources;
+          delete place.spiritConcentration;
+          if (frHasSpiritMapPatch(data.data)) frApplySpiritMapPatch(place,data.data,expectedState);
+          expectedWorldMap[mapKey].push(place);
         } else if (command === 'updateRegion') {
           data = miscPayload(op.regionData);
-          if (Object.keys(data).some(function(key) { return key !== 'name' && key !== 'points'; }) || !Array.isArray(data.points)) throw new Error('区域修订只消费名称和边界点，存在未消费字段');
-          row = (expectedWorldMap.main_regions || []).concat(expectedWorldMap.sub_regions || []).find(function(region) { return region.name === data.name; });
+          if (Object.keys(data).some(key=>!['name','points','spiritConcentration','spiritSources'].includes(key)) ||
+              (Object.hasOwn(data,'points') && !Array.isArray(data.points)) ||
+              (!Object.hasOwn(data,'points') && !frHasSpiritMapPatch(data))) throw new Error('区域修订需提供有效范围或灵气字段');
+          row = frFindSpiritMapTarget(expectedWorldMap,data);
           if (!row) throw new Error('区域目标不存在：' + String(data.name || ''));
-          row.points = data.points;
+          frApplySpiritMapPatch(row,data,expectedState);
         } else {
           if (!op.locationId || !(expectedWorldMap.points_of_interest || []).some(function(place) { return place.name === op.locationId; })) throw new Error('地点目标不存在：' + String(op.locationId || ''));
           expectedWorldMap.points_of_interest = expectedWorldMap.points_of_interest.filter(function(place) { return place.name !== op.locationId; });
@@ -62957,6 +63872,8 @@ async function ceCommitOriginalTimelineStageIntoSystem(options = {}) {
       }
     }
 
+    if (!originalMiscResult.error && typeof frSettlePendingCultivation==='function') await frSettlePendingCultivation(originalTimelineTargetMap,throwIfAborted,originalItemManagementResult);
+
     finalResult = ceBuildOriginalTimelineStandaloneResult(phaseResult, {
       characterDelta: filteredStandaloneCharacterDelta,
       appliedChanges: Array.isArray(characterApplyResult.appliedChanges)
@@ -64187,6 +65104,10 @@ function ceRemoveRetiredItemColumns(item, type) {
   for (const key of ['9','10','11','sourceMark','originMark','originImprint','sameOriginEffect','sameOrigin','synergy','setEffects']) delete item[key];
   if (/功法$/.test(type)) { delete item['4']; delete item.effect; }
   else if (type) for (const key of ['6','7','8','maxRealm','realmEffects','currentEffect','activeRealmEffect']) delete item[key];
+  if (!item.cultivationAid && typeof frSpiritCore==='function') {
+    const aid=frSpiritCore()?.readCultivationAid(item);
+    if (aid) item.cultivationAid=aid;
+  }
   return item;
 }
 
@@ -64887,6 +65808,11 @@ function executeConsumeItem(op) {
   const owner = op.owner;
   const itemId = op.itemId;
   const quantity = parseInt(op.quantity || '1', 10);
+  const aidReceipt=(item,count)=>{
+    const cultivationAid=typeof frSpiritCore==='function'?frSpiritCore()?.readCultivationAid(item):null;
+    const consumed=Math.min(quantity,count);
+    return cultivationAid && consumed>0 ? { cultivationAid, consumed } : {};
+  };
 
   if (!owner || !itemId) {
     return { success: false, error: '消耗参数不完整', op };
@@ -64911,11 +65837,11 @@ function executeConsumeItem(op) {
     if (remaining <= 0) {
       delete currentState['1'][itemId];
       console.log('[物品管理] 消耗物品(删除):', owner, itemId);
-      return { success: true, itemId, itemName, remaining: 0 };
+      return { success: true, itemId, itemName, remaining: 0, ...aidReceipt(item,currentQty) };
     } else {
       item['5'] = String(remaining);
       console.log('[物品管理] 消耗物品:', owner, itemId, currentQty, '->', remaining);
-      return { success: true, itemId, itemName, remaining };
+      return { success: true, itemId, itemName, remaining, ...aidReceipt(item,currentQty) };
     }
   } else {
     const row = getItemManagementCharacterRow(owner);
@@ -64939,6 +65865,7 @@ function executeConsumeItem(op) {
     }
     const itemName = ((inventory[idx] && (inventory[idx]['1'] || inventory[idx].name)) || '').replace(/<[^>]*>/g, '');
     const currentQty = parseInt((inventory[idx] && (inventory[idx]['5'] || inventory[idx].quantity)) || '1', 10);
+    const recordedAid=aidReceipt(inventory[idx],currentQty);
     const remaining = currentQty - quantity;
     if (remaining <= 0) {
       inventory.splice(idx, 1);
@@ -64952,7 +65879,7 @@ function executeConsumeItem(op) {
       row['9'] = JSON.stringify(remarks);
     }
     console.log('[物品管理] 消耗物品:', owner, itemId, currentQty, '->', Math.max(0, remaining));
-    return { success: true, itemId, itemName, remaining: Math.max(0, remaining) };
+    return { success: true, itemId, itemName, remaining: Math.max(0, remaining), ...recordedAid };
   }
 }
 
@@ -65958,7 +66885,8 @@ async function buildMergedEvolutionPrompt(options = {}) {
   if (targets.length) template += '\n\n' + CE_CORE['character-status'].CHARACTER_STATUS_RULE;
   if (!options.characterBatch && options.enabledPhases?.items !== false && hasMergedRules)
     template += '\n\n' + CE_CORE['canon-event-details'].SPIRIT_STONE_SETTLEMENT_RULE;
-  if (!options.sharedOnly && targets.some(target=>target.type==='player' || target.type==='npc')) template += '\n\n' + frPortraitVariableRule;
+  const portrait = options.sharedOnly ? {ids:[],text:''} : await frPortraitEvolutionGuidance(characterBatch ? batchTargets : targets,sharedContext);
+  if (portrait.text) template += '\n\n' + portrait.text;
   const scopedIds = options.canonVariables || characterBatch;
   const ids = scopedIds ? {} : await buildEntryCharacterIdContext();
   const unavailable = '当前前端未提供此项，禁止推断、创建对应状态或据此改写角色。';
@@ -65975,7 +66903,7 @@ async function buildMergedEvolutionPrompt(options = {}) {
     auto_record_key_items_enabled: '已确认持有/装备/消耗的事实仍按原物品规则完整记录（本前端无此偏好开关，不得把未提供开关当成关闭而漏记；不增加未持有或未来物品）',
     converted_beast_mappings: unavailable, beast_transformation_policy: unavailable,
     entry_decision_new_characters: characterBatch ? '登退场由共用阶段处理；本批只可补齐明确指定的新人物档案。' : '本请求尚未执行登场判断。只依据本轮正文创建新人，不引用上轮登场结果。',
-    locked_character_portrait_prompt_ids: unavailable, locked_character_visual_anchors: unavailable, '主角长期规划': unavailable
+    locked_character_portrait_prompt_ids: portrait.ids.join('、') || '无', locked_character_visual_anchors: unavailable, '主角长期规划': unavailable
   };
   if (options.canonTurnPlan && typeof frCanonOwnershipInstruction === 'function') template += frCanonOwnershipInstruction(options.canonTurnPlan);
   if (!scopedIds && options.enabledPhases?.entry !== false && typeof ceBuildRequiredEntryDeedsPromptBlock === 'function') template += '\n\n' + ceBuildRequiredEntryDeedsPromptBlock(options.requiredDeedsTargets || []);
@@ -67101,6 +68029,7 @@ async function runConcurrentEvolution(options = {}) {
       processedIds,
       processedNames,
       targetMap,
+      deferCultivation: true,
       sharedContext
     });
     const resultHandlers = [];
@@ -67176,7 +68105,7 @@ async function runConcurrentEvolution(options = {}) {
           }
         }
         const miscApplyResult = await applyMiscEvolutionResult(Object.assign({}, miscEvolutionResult || {}, {
-          source: 'normal_misc'
+          source: 'normal_misc', storyText
         }));
         window.lastMiscEvolutionResult = {
           thinking: miscEvolutionResult?.thinking || '',
@@ -67215,6 +68144,23 @@ async function runConcurrentEvolution(options = {}) {
 
     await frCeStage(null);
     throwIfAborted();
+
+    if (!summary?.misc?.error && typeof frSettlePendingCultivation==='function') {
+      await frCeStage('characters');
+      try {
+        const previousItems = ceReplaySession?.context?.afterMemory?.windows?.lastItemManagementResult?.value?.executedOps || [];
+        const preservedConsumes = previousItems.filter(row => {
+          const op = row.operation || row.op || row;
+          const owner = op.owner;
+          return owner && (!ceStageSelected('items') ||
+            !cePersonSelected(targetMap.get(owner)?.name || owner, owner, 'items'));
+        });
+        const cultivationItems = { executedOps: [...preservedConsumes, ...(summary?.itemManagement?.executedOps || [])] };
+        await frSettlePendingCultivation(targetMap,throwIfAborted,cultivationItems,options.logId||ceReplaySession?.context?.logId);
+      } finally {
+        await frCeStage(null);
+      }
+    }
 
     if(ceReplaySession){
       const oldImage=ceReplaySession.backup.memory.windows?.lastImageEvolutionResult?.value;
@@ -73589,20 +74535,22 @@ function openImageApiLibrary() {
   document.getElementById('open-unified-api-settings-btn').click();
 }
 
-async function openConcurrentEvolutionImagePromptModal() {
+async function openConcurrentEvolutionImagePromptModal({tab='display',preferredKey} = {}) {
   const overlay = document.getElementById('concurrent-evo-image-prompt-overlay');
   const field = id => overlay.querySelector('#' + id);
   const config = await loadConcurrentEvolutionConfig();
   const defaults = frImageMaterials();
   const lib = CE_CORE['api-library'];
   const tabButtons = [...overlay.querySelectorAll('[data-image-tab]')];
-  function selectTab(name) {
+  function selectTab(name,key) {
     for (const button of tabButtons) button.setAttribute('aria-pressed', String(button.dataset.imageTab === name));
     for (const pane of overlay.querySelectorAll('[data-image-pane]')) pane.hidden = pane.dataset.imagePane !== name;
     overlay.querySelector('.fr-image-body').scrollTop = 0;
+    overlay.querySelector('.fr-image-footer').hidden = name === 'gallery';
+    if (name === 'gallery') frMountCanonGallery(field('fr-canon-gallery'),key);
   }
   for (const button of tabButtons) button.onclick = () => selectTab(button.dataset.imageTab);
-  selectTab('display');
+  selectTab(tab,preferredKey);
   field('ce-image-enable-story').checked = config.enableImageEvolution === true;
   for (const input of overlay.querySelectorAll('[data-story-image-option]')) {
     input.checked = config[input.dataset.storyImageOption] ?? input.hasAttribute('data-default-on');
@@ -73641,7 +74589,7 @@ async function openConcurrentEvolutionImagePromptModal() {
     updateStoryTemplateSource();
   };
   field('ce-story-reference-reset').onclick = () => { field('ce-image-reference-guide').value = defaults.storyReference || ''; };
-  frShowImageExamples(field('ce-story-image-example'), { story:'正文插图' });
+  frShowImageExamples(field('ce-story-image-example'), { storyScene:'实际发送的场景画风图',story:'女性主体效果示例',storyMale:'男性主体效果示例' });
   lib.mountConsumerChain('FR_STORY_IMAGE_PLANNER_V1',field('ce-image-planning-routes'));
   lib.mountConsumerChain(CONCURRENT_EVOLUTION_CONFIG_KEY,field('ce-image-routes'),'imageProviderConfigs.openai');
   field('ce-open-image-api-library').onclick = openImageApiLibrary;
@@ -79103,10 +80051,27 @@ function ceParseAuthoritativeTimeLocation(raw, separateLocation = '') {
   return {timeText,locationText,coordinates,fullText:timeText&&locationText ? timeText+'/'+locationText+(coordinates?' '+coordinates:'') : text};
 }
 
-function ceGetAuthoritativeTimeLocationInfo(stateToSync = currentState) {
+function ceWorldTimeLocationRow(stateToSync) {
   const rows=stateToSync?.['4'];
-  const row=Array.isArray(rows) ? rows.find(row=>row?.id===TIME_LOCATION_ROW_ID)||rows[0] : rows?.[TIME_LOCATION_ROW_ID]||rows;
+  return Array.isArray(rows) ? rows.find(row=>row?.id===TIME_LOCATION_ROW_ID)||rows[0] : rows?.[TIME_LOCATION_ROW_ID]||rows;
+}
+
+function ceKnownWorldPlace(value) {
+  return !!value && !/^(?:未知|未详|无|同上|不变|地点未知|地点未探明|未知地点)$/u.test(value);
+}
+
+function ceGetAuthoritativeTimeLocationInfo(stateToSync = currentState) {
+  const row=ceWorldTimeLocationRow(stateToSync);
   const value=ceParseAuthoritativeTimeLocation(row?.['0'],row?.['1']);
+  if (!ceKnownWorldPlace(value.locationText)) {
+    const actorPlace = String(stateToSync?.['0']?.B1?.['16'] || '').split(/[|｜]/u)[2];
+    const fallback = ceParseAuthoritativeTimeLocation('',actorPlace);
+    if (ceKnownWorldPlace(fallback.locationText)) {
+      value.locationText = fallback.locationText;
+      value.coordinates = fallback.coordinates;
+      value.fullText = (value.timeText || '时间未知') + '/' + fallback.locationText + (fallback.coordinates ? ' ' + fallback.coordinates : '');
+    }
+  }
   return {...value,timeText:value.timeText||'时间未知',locationText:value.locationText||'未知',fullText:value.fullText||'时间未知/未知'};
 }
 
@@ -79170,7 +80135,7 @@ function ceResolveStoryTimeLocationDelta(storyText, stateToSync) {
   if (places.length === 1) {
     const place = places[0][1].replace(/^\s*(?:📍|所在地\s*[:：])\s*/u, '').trim();
     const parsed = ceParseAuthoritativeTimeLocation('', place);
-    if (parsed.locationText && !/^(?:未知|未详|无|同上|不变)$/.test(parsed.locationText)) {
+    if (ceKnownWorldPlace(parsed.locationText)) {
       if (parsed.locationText !== locationText) coordinates = '';
       locationText = parsed.locationText;
       if (parsed.coordinates) coordinates = parsed.coordinates;
@@ -79178,6 +80143,44 @@ function ceResolveStoryTimeLocationDelta(storyText, stateToSync) {
   }
   if (next === before && locationText === previous.locationText && coordinates === previous.coordinates) return null;
   return { command: 'add', id: TIME_LOCATION_ROW_ID, data: { id: TIME_LOCATION_ROW_ID, '0': timeText + '/' + locationText + (coordinates ? ' ' + coordinates : '') } };
+}
+
+function ceCompleteTimeLocationDelta(delta, state, storyText) {
+  if (!delta.some(op=>op?.command==='add' && op.id===TIME_LOCATION_ROW_ID && typeof op.data?.['0']==='string')) return delta;
+  const previous = ceGetAuthoritativeTimeLocationInfo(state);
+  const fromStory = storyText && ceResolveStoryTimeLocationDelta(storyText,state);
+  const story = fromStory ? ceParseAuthoritativeTimeLocation(fromStory.data['0']) : previous;
+  return delta.map(op=>{
+    if (op?.command!=='add' || op.id!==TIME_LOCATION_ROW_ID || typeof op.data?.['0']!=='string') return op;
+    const next = ceParseAuthoritativeTimeLocation(op.data['0'],op.data['1']);
+    if (!wtParseTimelinePointStrict(next.timeText)?.hasDay) return op;
+    const known = ceKnownWorldPlace(next.locationText);
+    const fallback = ceKnownWorldPlace(story.locationText) ? story : previous;
+    const location = known ? next.locationText : fallback.locationText;
+    if (!ceKnownWorldPlace(location)) return op;
+    const coordinates = next.coordinates || (location === story.locationText && story.coordinates) ||
+      (location === previous.locationText && previous.coordinates) || '';
+    if (known && next.coordinates === coordinates) return op;
+    return {...op,data:{...op.data,'0':next.timeText+'/'+location+(coordinates?' '+coordinates:'')}};
+  });
+}
+
+function ceRecoverSavedWorldLocation(state, logs) {
+  const row = ceWorldTimeLocationRow(state);
+  const stored = ceParseAuthoritativeTimeLocation(row?.['0'],row?.['1']);
+  if (!row || ceKnownWorldPlace(stored.locationText)) return;
+  const last = (logs || []).findLast(log=>log?.type==='ai' && !log.isGhost);
+  const header = frCanonReadAdoptedStoryHeader(last?.content);
+  const time = wtParseTimelinePointStrict(stored.timeText);
+  const storyTime = header && wtParseTimelinePointStrict(header.time);
+  if (!time?.hasMinute || !storyTime?.hasMinute || time.minuteIndex !== storyTime.minuteIndex) return;
+  const places = [...header.body.matchAll(/<li>([^<]+)<\/li>/giu)];
+  if (places.length !== 1) return;
+  const storyPlace = ceParseAuthoritativeTimeLocation('',places[0][1]);
+  if (!ceKnownWorldPlace(storyPlace.locationText)) return;
+  const fallback = ceGetAuthoritativeTimeLocationInfo(state);
+  const coordinates = storyPlace.coordinates || (fallback.locationText===storyPlace.locationText && fallback.coordinates) || '';
+  row['0'] = stored.timeText+'/'+storyPlace.locationText+(coordinates?' '+coordinates:'');
 }
 
 function ceFrOpeningStoryDelta(delta, storyText, state) {
@@ -79205,6 +80208,28 @@ function ceApplyAuthoritativeTimeLocationDisplay(info, targetObject = null) {
     };
   } finally {
     window.__ceApplyingAuthoritativeTimeDisplay = false;
+  }
+  const place=document.getElementById('current-world-place');
+  if (place) {
+    const known=ceKnownWorldPlace(info.locationText?.trim());
+    const name=known ? info.locationText.trim() : '地点未探明';
+    place.hidden=false;
+    place.classList.toggle('fr-world-place-unknown',!known);
+    const route=name.split(/[·・›→]/u).map(part=>part.trim()).filter(Boolean);
+    const locality=document.createElement('span');
+    locality.className='fr-world-place-name';
+    locality.textContent=route.pop() || name;
+    place.replaceChildren(locality);
+    if (route.length) {
+      const region=document.createElement('span');
+      region.className='fr-world-place-route';
+      region.textContent=route.join(' · ');
+      place.prepend(region);
+    }
+  }
+  const spirit=document.getElementById('current-location-spirit');
+  if (spirit && typeof frLocationSpiritData==='function') {
+    frDrawLocationSpirit(spirit,frLocationSpiritData([info.locationText,info.coordinates].filter(Boolean).join(' '),info.timeText));
   }
   return true;
 }
@@ -83730,7 +84755,7 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
           const pendingDomUpdates = [];
 
           if (combinedDelta.length > 0 || smallSummary !== null || largeSummary !== null) {
-            const result = await applyChanges(JSON.parse(JSON.stringify(initialState)), combinedDelta, {signal:turnOptions?.signal,archiveName,checkTurn});
+            const result = await applyChanges(JSON.parse(JSON.stringify(initialState)), combinedDelta, {signal:turnOptions?.signal,archiveName,checkTurn,cultivationFloorId:logEntry.id});
             checkTurn();
             const { newState, characterNameChanges, updatedCharacterIds: localUpdatedIds } = result;
             // 先落盘已接受的普通变量检查点，再发布内存。停止只能阻止下一阶段，
@@ -83834,6 +84859,11 @@ return equippedItems.length > 0 ? equippedItems.join(', ') : '无';
             }
 
             logEntry.stateSnapshot = JSON.stringify(currentState);
+            const cultivation=parseNestedJsonString(frReadBondedRemarks(currentState?.['0']?.B1?.['9']).lastCultivationSession,null);
+            if (cultivation?.logId===String(logEntry.id)) {
+              logEntry.cultivationReceipt=cultivation;
+              frRefreshStorySpirit(logEntry.id);
+            }
 
             try {
   if (typeof autoGenerateCharacterWorldBooks === 'function' && !autoGenerateCharacterWorldBooks.__ceSafePatched) {
@@ -83865,7 +84895,11 @@ checkTurn();
               if (turnOptions?.signal && logIndex < 0) throw Object.assign(new Error('本轮正文已回退'),{name:'AbortError'});
               if (logIndex !== -1) {
                 const {canonPending,...ordinaryLogEntry}=logEntry;
-                Object.assign(archive.data.logs[logIndex],ordinaryLogEntry);
+                const floor=archive.data.logs[logIndex];
+                if (typeof ordinaryLogEntry.content==='string') {
+                  ordinaryLogEntry.content=cePreserveGeneratedStoryImages(floor.content,ordinaryLogEntry.content);
+                }
+                Object.assign(floor,ordinaryLogEntry);
               }
               else archive.data.logs.push(logEntry);
 
@@ -94009,7 +95043,6 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           var ceCanonGuidanceKey = null;
           var ceCanonGuidanceBlock = '';
           var frGeneratedStory = null;
-          let finishStoryImageWrites;
           var frMainStage = '正文请求前准备';
           /* ★★★ 2026-11-03 玩家：「包括进行下一轮推进剧情也要清理掉临时的内容。」
            *
@@ -94100,6 +95133,7 @@ const subRegionName = parts.length > 2 ? cleanName(parts[2]) : null;
           const frEndDiagnosticRound=globalThis.FrDiagnosticLog?.beginRound(frMainStoryLogId);
           let frEarlyPreparation = null;
           let frFinishOrdinaryWrite = null;
+          let frFinishGalleryTurn = null;
           let frCanonTurnPromise = null;
           const frAbortOnPageHide = () => frTurnController.abort();
           window.addEventListener('pagehide',frAbortOnPageHide,{once:true});
@@ -95265,14 +96299,12 @@ frTurnController.signal.throwIfAborted();
 const storyImageConfig = await loadConcurrentEvolutionConfig();
 frTurnController.signal.throwIfAborted();
 const autoStoryImage = storyImageConfig.enableImageEvolution === true;
+const galleryTurnSettled = autoStoryImage && localStorage.getItem(FR_CANON_PORTRAIT_GALLERY_KEY)==='1'
+  ? new Promise(resolve=>{ frFinishGalleryTurn=resolve; }) : null;
 if (autoStoryImage) {
   if (!await saveToLog(storyArchiveName, logEntry)) throw new Error('本轮正文保存失败，未启动正文插图');
-  let writesFinished = false;
-  const floorWrites = new Promise(resolve => {
-    finishStoryImageWrites = () => { writesFinished = true; resolve(); };
-  });
-  void ceRunStoryImageJob({archiveName:storyArchiveName,logId:logEntry.id,config:storyImageConfig,automatic:true,signal:frTurnController.signal,
-    waitForFloorWrites:onWaiting=>{if (!writesFinished) onWaiting(); return floorWrites;}});
+  void ceRunStoryImageJob({archiveName:storyArchiveName,logId:logEntry.id,config:storyImageConfig,automatic:true,
+    signal:frTurnController.signal,galleryTurnSettled});
 }
 
 const processVariablesPromise = (async () => {
@@ -95874,6 +96906,7 @@ try {
             frFinishOrdinaryWrite(!variableResult.error && !frTurnController.signal.aborted);
             // 补演早在普通演化之前就起跑了，这里只等它自己收尾，不再由普通演化的成败决定跑不跑。
             if (canonTurnPromise) await canonTurnPromise;
+            frFinishGalleryTurn?.();
             if(frDeferTheater&&!variableResult.error&&!frTurnController.signal.aborted&&currentArchiveName===frTheaterArchive){
               try{
                 const paper=await (dailyPaperPromise||callAutomatedAITheater(lastUnoptimizedAiStoryText,newsReferenceContent,newLogId,false,true,frTurnController.signal));
@@ -95967,6 +97000,7 @@ try {
             if (frMpEndRequest(frMainPromptDisplayId)) frMpRefreshVisible();
             window.removeEventListener('pagehide',frAbortOnPageHide);
             frFinishOrdinaryWrite?.(false);
+            frFinishGalleryTurn?.();
             if (frTurnController.signal.aborted) await Promise.allSettled([frCanonTurnPromise, window._concurrentEvolutionPromise].filter(Boolean));
             if(typeof frCancelCanonEarlyPreparation==='function')frCancelCanonEarlyPreparation(frEarlyPreparation);
             if (thinkingMessage && thinkingMessage.parentNode) {
@@ -95985,7 +97019,6 @@ try {
               clearInterval(timerInterval);
               renderTimers();
             }
-            finishStoryImageWrites?.();
             isMainApiGenerating = false;
             frReleaseTurn();
             const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
@@ -96004,7 +97037,6 @@ try {
             { key: 'age', label: '年龄', isEnabled: true },
             { key: 'shouyuan', label: '寿元', isEnabled: true },
             { key: 'realm', label: '境界', isEnabled: true },
-            { key: 'location', label: '所在地', isEnabled: true },
             { key: 'spiritStones', label: '当前灵石', isEnabled: true },
           ];
           const defaultSettings = {
@@ -96015,7 +97047,7 @@ try {
             const savedSettings = await dbGet(PLAYER_DISPLAY_SETTINGS_KEY);
             if (savedSettings && savedSettings.defaultFields) {
               playerDisplaySettings = savedSettings;
-              playerDisplaySettings.defaultFields = savedSettings.defaultFields.filter(field=>field.key!=='shanE');
+              playerDisplaySettings.defaultFields = savedSettings.defaultFields.filter(field=>!['shanE','location'].includes(field.key));
               defaultFields.forEach(df => {
                 if (!playerDisplaySettings.defaultFields.some(sf => sf.key === df.key)) {
                   playerDisplaySettings.defaultFields.push(df);
@@ -96217,7 +97249,7 @@ snapshotString += `> 状态: HP:${hpCurrent}/${hpMax}, MP:${mpCurrent}/${mpMax},
 
 // --- 档案信息 ---
 const age = remarks['年龄'] || '未知';
-const shouyuan = remarks['寿元'] || '未知';
+const shouyuan = remarks['寿元'] ?? '未知';
 const linggen = charRow['5'] && charRow['5'] !== '待定' ? charRow['5'] : (remarks['灵根'] || '无');
 const constitution = charRow['6'] && charRow['6'] !== '待定' ? charRow['6'] : '无';
 const spiritStones = frSpiritStoneWalletText(frReadSpiritStoneWallet(charRow));
@@ -97524,7 +98556,9 @@ const patchCharacterLinePromptInfo = (line, characterMeta = {}) => {
             }
 
             const tempState = {};
-            syncStateFromTables(archive.data.state.currentState, tempState);
+            const statusState = structuredClone(archive.data.state.currentState);
+            frRestoreInitialRemainingLifespan(statusState,archive.data.logs);
+            syncStateFromTables(statusState, tempState);
             renderLogViewerState(tempState);
           } catch (e) {
             logList.innerHTML = '<p>读取日志记录时出错。</p>';
@@ -98366,14 +99400,13 @@ gender: { icon: 'fa-venus-mars', color: '#f48fb1' },
 age: { icon: 'fa-hourglass-start', color: '#a5d6a7' },
 shouyuan: { icon: 'fa-hourglass-end', color: '#ffb74d' },
 realm: { icon: 'fa-user-astronaut', color: '#ba68c8' },
-location: { icon: 'fa-map-marker-alt', color: '#81c784' },
 spiritStones: { icon: 'fa-gem', color: '#ffd700' }
 };
 
 // 渲染默认属性 (排除 hp, 因为上面已经渲染了)
 if (playerDisplaySettings.defaultFields) {
 playerDisplaySettings.defaultFields.forEach(field => {
-if (field.isEnabled && field.key !== 'hp' && field.key !== 'shanE') {
+if (field.isEnabled && !['hp','shanE','location'].includes(field.key)) {
 let value = '未知';
 switch (field.key) {
 case 'linggen': value = currentPlayerData.linggen; break;
@@ -98381,7 +99414,6 @@ case 'gender': value = currentPlayerData.gender; break;
 case 'age': value = formatNumber(currentPlayerData.age); break;
 case 'shouyuan': value = formatNumber(currentPlayerData.shouyuan); break;
 case 'realm': value = currentPlayerData.realm; break;
-case 'location': value = currentPlayerData.location; break;
 case 'spiritStones': value = frDisplaySpiritStoneWallet(currentPlayerData.spiritStoneWallet || frReadSpiritStoneWallet({26:currentPlayerData.spiritStones}),'\n'); break;
 }
 
@@ -98587,12 +99619,43 @@ console.log('【调试】renderInventory 被调用');
                 }, 0);
             }
 }
+        function frRestoreInitialRemainingLifespan(state, logs) {
+          const rows = state?.['0'];
+          if (!rows) return;
+          const opening = logs?.find(log => String(log.content||'').includes('<h4>天道初启</h4>'));
+          const snapshot = parseNestedJsonString(opening?.stateSnapshot,null);
+          const openingPlayer = (snapshot?.currentState||snapshot)?.['0']?.B1;
+          const openingNotes = frReadBondedRemarks(openingPlayer?.['9']);
+          const openingRealm = frCultivationRealmKey(openingPlayer?.['2']);
+          const oldMortalStart = openingRealm === '凡人' && !openingNotes.寿元口径 && Number(openingNotes.寿元) === 100;
+          for (const [id,row] of Object.entries(rows)) {
+            if (!row?.['9']) continue;
+            const notes = frReadBondedRemarks(row['9']);
+            const realm = frCultivationRealmKey(row['2']);
+            if (notes.寿元口径 === '总寿命') {
+              const converted = frWriteLifespanRemarks(row,{},notes);
+              if (converted.寿元口径 === '剩余') row['9'] = serializeRemarksObject(converted);
+              continue;
+            }
+            if (notes.寿元口径) continue;
+            if (id === 'B1') {
+              const remaining = frInitialRealmCore().legacyInitialRemainingLifespan(notes,openingNotes,{openingRealm,realm});
+              if (remaining !== undefined) row['9'] = serializeRemarksObject({...notes,寿元:remaining,寿元口径:'剩余'});
+            } else if (oldMortalStart && Number(notes.寿元) === 100 && frUsesOrdinaryNpcLifespan(row,notes)) {
+              const converted = frWriteLifespanRemarks(row,{},notes,true);
+              if (Number(converted.寿元) !== 100) row['9'] = serializeRemarksObject(converted);
+            }
+          }
+        }
+
         async function loadState(state, fullArchiveData = null) {
           const deepCopy = obj => JSON.parse(JSON.stringify(obj));
 
           WORLD_MAP_DATA = deepCopy(state.worldMap || DEFAULT_WORLD_MAP_DATA);
 
           currentState = state.currentState;
+          frRestoreInitialRemainingLifespan(currentState,fullArchiveData?.logs);
+          ceRecoverSavedWorldLocation(currentState,fullArchiveData?.logs);
           bondedCharacters = state.bondedCharacters || {};
 
           syncStateFromTables();
@@ -98647,7 +99710,7 @@ console.log('【调试】renderInventory 被调用');
             
 
         // 原始保存函数重命名
-        async function _internalSaveCurrentState() {
+        async function _internalSaveCurrentState(settledCultivationFloorId) {
   const frStrict = typeof frInCanonCommit === 'function' && frInCanonCommit();
   if (frStrict) frAssertCanonCommit();
           if (!currentArchiveName) { if (frStrict) throw new Error('补演提交：没有当前存档'); return { ok: false, reason: '没有当前存档' }; }
@@ -98671,6 +99734,19 @@ console.log('【调试】renderInventory 被调用');
             archive.data.state.rpgMaps = {};
             archive.data.state.worldMap = WORLD_MAP_DATA;
             if (!archive.data.state.npcAvatars) archive.data.state.npcAvatars = {};
+            const floors = archive.data.logs || [];
+            if (settledCultivationFloorId) {
+              const settledFloor = floors.find(log => log.type === 'ai' && String(log.id) === String(settledCultivationFloorId));
+              if (settledFloor) {
+                const prior = parseNestedJsonString(settledFloor.stateSnapshot, null);
+                settledFloor.stateSnapshot = JSON.stringify(prior?.currentState ? { ...prior, currentState } : currentState);
+              }
+            }
+            const cultivation=parseNestedJsonString(frReadBondedRemarks(currentState?.['0']?.B1?.['9']).lastCultivationSession,null);
+            if (cultivation?.logId) {
+              const floor=floors.find(log=>log.type==='ai' && String(log.id)===cultivation.logId);
+              if (floor) floor.cultivationReceipt=cultivation;
+            }
 
             if (frStrict) frAssertCanonCommit();
             await db.archives.put(archive);
@@ -99177,6 +100253,7 @@ console.log('【调试】renderInventory 被调用');
             creationScreen.classList.remove('hidden');
             startCharacterCreation();
           };
+          await frLoadCanonGallery().catch(error => console.warn('[原著人物图库]',error.message));
           const activeArchive = await dbGet(ACTIVE_ARCHIVE_KEY);
           const archivesCount = await db.archives.count();
           if (activeArchive) {
@@ -99302,6 +100379,7 @@ console.log('【调试】renderInventory 被调用');
         ? currentState?.['0']?.[ownerId] || characterDatabase?.[ownerId]
         : !isNpcItem && !isSectItem ? currentPlayerData : null);
     const options = {};
+    options.cultivationActorRank=frSpiritCore()?.cultivationItemRank(owner && ceGetCharacterRealmText(owner));
     if (classification.category === 'technique') {
         if (owner) {
             const entries = ceParseTechniqueRealmEffects(item.realmEffects || item['8'] || '');
@@ -100931,9 +102009,12 @@ console.log('【调试】renderInventory 被调用');
 
           if (!container || !npcId) return;
 
+          container.dataset.frCharacterId = npcId;
           container.innerHTML = '';
 
-          const archive = await db.archives.get(currentArchiveName);
+          const archiveName = currentArchiveName;
+          const archive = await db.archives.get(archiveName);
+          if (!container.isConnected || container.dataset.frCharacterId !== npcId || currentArchiveName !== archiveName) return;
           const npcAvatars = archive?.data?.state?.npcAvatars || {};
           const avatarData = typeof _portraitGetMapAvatarByKeyFallback === 'function'
             ? _portraitGetMapAvatarByKeyFallback(
@@ -100962,10 +102043,11 @@ const _timelineAvatarKey =
           return;
         }
 
-          if (avatarData) {
+          const gallery = _timelineAvatar === '' || visualData ? '' : frCanonGalleryPortrait(archive, { id:npcId });
+          if (avatarData || gallery) {
             const img = document.createElement('img');
             img.id = 'char-detail-avatar-img';
-            img.src = avatarData;
+            img.src = avatarData || gallery;
             img.style.cssText = imageStyle;
             container.appendChild(img);
           } else if (visualData) {
@@ -102820,7 +103902,7 @@ characterDetailView.classList.remove('hidden');
 
               const latestArchive = await db.archives.get(currentArchiveName);
               if (latestArchive) {
-                await loadState(latestArchive.data.state);
+                await loadState(latestArchive.data.state,latestArchive.data);
                 loadChatHistory(latestArchive.data.logs, latestArchive);
               }
             }
@@ -105638,11 +106720,11 @@ newConfirmBtn.addEventListener('click', handleConfirm);
                   console.log('[内置] 已装入内置思维链正则 ' + bi.chainRules.length + ' 条');
                 }
                 const before = regexConfig.rules;
-                const needsStoryRules = regexConfig.storyStyleRevision !== 1;
+                const needsStoryRules = regexConfig.storyStyleRevision !== 2;
                 const updated = frUpgradeStoryRegexRules(before, needsStoryRules);
                 if (needsStoryRules || updated.length !== before.length || updated.some((rule, i) => rule !== before[i])) {
                   regexConfig.rules = updated;
-                  regexConfig.storyStyleRevision = 1;
+                  regexConfig.storyStyleRevision = 2;
                   try { await dbSet(REGEX_CONFIG_KEY, regexConfig); } catch (error) {
                     console.warn('[正文正则] 迁移仅在本次启动生效', error);
                   }
@@ -106097,6 +107179,13 @@ newConfirmBtn.addEventListener('click', handleConfirm);
             if (!latestSnapshotLog) {
               await showCustomAlert('导出失败：当前存档没有可用的快照数据。');
               return;
+            }
+            const originalSnapshot = latestSnapshotLog.stateSnapshot;
+            const snapshot = parseNestedJsonString(originalSnapshot,null);
+            if (snapshot && typeof snapshot === 'object') {
+              const portable = structuredClone(snapshot);
+              frRestoreInitialRemainingLifespan(portable.currentState || portable,archive.data.logs);
+              latestSnapshotLog.stateSnapshot = typeof originalSnapshot === 'string' ? JSON.stringify(portable) : portable;
             }
 
             const exportObject = {
@@ -107251,36 +108340,39 @@ if (!isReadOnly) {
         async function handleAvatarUpload(e, type) {
           const file = e.target.files[0];
           if (!file) return;
+          const archiveName = currentArchiveName;
+          const npcId = currentEditingNpcId;
+          const checkTurn = frGenerationGuard(undefined,archiveName);
 
           const reader = new FileReader();
           reader.onload = async event => {
             const dataURL = event.target.result;
             try {
+              checkTurn();
               if (type === 'player') {
                 // (玩家逻辑保持不变)
-                const key = `${CUSTOM_AVATAR_KEY}_${currentArchiveName}`;
+                const key = `${CUSTOM_AVATAR_KEY}_${archiveName}`;
                 await dbSet(key, dataURL);
+                checkTurn();
                 updateAvatar(currentPlayerData);
+                void frRefreshDialogueAvatarImages(archiveName).catch(error=>console.warn('[对白头像]',error.message));
                 await showCustomAlert('头像更换成功！');
               } else {
                 // type === 'npc'
-                if (!currentEditingNpcId) return await showCustomAlert('错误：未指定NPC。');
-                const char = characterDatabase[currentEditingNpcId];
+                if (!npcId) return await showCustomAlert('错误：未指定NPC。');
+                const char = characterDatabase[npcId];
                 if (!char) return await showCustomAlert('错误：找不到该NPC的数据。');
 
                 // 1. 保存新的本地上传头像
-                const archive = await db.archives.get(currentArchiveName);
-                if (!archive.data.state.npcAvatars) archive.data.state.npcAvatars = {};
-                const uniqueImageKey = `${char.id}_${char.name}`;
-                archive.data.state.npcAvatars[uniqueImageKey] = dataURL;
-                await db.archives.put(archive);
+                await applyGeneratedPortrait(npcId,char.name,dataURL,{archiveName,checkTurn,bindToLatestStory:true,notify:false});
+                checkTurn();
 
                 // 2.【核心修复】清除旧的易容阁数据
-                if (characterDatabase[currentEditingNpcId]) {
-                  delete characterDatabase[currentEditingNpcId].visualData;
+                if (characterDatabase[npcId]) {
+                  delete characterDatabase[npcId].visualData;
                 }
-                if (currentState['0'][currentEditingNpcId]) {
-                  const charRow = currentState['0'][currentEditingNpcId];
+                if (currentState['0'][npcId]) {
+                  const charRow = currentState['0'][npcId];
                   const remarks = parseRemarksString(charRow['9']);
                   if (remarks['visual']) {
                     delete remarks['visual'];
@@ -107290,7 +108382,8 @@ if (!isReadOnly) {
                 }
 
                 // 3. 统一刷新界面
-                await refreshAllNpcViews(currentEditingNpcId);
+                checkTurn();
+                await refreshAllNpcViews(npcId);
                 await showCustomAlert(`'${char.name}' 的头像已更新！`);
               }
             } catch (err) {
@@ -108057,6 +109150,7 @@ if(snapshotObject.canonLedger && typeof snapshotObject.canonLedger==='object')sn
 } else {
 snapshotState = snapshotObject;
 }
+frRestoreInitialRemainingLifespan(snapshotState,archive.data.logs);
 
 let cutoffTimestamp = null;
 console.log('[快照回溯] 开始查找截止时间戳，logIndex:', logIndex, '总日志数:', archive.data.logs.length);
@@ -112320,9 +113414,10 @@ ${
 
             const newTableState = getInitialTableState();
             const rootDescription = CREATION_CONFIG.LINGGEN[creationState.selectedLinggen]?.desc || '';
+            const remainingLife = frInitialRealmCore().initialRemainingLifespan(initialRealm,creationState.initialAge);
             const playerRemarks = `灵根:${creationState.selectedLinggen}|灵根说明:${rootDescription}|年龄:${
               creationState.initialAge
-            }|寿元:${initialRealm.lifespan}|初始境界:${initialRealm.realm}|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
+            }|寿元:${remainingLife}|寿元口径:剩余|初始境界:${initialRealm.realm}|修为进度:0%|traits:${JSON.stringify(sanitizedTraits)}|avatar:${
               creationState.avatarAppearance
             }|isExtreme:${creationState.isExtreme}|warehouse:[]|deathCount:0`;
 
@@ -115004,6 +116099,7 @@ ${textToSummarize}
             };
 
             const idsToRemove = new Set(batchToCompress.map(l => l.id));
+            frSetPortraitSummarySources(archive.data.state,newDeepSummaryLog,batchToCompress);
             const finalLogList = [];
             let insertedSummary = false;
 
@@ -115995,7 +117091,17 @@ function frCultivationSpeedCell(raw, character) {
 function frCultivationPromptSnapshot(character, finalAttributes) {
   if (finalAttributes?.修炼速度?.unbounded) return { available: true, finalSpeed: '∞', unbounded: true, rule: '超脱者不适用普通修炼进度计算。' };
   const core = frCultivationCore();
-  return core ? core.buildCultivationSpeedSnapshot(character, finalAttributes) : { available:false, reason:'module_unavailable' };
+  if (!core) return { available:false, reason:'module_unavailable' };
+  const snapshot=core.buildCultivationSpeedSnapshot(character,finalAttributes);
+  const environment=typeof frSpiritCore==='function' ? frSpiritCore() : null;
+  if (!snapshot.available||!environment||typeof WORLD_MAP_DATA==='undefined') return snapshot;
+  const at=ceGetCultivationAuthoritativeTimeText();
+  const site=environment.resolveSpiritLocation(WORLD_MAP_DATA,frCharacterSpiritPlace(character,currentState));
+  const notes=parseRemarksString(character?.['9']||'');
+  const extra=parseNestedJsonString(notes.cultivationCompatibleQi,[]);
+  const spirit=environment.calculateSpiritConcentration(site,{ at, actorId:character?.['0']||character?.id, compatible:['普通',...(Array.isArray(extra)?extra:[])] });
+  return { ...snapshot, environment:{ location:site.name, known:site.known, raw:spirit.raw, usable:spirit.usable, multiplier:spirit.multiplier },
+    environmentalDailyProgress:snapshot.dailyProgress===null?null:snapshot.dailyProgress*spirit.multiplier };
 }
 function frContainerCore() {
   return typeof CE_CORE === 'object' && CE_CORE ? CE_CORE['container-equipment'] : null;
@@ -117014,6 +118120,7 @@ function calculateTotalAttributes(characterId, characterOverride) {
           }
 
           const initialTableState = JSON.parse(firstLog.stateSnapshot);
+          frRestoreInitialRemainingLifespan(initialTableState,archive.data.logs);
           const initialPlayerRow = JSON.parse(JSON.stringify(initialTableState['0']['B1']));
           const oldRemarks = parseRemarksString(initialPlayerRow['9']);
           oldRemarks.deathCount = (currentPlayerData.deathCount || 0) + 1;
@@ -119666,6 +120773,11 @@ ${!avatarUrl ? avatarPlaceholder : ''}
                   <div class="map-info-content">${poi.description || '暂无描述'}</div>
                 </div>`;
               }
+
+              const spiritPlace=this.isWorldMap&&this.selectedPoint
+                ? (poi?.name||subRegion?.name||mainRegion?.name||'')+' '+Math.round(this.selectedPoint.x)+','+Math.round(this.selectedPoint.y)
+                : '';
+              if (spiritPlace) descriptionHtml+='<div class="map-info-section fr-location-spirit fr-location-spirit-map" hidden></div>';
               
               let distanceHtml = '';
               let distance = 0;
@@ -119712,6 +120824,15 @@ ${!avatarUrl ? avatarPlaceholder : ''}
                   <i class="fas fa-${this.isWorldMap ? 'walking' : 'check'}"></i>
                   ${this.isWorldMap ? '前往此处' : '确认此地'}
                 </button>`;
+              const spiritPanel=this.infoPanel.querySelector('.fr-location-spirit-map');
+              if (spiritPanel) {
+                const data=frLocationSpiritData(spiritPlace,ceGetCultivationAuthoritativeTimeText());
+                if (data?.details) {
+                  data.details.push(['底值',data.base??'未探明']);
+                  if (data.sourceCount) data.details.push(['已登记灵源',data.sourceCount+' 项']);
+                }
+                frDrawLocationSpirit(spiritPanel,data);
+              }
               
               document.getElementById('confirm-location-btn').onclick = () => {
                 this.onSelectCallback(finalLocation, distance);

@@ -224,7 +224,8 @@ function detailHtml(raw,options={}){
  const [effectTitle,descTitle]=/^(技能|神通|武技|法术|秘籍)$/u.test(typeOf(item))?['招式与效果','要义与说明']:titles[category]||titles.misc;
  const rules=containerDetailHtml(item,options.containerResult);
  const lore=chaosDetailHtml(item);
- return (rules||section(effectTitle,detailText(effect,{fields:true})))+(lore||section(descTitle,detailText(desc)))||section('物品说明','<p class="fr-item-muted">暂无详细资料</p>');
+ const cultivationAid=core('cultivation-environment')?.cultivationAidSummary(item,options.cultivationActorRank);
+ return (cultivationAid?section('修炼辅助',detailText(cultivationAid)):'')+(rules||section(effectTitle,detailText(effect,{fields:true})))+(lore||section(descTitle,detailText(desc)))||section('物品说明','<p class="fr-item-muted">暂无详细资料</p>');
 }
 g.FrItemPresentation=Object.freeze({icon,iconKey,rarity,ornament,decorate,projectMiracleBottle,chaosDetailHtml,detailHtml});
 })(window);

@@ -5,6 +5,7 @@ import { techniqueSpeedContract, buildCultivationSpeedRules, CULTIVATION_ROOT_BA
 import { CONTAINER_LIMITS, CONTAINER_HARD_CAPS } from './container-equipment.js';
 import { applyNumericSettings } from './numeric-settings.js';
 import { DEFAULT_SKILL_COST_PERCENT, SKILL_REALM_ANCHORS } from './numeric-skill.js';
+import { spiritNumericTables } from './cultivation-environment.js';
 
 const baselineRules = () => numericRulesText({includeTechniqueSpeed:false}).split('\n【修炼速度生成与消费合同')[0]
   .split('\n').filter(line=>!line.startsWith('基准区间乘下列系数')&&!line.startsWith('气运、魅力单独用')).join('\n');
@@ -47,6 +48,7 @@ export function numericRuleDefaults() {
       ...rootRules().slice(7).map(line=>line.startsWith('每日进度点')?
         '每日进度点＝100÷（基准年数×每年天数）×最终修速÷100。高阶未定义不得外推。':line)].join('\n') },
     { id: 'technique-speed', name: '功法修炼速度', content: techniqueTable() },
+    ...spiritNumericTables(),
     { id: 'sect-income', name: '宗门供给与差事收入', content: [
       '黄枫谷炼气弟子完成普通杂务，每年约得20–30块下品灵石。按实际履职月份折算，全年范围供校准。',
       '持续照管药园等收入较高的低级差事，每月约2–5块下品灵石。首次任职从低端估起，涨报酬须符合职责和表现。',

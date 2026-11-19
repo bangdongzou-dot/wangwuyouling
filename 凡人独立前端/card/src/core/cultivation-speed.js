@@ -1,4 +1,5 @@
 import { numericSetting } from './numeric-settings.js';
+import { cultivationAidValues, materialEfficiencyMultiplier } from './cultivation-environment.js';
 // 修炼速度是效率百分数，不参与战力容器缩放。本模块只计算，不推进时间/改存档/扣物品。
 export const CULTIVATION_SPEED_VERSION = 'root-speed-v1';
 export const CULTIVATION_ROOT_BASES = Object.freeze({ 1:200, 2:150, 3:100, 4:50, 5:25 });
@@ -160,6 +161,37 @@ export function calculateCultivationProgress(input = {}) {
   // 仅同层参考；突破必须另有已完成事实，保留现存99%以上进度，不反向裁低。
   const finalProgress = Math.max(Number(progress),Math.min(99,Number(progress) + rawGain));
   return {ok:true,stage,multiplier,baselineDays,dailyProgress:round(dailyProgress),rawGain:round(rawGain),appliedGain:round(finalProgress-Number(progress)),progress:round(finalProgress),bottleneck:rawGain>finalProgress-Number(progress)};
+}
+
+export function calculateCultivationSession(input = {}) {
+  const { realm, startingProgress=0, availableDays, segments=[], elixirs=[] }=input;
+  if (!finiteNonnegative(startingProgress)||Number(startingProgress)>100||!finiteNonnegative(availableDays)) {
+    return { ok:false, reason:'invalid_context' };
+  }
+  const days=segments.reduce((sum,segment)=>sum+Number(segment.days),0);
+  if (!Number.isFinite(days)||days>Number(availableDays)+1e-8) return { ok:false, reason:'invalid_practice_time' };
+  const baseline=calculateCultivationProgress({ realm, finalSpeed:100, cultivationDays:0, availableDays:0 });
+  if (!baseline.ok) return baseline;
+  const settled=[];
+  for (const segment of segments) {
+    const { finalSpeed, concentration=100, materialRaw=0, difficulty=1 }=segment;
+    if (![segment.days,finalSpeed,concentration,materialRaw,difficulty].every(finiteNonnegative)||Number(difficulty)<1) return { ok:false, reason:'invalid_segment' };
+    const efficiency=materialEfficiencyMultiplier(materialRaw);
+    const gain=(100/(baseline.baselineDays*difficulty))*segment.days*(finalSpeed/100)*(concentration/100)*efficiency;
+    if (!Number.isFinite(gain)) return { ok:false, reason:'numeric_overflow' };
+    settled.push({ ...segment, efficiency, gain });
+  }
+  let directGain=0;
+  for (const elixir of elixirs) {
+    const value=cultivationAidValues({ count:elixir.count, cultivationAid:{ ...elixir, kind:'elixir' } },elixir.actorRank);
+    if (!value) return { ok:false, reason:'invalid_elixir' };
+    directGain+=value.gain;
+  }
+  const rawGain=settled.reduce((sum,segment)=>sum+segment.gain,directGain);
+  if (!Number.isFinite(rawGain)) return { ok:false, reason:'numeric_overflow' };
+  const appliedGain=Math.min(rawGain,Math.max(0,99-Number(startingProgress)));
+  return { ok:true, baselineDays:baseline.baselineDays, startingProgress:Number(startingProgress),
+    segments:settled, rawGain, directGain, appliedGain, progress:Number(startingProgress)+appliedGain };
 }
 
 export function buildCultivationSpeedSnapshot(character, finalAttributes) {

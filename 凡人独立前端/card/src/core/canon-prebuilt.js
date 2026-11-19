@@ -11,6 +11,7 @@ import { applyEventFieldChanges, eventFieldChanges, eventSourceRecord, isLegacyP
 import { WORLD_EVENT_CLOSURE_RULE, WORLD_EVENT_OPPORTUNITY_RULE } from './world-events.js';
 import { repairCarriedBreakthrough, carryAdjustedWhiteValues } from './numeric-realms.js';
 import { INVENTORY_STOCK_RULE, validStockMembers } from './inventory-stock.js';
+import { cultivationAidValues } from './cultivation-environment.js';
 
 export const PREBUILT_REPAIR_STAGES = {
   boundary: '预制变异边界',
@@ -2094,13 +2095,18 @@ function plainNativeValue(value, depth = 0) {
     !/^(?:__proto__|constructor|prototype)$/u.test(key) && plainNativeValue(entry, depth + 1));
 }
 
+function prebuiltCultivationAid(raw) {
+  const aid=raw?.cultivationAid;
+  return isRecord(aid)&&cultivationAidValues({cultivationAid:aid},1) ? {cultivationAid:structuredClone(aid)} : {};
+}
+
 function compileNativeItem(native) {
   if (!isRecord(native) || native['0'] != null || !inventoryTypes.has(native['2']) ||
       !cleanText(native['1']) || !cleanText(native['3']) || !/^[1-9]\d*$/u.test(String(native['5'])) ||
       !Number.isSafeInteger(Number(native['5']))||native.quantityDetail!=null&&!cleanText(native.quantityDetail)) return null;
   const technique = /功法$/u.test(native['2']);
   if (technique ? ![6, 7, 8].every(key => cleanText(native[key])) : !cleanText(native['4'])) return null;
-  const item = { 1: native['1'], 2: native['2'], 3: native['3'], 5: String(native['5']) };
+  const item = { 1: native['1'], 2: native['2'], 3: native['3'], 5: String(native['5']), ...prebuiltCultivationAid(native) };
   for (const key of (technique ? [6, 7, 8] : [4])) {
     if (native[key] == null) continue;
     if (!cleanText(native[key])) return null;
@@ -2629,6 +2635,7 @@ export function compilePrebuiltItemGain(owner, op, { requireBaseline = false } =
       !matchesPrebuiltBaseline(op, '9', 0, item.quantity, requireBaseline) ||
       (native && Object.hasOwn(native, '1') && native['1'] !== op.subject)) return null;
   return { type: 'createItem', owner, item: { 1: op.subject, 2: item.type, 3: item.description, 4: item.effect, 5: String(item.quantity),
+    ...prebuiltCultivationAid(native||item),
     ...(text(native?.quantityDetail)?{quantityDetail:native.quantityDetail}:{}),
     ...(text(native?.inventoryGroup)?{inventoryGroup:native.inventoryGroup}:{}) } };
 }

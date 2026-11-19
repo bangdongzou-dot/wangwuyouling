@@ -79,6 +79,7 @@ export const CORE_MODULE_FILES = [
   'numeric-preset.js',
   'numeric-rule-library.js',
   'cultivation-speed.js',
+  'cultivation-environment.js',
   'cultivation-arts.js',
   'visibility.js',
   'world-block.js',

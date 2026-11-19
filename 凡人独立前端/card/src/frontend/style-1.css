@@ -1591,6 +1591,12 @@
         max-height: 320px;
         object-fit: contain;
       }
+      .fr-image-hint {
+        margin: 10px 0 0;
+        color: var(--text-secondary);
+        font-size: .9em;
+        line-height: 1.5;
+      }
       .fr-story-turn {
         display: block;
         width: fit-content;
@@ -1741,6 +1747,26 @@
         line-height: 1.6;
       }
       .fr-story-status-details b { color: var(--fr-story-jade); font-weight: 500; }
+      .fr-location-spirit { color:var(--fr-story-footer-detail, var(--fr-ui-muted, currentColor)); font-variant-numeric:tabular-nums; }
+      :is(.fr-location-spirit,.fr-story-cultivation)[hidden] { display:none; }
+      .fr-story-turn > .fr-location-spirit { margin-block-start:.55rem; }
+      .fr-story-status-final > .fr-location-spirit { flex-basis:100%; }
+      .fr-location-spirit-note { display:block; margin-top:.25rem; font-size:.75rem; }
+      .fr-story-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(6.5rem,100%),1fr)); margin:0; gap:.7rem; }
+      .fr-story-metric { min-width:0; }
+      .fr-story-metric dt { color:var(--fr-ui-muted,var(--fr-story-footer-detail)); font-size:.78rem; line-height:1.35; }
+      .fr-story-metric dd { margin:.22rem 0 0; color:var(--fr-ui-text,var(--fr-story-ink)); font-size:1.06rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+      .fr-story-metric-highlight dd { color:var(--fr-ui-accent,var(--fr-story-footer-time)); }
+      .fr-cultivation-card { display:grid; gap:.9rem; width:min(100%,36rem); box-sizing:border-box; margin:1.2rem auto; padding:1rem 1.15rem; border:1px solid var(--fr-ui-line,#6b5a3b); border-radius:10px; background:var(--fr-story-turn-bg); text-align:start; }
+      .fr-cultivation-card header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:.3rem .9rem; }
+      .fr-cultivation-card header strong { color:var(--fr-ui-accent,var(--fr-story-footer-time)); font-size:1rem; }
+      .fr-cultivation-realm { color:var(--fr-ui-muted,var(--fr-story-footer-detail)); font-size:.82rem; }
+      .fr-cultivation-totals { grid-template-columns:minmax(0,1fr) auto; gap:.5rem .8rem; }
+      .fr-cultivation-totals dd { font-size:clamp(1.03rem,3.2vw,1.5rem); font-weight:650; }
+      .fr-cultivation-card details { padding-block-start:.5rem; border-block-start:1px solid var(--fr-ui-divider,var(--fr-story-rule)); }
+      .fr-cultivation-card summary { cursor:pointer; width:fit-content; min-height:1.75rem; color:var(--fr-ui-accent,var(--fr-story-footer-time)); font-size:.82rem; }
+      .fr-cultivation-breakdown { margin-block-start:.55rem; }
+      .fr-cultivation-note { margin:.55rem 0 0; font-size:.82rem; color:var(--fr-ui-muted,var(--fr-story-footer-detail)); }
       .fr-story-ending .fr-story-status-details :is(.fr-story-status-mood,.fr-story-status-env) {
         color: inherit;
         font-style: normal;

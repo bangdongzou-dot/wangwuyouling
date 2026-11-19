@@ -102,13 +102,25 @@ async function readBuiltinAssets() {
   const regex = JSON.parse(await fs.readFile(path.join(dir, 'regex.json'), 'utf8'));
   const imageDir = path.join(dir, 'image-materials');
   const imagePrompts = JSON.parse(await fs.readFile(path.join(imageDir, 'prompts.json'), 'utf8'));
-  const imageExamples = Object.fromEntries(await Promise.all(['photo', 'design', 'portrait', 'story'].map(async name => [
-    name, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(imageDir, name + '.jpg'))).toString('base64')
+  const imageExamples = Object.fromEntries(await Promise.all(
+    Object.entries({photo:'photo',design:'design',portrait:'portrait',story:'story',storyMale:'story-male',storyScene:'story-scene'}).map(async ([key,name]) => [
+    key, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(imageDir, name + '.jpg'))).toString('base64')
   ])));
   const defaultAvatarPosters = Object.fromEntries(await Promise.all(['male', 'female'].map(async name => [
     name, 'data:image/jpeg;base64,' + (await fs.readFile(path.join(dir, 'default-avatars', name + '.jpg'))).toString('base64')
   ])));
-  return { preset, regex, imageMaterials: { ...imagePrompts, examples: imageExamples }, defaultAvatarPosters };
+  const galleryDir = path.join(dir, 'canon-portraits');
+  const galleryManifest = JSON.parse(await fs.readFile(path.join(galleryDir, 'manifest.json'), 'utf8'));
+  const canonPortraitGallery = await Promise.all(galleryManifest.map(async entry => ({
+    ...entry,
+    sets: await Promise.all(entry.sets.map(async set => {
+      const images = await Promise.all(['portrait', 'design'].map(async kind => [
+        kind, set[kind] ? 'data:image/webp;base64,' + (await fs.readFile(path.join(galleryDir, set[kind]))).toString('base64') : ''
+      ]));
+      return { ...set, ...Object.fromEntries(images) };
+    }))
+  })));
+  return { preset, regex, imageMaterials: { ...imagePrompts, examples: imageExamples }, defaultAvatarPosters, canonPortraitGallery };
 }
 
 // 保持编码声明在脚本之前，浏览器读取单文件时可以尽早识别 UTF-8。
@@ -284,6 +296,7 @@ async function main() {
     'window.__FR_BUILTIN_REGEX__ = ' + safeJson(builtin.regex) + ';',
     'window.__FR_IMAGE_MATERIALS__ = ' + safeJson(builtin.imageMaterials) + ';',
     'window.__FR_DEFAULT_AVATAR_POSTERS__ = ' + safeJson(builtin.defaultAvatarPosters) + ';',
+    'window.__FR_CANON_PORTRAIT_GALLERY__ = ' + safeJson(builtin.canonPortraitGallery) + ';',
     'window.__FR_CARD__ = ' + safeJson(frCard) + ';',
     'window.__FR_CARD_BOOK__ = ' + safeJson(frCardBook) + ';'
   ].join('\n');

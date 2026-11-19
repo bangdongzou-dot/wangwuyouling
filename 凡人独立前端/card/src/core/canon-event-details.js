@@ -84,11 +84,13 @@ const itemFields=value=>{
   const {'0':id,inventoryGroup,...fields}=value;
   return fields;
 };
-const sameItemFields=(left,right,allowMissingTags)=>{
+const sameItemFields=(left,right,allowMissingMetadata)=>{
   const a=itemFields(left),b=itemFields(right);
-  if(allowMissingTags&&object(a)&&object(b)&&(!Object.hasOwn(a,'tags')||!Object.hasOwn(b,'tags'))){
-    delete a.tags;
-    delete b.tags;
+  if(allowMissingMetadata&&object(a)&&object(b)){
+    for(const key of ['tags','cultivationAid']) if(!Object.hasOwn(a,key)||!Object.hasOwn(b,key)){
+      delete a[key];
+      delete b[key];
+    }
   }
   return same(a,b);
 };

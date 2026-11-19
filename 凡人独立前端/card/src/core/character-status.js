@@ -128,6 +128,13 @@ export function activeCharacterStatuses(value, worldTime = '') {
   return statusEntries(value).filter(entry => statusLifecycle(entry, at) === 'active');
 }
 
+export function cultivationStatusPeriods(value) {
+  return statusEntries(value).filter(entry=>entry.effectText?.includes('修炼速度')).map(entry=>({
+    start: entry.activation?.replace(/^自\s*/u,''),
+    end: entry.ending?.replace(/^(?:直至|截至|至)\s*/u,''),
+  }));
+}
+
 export function characterStatusCards(value, worldTime = '') {
   const at = String(worldTime || '').trim();
   return statusEntries(value).flatMap(entry => {

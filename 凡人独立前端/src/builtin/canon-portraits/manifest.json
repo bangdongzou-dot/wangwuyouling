@@ -1,0 +1,2040 @@
+[
+  {
+    "name": "韩立",
+    "gender": "male",
+    "tier": "core",
+    "events": [
+      "E-001",
+      "E-002",
+      "E-003",
+      "E-004",
+      "E-005",
+      "E-006",
+      "E-007",
+      "E-008",
+      "E-009",
+      "E-010",
+      "E-011",
+      "E-012",
+      "E-013",
+      "E-014",
+      "E-015",
+      "E-016",
+      "E-017",
+      "E-018",
+      "E-019",
+      "E-020",
+      "E-021",
+      "E-022",
+      "E-023",
+      "E-024",
+      "E-025",
+      "E-026",
+      "E-027",
+      "E-028",
+      "E-029",
+      "E-030",
+      "E-031",
+      "E-032",
+      "E-033",
+      "E-034",
+      "E-035",
+      "E-036",
+      "E-037",
+      "E-038",
+      "E-039",
+      "E-040",
+      "E-041",
+      "E-042",
+      "E-043",
+      "E-044",
+      "E-045",
+      "E-046",
+      "E-047",
+      "E-048",
+      "E-049",
+      "E-050",
+      "E-051",
+      "E-053",
+      "E-054",
+      "E-055",
+      "E-056",
+      "E-057",
+      "E-058",
+      "E-059",
+      "E-060",
+      "E-061",
+      "E-062",
+      "E-063",
+      "E-064",
+      "E-065",
+      "E-066",
+      "E-067",
+      "E-070",
+      "E-071",
+      "E-072",
+      "E-073",
+      "E-074",
+      "E-075",
+      "E-076",
+      "E-077",
+      "E-078",
+      "E-079",
+      "E-080",
+      "E-081",
+      "E-082",
+      "E-083",
+      "E-084",
+      "E-085",
+      "E-086",
+      "E-087",
+      "E-088",
+      "E-089",
+      "E-090",
+      "E-091",
+      "E-092",
+      "E-093",
+      "E-094",
+      "E-095",
+      "E-096",
+      "E-097",
+      "E-098",
+      "E-099",
+      "E-100",
+      "E-102",
+      "E-103",
+      "E-104",
+      "E-105",
+      "E-106",
+      "E-107",
+      "E-108",
+      "E-109",
+      "E-110",
+      "E-111",
+      "E-112",
+      "E-113",
+      "E-114",
+      "E-115",
+      "E-116",
+      "E-117",
+      "E-118",
+      "E-119",
+      "E-120",
+      "E-121",
+      "E-123",
+      "E-124",
+      "E-125",
+      "E-126",
+      "E-127",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 194,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "五里坡与七玄门·少年",
+        "from": "0010.04.02",
+        "to": "0018.05.21",
+        "realms": [
+          "凡人",
+          "炼气"
+        ]
+      },
+      {
+        "id": "stage-2",
+        "phase": "神手谷主与初入修仙界",
+        "from": "0018.05.22",
+        "to": "0020.08.09",
+        "realms": [
+          "炼气"
+        ]
+      },
+      {
+        "id": "stage-3",
+        "phase": "黄枫谷·成年弟子",
+        "from": "0020.08.10",
+        "to": "0032.12.22",
+        "realms": [
+          "炼气",
+          "筑基"
+        ],
+        "design": "韩立-design.webp",
+        "portrait": "韩立-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "厉飞雨",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-001",
+      "E-002",
+      "E-004",
+      "E-005",
+      "E-007",
+      "E-009",
+      "E-010",
+      "E-011",
+      "E-014",
+      "E-015",
+      "E-016",
+      "E-023",
+      "E-024",
+      "E-025",
+      "E-026",
+      "E-027",
+      "E-028",
+      "E-029",
+      "E-030",
+      "E-031",
+      "E-032",
+      "E-033",
+      "E-034"
+    ],
+    "nodeCount": 27,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "七玄门少年弟子",
+        "from": "0010.04.05",
+        "to": "0017.08.31",
+        "realms": [
+          "凡人"
+        ],
+        "design": "厉飞雨-stage-1-design.webp",
+        "portrait": "厉飞雨-stage-1-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "七玄门护法与外刃堂",
+        "from": "0017.09.01",
+        "to": "0020.04.12",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "墨居仁",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-002",
+      "E-003",
+      "E-004",
+      "E-005",
+      "E-013",
+      "E-014",
+      "E-017",
+      "E-018",
+      "E-019",
+      "E-020",
+      "E-021"
+    ],
+    "nodeCount": 13,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0010.04.09",
+        "to": "0018.05.16",
+        "realms": [
+          "凡人"
+        ],
+        "design": "墨居仁-stage-1-design.webp",
+        "portrait": "墨居仁-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "张铁",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-001",
+      "E-002",
+      "E-003",
+      "E-004",
+      "E-005",
+      "E-006",
+      "E-020",
+      "E-021"
+    ],
+    "nodeCount": 14,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0010.04.05",
+        "to": "0018.05.16",
+        "realms": [
+          "凡人"
+        ],
+        "design": "张铁-stage-1-design.webp",
+        "portrait": "张铁-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "曲魂",
+    "gender": "male",
+    "tier": "major",
+    "aliases": [
+      "曲魂(张铁躯体)"
+    ],
+    "events": [
+      "E-021",
+      "E-022",
+      "E-027",
+      "E-028",
+      "E-029",
+      "E-030",
+      "E-035",
+      "E-036",
+      "E-037",
+      "E-038",
+      "E-072",
+      "E-111",
+      "E-112",
+      "E-113",
+      "E-114",
+      "E-115",
+      "E-116",
+      "E-117",
+      "E-118",
+      "E-119",
+      "E-120",
+      "E-121",
+      "E-123",
+      "E-124",
+      "E-125",
+      "E-126",
+      "E-127",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 29,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "神手谷与嘉元城·人傀",
+        "from": "0018.05.16",
+        "to": "0026.06.19",
+        "realms": [
+          "凡人"
+        ],
+        "design": "曲魂-stage-1-design.webp",
+        "portrait": "曲魂-stage-1-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "流落与追回·尸傀",
+        "from": "0026.06.20",
+        "to": "0032.11.12",
+        "realms": [
+          "凡人",
+          "炼气"
+        ]
+      },
+      {
+        "id": "stage-3",
+        "phase": "筑基尸傀",
+        "from": "0032.11.13",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "李化元",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-053",
+      "E-064",
+      "E-065",
+      "E-066",
+      "E-079",
+      "E-088",
+      "E-092",
+      "E-093",
+      "E-094",
+      "E-101",
+      "E-117",
+      "E-119",
+      "E-120",
+      "E-121",
+      "E-122",
+      "E-124"
+    ],
+    "nodeCount": 17,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.12",
+        "to": "0032.11.13",
+        "realms": [
+          "结丹"
+        ],
+        "design": "李化元-stage-1-design.webp",
+        "portrait": "李化元-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "王蝉",
+    "gender": "male",
+    "tier": "major",
+    "aliases": [
+      "王婵"
+    ],
+    "events": [
+      "E-068",
+      "E-069",
+      "E-082",
+      "E-084",
+      "E-085",
+      "E-086",
+      "E-089",
+      "E-090",
+      "E-093",
+      "E-102",
+      "E-120",
+      "E-122",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 14,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0030.08.15",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ],
+        "design": "王蝉-design.webp",
+        "portrait": "王蝉-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "钟吾",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-052",
+      "E-054",
+      "E-058",
+      "E-059",
+      "E-060",
+      "E-065",
+      "E-075",
+      "E-089",
+      "E-090",
+      "E-093",
+      "E-102",
+      "E-120",
+      "E-122",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 15,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.11",
+        "to": "0032.12.22",
+        "realms": [
+          "炼气"
+        ],
+        "design": "钟吾-stage-1-design.webp",
+        "portrait": "钟吾-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "向之礼",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-049",
+      "E-054",
+      "E-065",
+      "E-071",
+      "E-122"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.11",
+        "to": "0032.10.14",
+        "realms": [
+          "炼气"
+        ],
+        "design": "向之礼-stage-1-design.webp",
+        "portrait": "向之礼-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "令狐老祖",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-119",
+      "E-120",
+      "E-122"
+    ],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "黄枫谷·元婴老祖",
+        "from": "0032.10.08",
+        "to": "0032.10.17",
+        "realms": [
+          "元婴"
+        ],
+        "design": "令狐老祖-stage-1-design.webp",
+        "portrait": "令狐老祖-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "云露",
+    "gender": "male",
+    "tier": "major",
+    "aliases": [
+      "云露老祖"
+    ],
+    "events": [
+      "E-102",
+      "E-122",
+      "E-129"
+    ],
+    "nodeCount": 2,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.10.14",
+        "to": "0032.10.16",
+        "realms": [
+          "元婴"
+        ],
+        "design": "云露-stage-1-design.webp",
+        "portrait": "云露-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "刘靖",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-092",
+      "E-102",
+      "E-103",
+      "E-105",
+      "E-106",
+      "E-107",
+      "E-108",
+      "E-110"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.10",
+        "to": "0032.08.15",
+        "realms": [
+          "筑基"
+        ],
+        "design": "刘靖-stage-1-design.webp",
+        "portrait": "刘靖-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "宋蒙",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-092",
+      "E-102",
+      "E-103",
+      "E-105",
+      "E-106",
+      "E-107",
+      "E-108",
+      "E-109",
+      "E-110",
+      "E-119",
+      "E-123",
+      "E-129"
+    ],
+    "nodeCount": 10,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.10",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ],
+        "design": "宋蒙-stage-1-design.webp",
+        "portrait": "宋蒙-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "齐云霄",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-074",
+      "E-075",
+      "E-095",
+      "E-123",
+      "E-124"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0026.06.24",
+        "to": "0032.11.13",
+        "realms": [
+          "筑基"
+        ],
+        "design": "齐云霄-stage-1-design.webp",
+        "portrait": "齐云霄-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "钟灵道",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-047",
+      "E-072",
+      "E-117",
+      "E-119",
+      "E-122"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.08.11",
+        "to": "0032.10.16",
+        "realms": [
+          "筑基"
+        ],
+        "design": "钟灵道-stage-1-design.webp",
+        "portrait": "钟灵道-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "雷万鹤",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-077",
+      "E-078",
+      "E-120"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0026.07.09",
+        "to": "0032.10.14",
+        "realms": [
+          "结丹"
+        ],
+        "design": "雷万鹤-stage-1-design.webp",
+        "portrait": "雷万鹤-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "陆云风",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-041",
+      "E-043",
+      "E-046",
+      "E-047",
+      "E-051"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.05.09",
+        "to": "0022.08.11",
+        "realms": [
+          "炼气"
+        ],
+        "design": "陆云风-stage-1-design.webp",
+        "portrait": "陆云风-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "王绝楚",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-002",
+      "E-003",
+      "E-027",
+      "E-028",
+      "E-032",
+      "E-033",
+      "E-034"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0010.04.09",
+        "to": "0020.01.17",
+        "realms": [
+          "凡人"
+        ],
+        "design": "王绝楚-stage-1-design.webp",
+        "portrait": "王绝楚-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "浮云子",
+    "gender": "male",
+    "tier": "major",
+    "events": [
+      "E-053",
+      "E-065",
+      "E-117",
+      "E-119",
+      "E-123"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.12",
+        "to": "0032.10.11",
+        "realms": [
+          "结丹"
+        ],
+        "design": "浮云子-stage-1-design.webp",
+        "portrait": "浮云子-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "万小山",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-038",
+      "E-039",
+      "E-040",
+      "E-041",
+      "E-042",
+      "E-044"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.05.04",
+        "to": "0020.05.10",
+        "realms": [
+          "炼气"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "余子童",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-018",
+      "E-019"
+    ],
+    "nodeCount": 2,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0018.05.16",
+        "to": "0018.05.16",
+        "realms": [
+          "炼气"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "贾天龙",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-032",
+      "E-033"
+    ],
+    "nodeCount": 2,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.01.13",
+        "to": "0020.01.13",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "金光上人",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-032",
+      "E-033"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.01.13",
+        "to": "0020.01.13",
+        "realms": [
+          "炼气"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "吴勉",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-045",
+      "E-046",
+      "E-049",
+      "E-071",
+      "E-075",
+      "E-076",
+      "E-077"
+    ],
+    "nodeCount": 7,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.08.10",
+        "to": "0026.07.10",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "封岳",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-054",
+      "E-056",
+      "E-057"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.12",
+        "to": "0022.08.15",
+        "realms": [
+          "炼气"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "宣乐",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-088",
+      "E-089",
+      "E-090",
+      "E-091"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0030.08.17",
+        "to": "0030.09.18",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "吕天蒙",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-088",
+      "E-089",
+      "E-090",
+      "E-091"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0030.08.17",
+        "to": "0030.09.18",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "武炫",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-092",
+      "E-093",
+      "E-102",
+      "E-104",
+      "E-110"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.10",
+        "to": "0032.08.15",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "青纹道人",
+    "gender": "male",
+    "tier": "minor",
+    "aliases": [
+      "青纹"
+    ],
+    "events": [
+      "E-041",
+      "E-042",
+      "E-044",
+      "E-101",
+      "E-104",
+      "E-106"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.05.09",
+        "to": "0032.08.15",
+        "realms": [
+          "炼气",
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "铁罗",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-099",
+      "E-100",
+      "E-101",
+      "E-105",
+      "E-106"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.07.30",
+        "to": "0032.08.15",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "叶蛇",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-101",
+      "E-104",
+      "E-106"
+    ],
+    "nodeCount": 2,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.08.15",
+        "to": "0032.08.15",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "冰妖",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-101",
+      "E-105",
+      "E-106"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.08.15",
+        "to": "0032.08.15",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "胥王",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-107",
+      "E-108",
+      "E-109"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.08.15",
+        "to": "0032.08.16",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "秦言",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-096",
+      "E-097",
+      "E-110"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.18",
+        "to": "0032.08.31",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "秦飞",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-096",
+      "E-097",
+      "E-102",
+      "E-104",
+      "E-105",
+      "E-110"
+    ],
+    "nodeCount": 6,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.18",
+        "to": "0032.08.31",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "萧振",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-096",
+      "E-099",
+      "E-118"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.18",
+        "to": "0032.10.08",
+        "realms": [
+          "炼气"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "燕炎",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-068",
+      "E-069",
+      "E-085"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0025.05.16",
+        "to": "0025.05.21",
+        "realms": [
+          "结丹"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "韩天生",
+    "gender": "male",
+    "tier": "minor",
+    "aliases": [
+      "韩父韩天生"
+    ],
+    "events": [
+      "E-001",
+      "E-039"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0010.04.02",
+        "to": "0020.05.09",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "韩世昌",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-001"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0010.04.05",
+        "to": "0010.04.05",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "孙二狗",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-035",
+      "E-111"
+    ],
+    "nodeCount": 2,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.04.13",
+        "to": "0032.09.05",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "骷髅",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-119",
+      "E-121",
+      "E-122"
+    ],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "魔道入侵·骷髅",
+        "from": "0032.10.08",
+        "to": "0032.10.17",
+        "realms": [
+          "结丹"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "血灵门少主",
+    "gender": "male",
+    "tier": "minor",
+    "events": [
+      "E-052"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0022.08.11",
+        "to": "0022.08.11",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "南宫婉",
+    "gender": "female",
+    "tier": "core",
+    "events": [
+      "E-043",
+      "E-054",
+      "E-055",
+      "E-060",
+      "E-062",
+      "E-063",
+      "E-064",
+      "E-094",
+      "E-124",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 15,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.05.10",
+        "to": "0032.12.22",
+        "realms": [
+          "结丹"
+        ],
+        "design": "南宫婉-design.webp",
+        "portrait": "南宫婉-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "紫灵",
+    "gender": "female",
+    "tier": "unclassified",
+    "aliases": [
+      "汪凝",
+      "汪凝（紫灵）",
+      "紫灵仙子"
+    ],
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "紫灵-design.webp",
+        "portrait": "紫灵-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "董萱儿",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-043",
+      "E-047",
+      "E-072",
+      "E-079",
+      "E-081",
+      "E-082",
+      "E-084",
+      "E-085",
+      "E-086",
+      "E-089",
+      "E-092",
+      "E-093",
+      "E-101",
+      "E-102",
+      "E-122",
+      "E-128",
+      "E-129"
+    ],
+    "nodeCount": 17,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "升仙大会与黄枫谷·炼气",
+        "from": "0020.05.10",
+        "to": "0026.06.19",
+        "realms": [
+          "炼气"
+        ],
+        "design": "董萱儿-design.webp",
+        "portrait": "董萱儿-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "红拂门下·筑基",
+        "from": "0026.06.20",
+        "to": "0032.12.12",
+        "realms": [
+          "筑基"
+        ]
+      },
+      {
+        "id": "stage-3",
+        "phase": "合欢宗",
+        "from": "0032.12.13",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "墨彩环",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-035",
+      "E-036",
+      "E-037",
+      "E-038",
+      "E-072",
+      "E-083",
+      "E-084",
+      "E-085",
+      "E-086",
+      "E-087",
+      "E-097",
+      "E-098",
+      "E-099",
+      "E-103",
+      "E-129"
+    ],
+    "nodeCount": 15,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "嘉元城·墨府三小姐",
+        "from": "0020.04.13",
+        "to": "0026.06.19",
+        "realms": [
+          "凡人"
+        ],
+        "design": "墨彩环-design.webp",
+        "portrait": "墨彩环-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "燕家堡行医",
+        "from": "0026.06.20",
+        "to": "0030.08.16",
+        "realms": [
+          "凡人"
+        ]
+      },
+      {
+        "id": "stage-3",
+        "phase": "越京行医与墨家客栈",
+        "from": "0030.08.17",
+        "to": "0032.12.22",
+        "realms": [
+          "凡人"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "陈巧倩",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-041",
+      "E-043",
+      "E-046",
+      "E-051",
+      "E-072",
+      "E-088",
+      "E-089",
+      "E-090",
+      "E-091",
+      "E-092",
+      "E-094",
+      "E-102",
+      "E-103",
+      "E-105",
+      "E-106",
+      "E-107",
+      "E-108",
+      "E-109",
+      "E-110",
+      "E-118",
+      "E-129"
+    ],
+    "nodeCount": 21,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "黄枫谷·炼气弟子",
+        "from": "0020.05.09",
+        "to": "0026.06.19",
+        "realms": [
+          "炼气"
+        ],
+        "design": "陈巧倩-design.webp",
+        "portrait": "陈巧倩-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "黄枫谷·筑基弟子",
+        "from": "0026.06.20",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "红拂",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-079",
+      "E-081",
+      "E-088",
+      "E-089",
+      "E-092",
+      "E-093",
+      "E-101",
+      "E-117",
+      "E-119",
+      "E-120",
+      "E-121",
+      "E-122",
+      "E-124",
+      "E-129"
+    ],
+    "nodeCount": 15,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "黄枫谷·结丹长老",
+        "from": "0026.10.12",
+        "to": "0032.11.12",
+        "realms": [
+          "结丹"
+        ],
+        "design": "红拂-design.webp",
+        "portrait": "红拂-portrait.webp"
+      },
+      {
+        "id": "stage-2",
+        "phase": "离开黄枫谷",
+        "from": "0032.11.13",
+        "to": "0032.12.22",
+        "realms": [
+          "结丹"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "菡云芝",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-041",
+      "E-042",
+      "E-043",
+      "E-054",
+      "E-058",
+      "E-059",
+      "E-060",
+      "E-061",
+      "E-064",
+      "E-065",
+      "E-129"
+    ],
+    "nodeCount": 10,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0020.05.09",
+        "to": "0032.12.22",
+        "realms": [
+          "炼气"
+        ],
+        "design": "菡云芝-design.webp",
+        "portrait": "菡云芝-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "辛如音",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-074",
+      "E-095",
+      "E-123",
+      "E-124",
+      "E-126"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0026.06.24",
+        "to": "0032.12.06",
+        "realms": [
+          "境界未详的低阶修士"
+        ],
+        "design": "辛如音-design.webp",
+        "portrait": "辛如音-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "钟卫娘",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-092",
+      "E-102",
+      "E-103",
+      "E-105",
+      "E-106",
+      "E-107",
+      "E-108",
+      "E-109",
+      "E-110",
+      "E-119",
+      "E-123",
+      "E-129"
+    ],
+    "nodeCount": 9,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0032.04.10",
+        "to": "0032.12.22",
+        "realms": [
+          "筑基"
+        ],
+        "design": "钟卫娘-design.webp",
+        "portrait": "钟卫娘-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "燕如嫣",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-068",
+      "E-069",
+      "E-085"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "E-001～E-129 出场阶段",
+        "from": "0025.05.16",
+        "to": "0030.08.16",
+        "realms": [
+          "炼气"
+        ],
+        "design": "燕如嫣-design.webp",
+        "portrait": "燕如嫣-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "元瑶",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "元瑶-design.webp",
+        "portrait": "元瑶-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "凌玉灵",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "凌玉灵-design.webp",
+        "portrait": "凌玉灵-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "慕沛灵",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "慕沛灵-design.webp",
+        "portrait": "慕沛灵-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "红粉",
+    "gender": "female",
+    "tier": "major",
+    "events": [
+      "E-119",
+      "E-121",
+      "E-122"
+    ],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "魔道入侵·红粉",
+        "from": "0032.10.08",
+        "to": "0032.10.17",
+        "realms": [
+          "结丹"
+        ],
+        "design": "红粉-design.webp",
+        "portrait": "红粉-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "张袖儿",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-011",
+      "E-023",
+      "E-024",
+      "E-026",
+      "E-032",
+      "E-033",
+      "E-034"
+    ],
+    "nodeCount": 5,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "七玄门·张袖儿",
+        "from": "0015.12.06",
+        "to": "0020.01.17",
+        "realms": [
+          "凡人"
+        ],
+        "design": "张袖儿-stage-1-design.webp",
+        "portrait": "张袖儿-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "韩小妹",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-001",
+      "E-039"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "五里坡·童年",
+        "from": "0010.04.02",
+        "to": "0010.04.08",
+        "realms": [
+          "凡人"
+        ]
+      },
+      {
+        "id": "stage-2",
+        "phase": "五里坡·出嫁",
+        "from": "0020.05.09",
+        "to": "0020.05.09",
+        "realms": [
+          "凡人"
+        ],
+        "design": "韩小妹-design.webp",
+        "portrait": "韩小妹-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "萧翠儿",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-096",
+      "E-099",
+      "E-118"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "京城·随祖行走",
+        "from": "0032.04.18",
+        "to": "0032.10.08",
+        "realms": [
+          "炼气"
+        ],
+        "design": "萧翠儿-stage-1-design.webp",
+        "portrait": "萧翠儿-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "霓裳仙子",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-054",
+      "E-064"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "掩月宗·血色试炼",
+        "from": "0022.08.18",
+        "to": "0022.08.18",
+        "realms": [
+          "结丹"
+        ],
+        "design": "霓裳仙子-stage-1-design.webp",
+        "portrait": "霓裳仙子-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "李耕",
+    "gender": "female",
+    "tier": "minor",
+    "aliases": [
+      "韩母李耕"
+    ],
+    "events": [
+      "E-001",
+      "E-039"
+    ],
+    "nodeCount": 3,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "青牛镇·韩母",
+        "from": "0010.04.02",
+        "to": "0020.05.09",
+        "realms": [
+          "凡人"
+        ],
+        "design": "李耕-stage-1-design.webp",
+        "portrait": "李耕-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "严氏",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-037",
+      "E-038",
+      "E-072"
+    ],
+    "nodeCount": 4,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "墨府·掌家",
+        "from": "0020.04.14",
+        "to": "0026.06.20",
+        "realms": [
+          "凡人"
+        ],
+        "design": "严氏-stage-1-design.webp",
+        "portrait": "严氏-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "李缨宁",
+    "gender": "female",
+    "tier": "minor",
+    "events": [
+      "E-129"
+    ],
+    "nodeCount": 1,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "嘉元城·幼年",
+        "from": "0032.12.22",
+        "to": "0032.12.22",
+        "realms": [
+          "凡人"
+        ],
+        "design": "李缨宁-stage-1-design.webp",
+        "portrait": "李缨宁-stage-1-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "梅凝",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "梅凝-design.webp",
+        "portrait": "梅凝-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "妍丽",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "妍丽-design.webp",
+        "portrait": "妍丽-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "宋玉",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "宋玉-design.webp",
+        "portrait": "宋玉-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "温夫人",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "温夫人-design.webp",
+        "portrait": "温夫人-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "文思月",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "文思月-design.webp",
+        "portrait": "文思月-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "卓如婷",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "卓如婷-design.webp",
+        "portrait": "卓如婷-portrait.webp"
+      }
+    ]
+  },
+  {
+    "name": "公孙杏",
+    "gender": "female",
+    "tier": "unclassified",
+    "events": [],
+    "nodeCount": 0,
+    "sets": [
+      {
+        "id": "stage-1",
+        "phase": "已有造型",
+        "from": "",
+        "to": "",
+        "realms": [],
+        "design": "公孙杏-design.webp",
+        "portrait": "公孙杏-portrait.webp"
+      }
+    ]
+  }
+]

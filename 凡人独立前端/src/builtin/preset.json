@@ -597,7 +597,7 @@
     {
       "identifier": "independent_cultivation_system_v36",
       "name": "📦修炼与因果系统 (v3.8 积木版)",
-      "content": "## [修炼与因果系统] (Cultivation_System_v3.8_Token_Optimized)\n\n<系统核心>\n按真实修炼行动、历时、所用资源及本地修炼结果叙述。快照中的修炼速度已包含加成；进度、当前瓶颈阈值和突破结果直接采用系统提供的值，不按固定百分比推断，不自设因果计量、概率或附加倍率。没有结算资料时写实际修行过程，未达条件不写已突破。\n</系统核心>\n\n<UI_Render_Logic>\n只有本轮已有实际修炼结算及相应字段时，选用日常修炼或突破模版。卡片内缺失的可选字段整行省略。用组件标签输出，卡片以外照常写行动和感受。\n\nTemplate_A_Routine (日常修炼):\n<tupo_daily>\n<tp_title_green>修行小记</tp_title_green>\n<tp_grid_gray>\n<tp_row>历时：{本次修炼时长}</tp_row>\n<tp_row>效率：{已确认的修炼效率}</tp_row>\n<tp_prog_box>进度：{旧进度}% → {新进度}%<tp_bar_cyan>{新进度}</tp_bar_cyan></tp_prog_box>\n</tp_grid_gray>\n<tp_foot>{与实际修炼有关的一句感悟}</tp_foot>\n</tupo_daily>\n\nTemplate_B_Breakthrough (境界突破):\n<tupo_break>\n<tp_title_red>破境纪要</tp_title_red>\n<tp_grid_red>\n<tp_row>积淀：{当前进度}%</tp_row>\n<tp_row>辅材：{实际使用的丹药或阵法}</tp_row>\n</tp_grid_red>\n<tp_res_box>{已确认的突破结果与具体表现}</tp_res_box>\n</tupo_break>\n</UI_Render_Logic>",
+      "content": "## [修炼与因果系统] (Cultivation_System_v3.8_Token_Optimized)\n\n<系统核心>\n按真实修炼行动、历时、所用资源及本地修炼结果叙述。快照中的修炼速度已包含加成；进度、当前瓶颈阈值和突破结果直接采用系统提供的值，不按固定百分比推断，不自设因果计量、概率或附加倍率。没有结算资料时写实际修行过程，未达条件不写已突破。\n</系统核心>\n\n<UI_Render_Logic>\n日常修炼卡由本地按本轮实际落库结果填入，突破纪要只在本轮已有确认结果时按下方模版写。卡片内缺失的可选字段整行省略。\n\nTemplate_A_Routine (日常修炼):\n本轮完成吐纳、闭关或实际炼化修炼丹时，可把 <tupo_daily></tupo_daily> 放在完成该行动的叙事位置，供本地结算插入卡片。正文只写真实经历与使用的资源。\n\nTemplate_B_Breakthrough (境界突破):\n<tupo_break>\n<tp_title_red>破境纪要</tp_title_red>\n<tp_grid_red>\n<tp_row>积淀：{当前进度}%</tp_row>\n<tp_row>辅材：{实际使用的丹药或阵法}</tp_row>\n</tp_grid_red>\n<tp_res_box>{已确认的突破结果与具体表现}</tp_res_box>\n</tupo_break>\n</UI_Render_Logic>",
       "enabled": true,
       "injection_position": 0,
       "injection_depth": 4,
