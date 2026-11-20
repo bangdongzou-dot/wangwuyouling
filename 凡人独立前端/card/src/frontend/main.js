@@ -17298,42 +17298,54 @@ const textToSearch = storyText + (userInput || '');
             }
             frDrawLocationSpirit(line,data);
           }
-          const legacyCards=[...element.querySelectorAll('.fr-story-cultivation,cultivation_card')];
+          const renderedReceipt=element.querySelector('[data-fr-cultivation-receipt]');
+          const legacyCards=[...element.querySelectorAll('.fr-story-cultivation,tupo_daily,cultivation_card')]
+            .filter(card=>card!==renderedReceipt);
           for (const legacy of legacyCards) {
-            if (!legacy.textContent.trim()) legacy.hidden=true;
+            if ([...legacy.childNodes].every(node=>
+              node.nodeType===Node.ELEMENT_NODE ? node.classList.contains('fr-cultivation-seal') : !node.textContent.trim())) {
+              legacy.hidden=true;
+            }
           }
           if (!receipt || ![receipt.startingProgress,receipt.progress,receipt.gain].every(Number.isFinite)) return;
-          let card=element.querySelector('.fr-cultivation-card');
-          if (!card) {
+          const fmt=value=>Number(value.toFixed(4));
+          const progress=fmt(receipt.progress);
+          const change=fmt(receipt.startingProgress)+'% → '+progress+'%';
+          const gain='+'+fmt(receipt.gain)+' 点';
+          const capped=receipt.rawGain>receipt.gain+1e-8;
+          const template=document.createElement('template');
+          const markup='<tupo_daily><tp_head_box><tp_flex><tp_title_green>🧘 修行不辍</tp_title_green>'+
+            '<tp_sub>'+escapeHtml(String(receipt.realm||''))+'</tp_sub></tp_flex></tp_head_box>'+
+            '<tp_grid_gray><tp_row>修为进度 <tp_span_cyan>'+change+'</tp_span_cyan></tp_row>'+
+            '<tp_row>本轮实得 <tp_span_gold>'+gain+'</tp_span_gold></tp_row>'+
+            '<tp_prog_box><tp_bar_cyan>'+progress+'</tp_bar_cyan></tp_prog_box></tp_grid_gray></tupo_daily>';
+          template.innerHTML=sanitizeHTML(processTextWithRules(markup,PLACEMENT_MAP.AI_OUTPUT,'regular'));
+          let card=template.content.firstElementChild;
+          if (!card || template.content.querySelector('tupo_daily')) {
             card=document.createElement('section');
             card.className='fr-cultivation-card';
-            const closing=[...element.querySelectorAll('.fr-story-ending')].at(-1) ||
-              [...element.querySelectorAll('.fr-story-status')].at(-1);
-            if (legacyCards.length) legacyCards[0].before(card);
-            else if (closing) closing.before(card); else element.append(card);
+            const heading=document.createElement('header');
+            const title=document.createElement('strong');
+            title.textContent='修炼结算';
+            heading.append(title);
+            if (receipt.realm) {
+              const realm=document.createElement('span');
+              realm.className='fr-cultivation-realm';
+              realm.textContent=receipt.realm;
+              heading.append(realm);
+            }
+            const totals=frStoryMetricList([['修为进度',change],['本轮实得',gain]],'本轮实得');
+            totals.classList.add('fr-cultivation-totals');
+            card.append(heading,totals);
+          } else if (template.content.children.length>1) {
+            card=document.createElement('div');
+            card.append(template.content);
           }
-          const heading=document.createElement('header');
-          const title=document.createElement('strong');
-          title.textContent='修炼结算';
-          heading.append(title);
-          if (receipt.realm) {
-            const realm=document.createElement('span');
-            realm.className='fr-cultivation-realm';
-            realm.textContent=receipt.realm;
-            heading.append(realm);
-          }
-          const fmt=value=>Number(value.toFixed(4));
-          const capped=receipt.rawGain>receipt.gain+1e-8;
-          const totals=frStoryMetricList([
-            ['修为进度',fmt(receipt.startingProgress)+'% → '+fmt(receipt.progress)+'%'],
-            ['本轮实得','+'+fmt(receipt.gain)+' 点']
-          ],'本轮实得');
-          totals.classList.add('fr-cultivation-totals');
+          card.dataset.frCultivationReceipt='';
           const breakdown=[];
           if (receipt.days>0) breakdown.push(['吐纳时长',fmt(receipt.days)+' 天']);
           if (receipt.naturalGain>0) breakdown.push([capped?'吐纳候选':'吐纳贡献','+'+fmt(receipt.naturalGain)]);
           if (receipt.directGain>0) breakdown.push([capped?'丹药候选':'丹药贡献','+'+fmt(receipt.directGain)]);
-          card.replaceChildren(heading,totals);
           if (breakdown.length || capped) {
             const details=document.createElement('details');
             const summary=document.createElement('summary');
@@ -17352,6 +17364,11 @@ const textToSearch = storyText + (userInput || '');
             }
             card.append(details);
           }
+          const anchor=renderedReceipt || legacyCards[0] ||
+            [...element.querySelectorAll('.fr-story-ending')].at(-1) ||
+            [...element.querySelectorAll('.fr-story-status')].at(-1);
+          if (anchor) anchor.before(card); else (element.querySelector('content')||element).append(card);
+          renderedReceipt?.remove();
           legacyCards.forEach(card=>card.remove());
         }
 
@@ -37752,7 +37769,7 @@ async function ceBuildOriginalTimelineNpcArchiveIndex(options = {}) {
   }
 
   try {
-    const worldBookEntries = await ceGetAuthoritativeWorldBookEntries({
+    const worldBookEntries = Array.isArray(opts.worldBookEntries) ? opts.worldBookEntries : await ceGetAuthoritativeWorldBookEntries({
       context: 'original_timeline_archive_index',
       throwOnMissing: true
     });
@@ -68432,6 +68449,12 @@ async function runConcurrentEvolution(options = {}) {
       if(ceReplaySession)ceReplaySession.ceWriteJournal=frCeTrace.ceWriteJournal;
     }catch(error){console.warn('[变量演化] 阶段写入记录未能封存：',error);}
     if(typeof frRecordOrdinarySettlement==='function')frRecordOrdinarySettlement(frCeResult,storyText,options.logId);
+    if(options.logId&&options.earlyPreparation?.requiredBoundary&&!ceReplaySession&&!currentRunWasAborted){
+      // Seal against the ordinary result that was actually applied to this floor.
+      // The main flow can retry persistence if this write failed.
+      try{await frPersistOrdinarySettlement(options.logId,storyText,{archiveName:options.earlyPreparation.archiveName,signal:runtimeAbortSignal});}
+      catch(error){if(!runtimeAbortSignal.aborted)console.warn('[变量演化] 普通结算明细待本轮保存：',error.message);}
+    }
     if(frCeTrace){var failed=frCeResult?.skipped||Object.values(frCeResult?.failedCount||{}).some(n=>n>0)||frCeResult?.entryDecision?.error||frCeResult?.itemManagement?.error||frCeResult?.misc?.error;await frCanonTraceFinish(frCeTrace,runtimeAbortSignal.aborted?'cancelled':failed?'error':'done',frCeResult);}
     if(typeof frReplaySealPending==='function')await frReplaySealPending('ce');
   }
@@ -96903,6 +96926,8 @@ try {
               );
             }
             if(!variableResult.error&&frEarlyPreparation?.requiredBoundary&&window._ceSkipThinkingApi!==true&&typeof frRecordOrdinarySettlement==='function')frRecordOrdinarySettlement({appliedChanges:(variableResult.delta||[]).map(function(operation){return {success:true,operation:operation};})},finalStoryContentForDisplay,logEntry.id);
+            if(frCanonTimingEnabled)await frPersistOrdinarySettlement(logEntry.id,finalStoryContentForDisplay,
+              {archiveName:storyArchiveName,signal:frTurnController.signal,error:variableResult.error});
             frFinishOrdinaryWrite(!variableResult.error && !frTurnController.signal.aborted);
             // 补演早在普通演化之前就起跑了，这里只等它自己收尾，不再由普通演化的成败决定跑不跑。
             if (canonTurnPromise) await canonTurnPromise;
@@ -106623,11 +106648,15 @@ newConfirmBtn.addEventListener('click', handleConfirm);
           if (!migration || !Array.isArray(rules)) return rules;
           const retired = new Set(migration.retiredCombatRuleIds);
           const builtin = new Map((window.__FR_BUILTIN_REGEX__?.rules || []).map(rule => [rule.id, rule]));
-          const previous = new Map(migration.previousStyleRules.map(rule => [rule.id, rule]));
+          const previous = new Map();
+          for (const rule of migration.previousStyleRules) {
+            if (!previous.has(rule.id)) previous.set(rule.id, []);
+            previous.get(rule.id).push(rule);
+          }
           const next = rules.filter(rule => !retired.has(rule.id)).map(rule => {
-            const old = previous.get(rule.id);
             const replacement = builtin.get(rule.id);
-            if (!old || !replacement || old.findRegex !== rule.findRegex || old.replaceString !== rule.replaceString) return rule;
+            if (!replacement || (replacement.findRegex===rule.findRegex && replacement.replaceString===rule.replaceString) ||
+                !previous.get(rule.id)?.some(old=>old.findRegex===rule.findRegex && old.replaceString===rule.replaceString)) return rule;
             return { ...rule, findRegex: replacement.findRegex, replaceString: replacement.replaceString };
           });
           if (addMissing) {

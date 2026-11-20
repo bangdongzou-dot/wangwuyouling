@@ -46,6 +46,7 @@ export const CORE_MODULE_FILES = [
   'chat-request-policy.js',
   'vector-input.js',
   'diff.js',
+  'canonical-json.js',
   'canon-turn-plan.js',
   'canon-prebuilt.js',
   'canon-event-details.js',

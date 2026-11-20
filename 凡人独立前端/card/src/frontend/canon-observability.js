@@ -881,7 +881,7 @@ function frCanonTraceClean(value, run, ancestors) {
   if(kind==='bigint')return String(value);
   if (typeof value === 'string') {
     var text = value.replace(/Bearer\s+[^\s"']+/gi,'Bearer [已隐藏]').replace(/([?&](?:api[_-]?key|access[_-]?token|token|secret)=)[^&#\s]*/gi,"\u00241[已隐藏]");
-    secrets.forEach(function(secret) { if(secret) text=text.split(secret).join('[已隐藏]'); });
+    secrets.forEach(function(secret) { if(secret&&text.includes(secret)) text=text.replaceAll(secret,'[已隐藏]'); });
     return text;
   }
   if (value && typeof value === 'object') {

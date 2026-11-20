@@ -173,12 +173,14 @@ function frTimelineForPrebuiltSetting(entries,config){
 async function frTimelineLoadForCanon(phase,traceRun){
   var source=await frTimelineReadSource();
   var entries=source.entries.map(function(entry){return {...entry,content_brief:String(entry.content_brief||entry.brief||''),content_original:String(entry.content_original||entry.original||'')};}).filter(function(row){return row.content_brief.trim()||row.content_original.trim();});
-  if(traceRun){Object.defineProperty(traceRun,'_timelineSource',{value:JSON.stringify(source),configurable:true,enumerable:false});frCanonTraceEvent(traceRun,'material','年表 → '+phase,{enabled:true,mode:source.mode,available:source.entries.length,provided:entries.length,source:'已保存年表；统一材料策略',brief:entries.filter(e=>e.content_brief.trim()).length,original:entries.filter(e=>e.content_original.trim()).length});}
+  if(traceRun){Object.defineProperty(traceRun,'_timelineSource',{value:'sha256:'+ceBridgeCore()['canonical-json'].hashCanonicalJson(source),configurable:true,enumerable:false});frCanonTraceEvent(traceRun,'material','年表 → '+phase,{enabled:true,mode:source.mode,available:source.entries.length,provided:entries.length,source:'已保存年表；统一材料策略',brief:entries.filter(e=>e.content_brief.trim()).length,original:entries.filter(e=>e.content_original.trim()).length});}
   return entries;
 }
 async function frTimelineAssertSource(expected){
   if(typeof expected!=='string')return;
-  if(JSON.stringify(await frTimelineReadSource())!==expected)throw new Error('补演期间已保存年表或补演供料设置变化，拒绝提交旧资料结果');
+  var source=await frTimelineReadSource();
+  var actual=expected.startsWith('sha256:')?'sha256:'+ceBridgeCore()['canonical-json'].hashCanonicalJson(source):JSON.stringify(source);
+  if(actual!==expected)throw new Error('补演期间已保存年表或补演供料设置变化，拒绝提交旧资料结果');
 }
 async function frTimelineRefreshUI(){
   var box=document.getElementById('fr-timeline-collaboration');if(!box)return;
@@ -1811,8 +1813,8 @@ async function ceBridgeReadGuidanceNpcState(timeline){
   return {asOf:String(ledger.worldTime || ceBridgeReadWorldTime()),records:records,eventProgress:JSON.parse(JSON.stringify(ledger.eventProgress || [])),eventWatches:JSON.parse(JSON.stringify(ledger.eventWatches || [])),columns:'沿原卡列：1名称/性别，2境界/身份，3性格，4状态，5灵根，6体质，9备注（物品装备与资源），10背景，11属性，12内心，13关系，16行为|衣着|位置|身形|外貌，26灵石，27当前动机，28短期目标，29长期目标，31战斗，32盟友，35生平经历；其余沿原卡定义。'};
 }
 
-async function ceBridgeReadStoredRows() {
-  var index = await ceBuildOriginalTimelineNpcArchiveIndex({sharedContext:{},strict:true});
+async function ceBridgeReadStoredRows(archive) {
+  var index = await ceBuildOriginalTimelineNpcArchiveIndex({sharedContext:{},strict:true,worldBookEntries:archive?.data?.state?.worldBookEntries});
   var rows = {};
   (index.records || []).forEach(function(record) {
     if (record && record.id && record.data) rows[record.id] = JSON.parse(JSON.stringify(record.data));

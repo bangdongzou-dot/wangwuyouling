@@ -849,6 +849,201 @@
         "id": "fr_living_story_dialogue",
         "findRegex": "/^[ \\t]*【对白[｜|]([^｜|】\\r\\n<>]{1,40})】[ \\t]*(「[^\\r\\n<>]+」|“[^\\r\\n<>]+”)[ \\t]*$/gm",
         "replaceString": "<blockquote class=\"fr-story-quote\"><span class=\"fr-story-speaker\">$1</span>$2</blockquote>"
+      },
+      {
+        "id": "blk_daily_start",
+        "findRegex": "<tupo_daily>",
+        "replaceString": "<div class=\"fr-story-artifact fr-story-cultivation\">"
+      },
+      {
+        "id": "blk_break_start",
+        "findRegex": "<tupo_break>",
+        "replaceString": "<div class=\"fr-story-artifact fr-story-breakthrough\">"
+      },
+      {
+        "id": "blk_head_box_start",
+        "findRegex": "<tp_head_box>",
+        "replaceString": "<div class=\"fr-story-artifact-heading\">"
+      },
+      {
+        "id": "blk_head_box_red_start",
+        "findRegex": "<tp_head_box_red>",
+        "replaceString": "<div class=\"fr-story-artifact-heading\">"
+      },
+      {
+        "id": "blk_flex_start",
+        "findRegex": "<tp_flex>",
+        "replaceString": "<div class=\"fr-story-artifact-heading\">"
+      },
+      {
+        "id": "blk_title_green_start",
+        "findRegex": "<tp_title_green>",
+        "replaceString": "<span class=\"fr-story-artifact-title\">"
+      },
+      {
+        "id": "blk_title_red_start",
+        "findRegex": "<tp_title_red>",
+        "replaceString": "<span class=\"fr-story-artifact-title\">"
+      },
+      {
+        "id": "blk_sub_start",
+        "findRegex": "<tp_sub>",
+        "replaceString": "<span class=\"fr-story-artifact-accent\">"
+      },
+      {
+        "id": "blk_grid_gray_start",
+        "findRegex": "<tp_grid_gray>",
+        "replaceString": "<div class=\"fr-story-artifact-grid\">"
+      },
+      {
+        "id": "blk_grid_red_start",
+        "findRegex": "<tp_grid_red>",
+        "replaceString": "<div class=\"fr-story-artifact-grid\">"
+      },
+      {
+        "id": "blk_row_start",
+        "findRegex": "<tp_row>",
+        "replaceString": "<div>"
+      },
+      {
+        "id": "blk_prog_box_start",
+        "findRegex": "<tp_prog_box>",
+        "replaceString": "<div class=\"fr-story-artifact-progress\">"
+      },
+      {
+        "id": "blk_visual_bar_cyan",
+        "findRegex": "<tp_bar_cyan>([\\d\\.]+)</tp_bar_cyan>",
+        "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"修炼进度\">$1%</progress>"
+      },
+      {
+        "id": "blk_visual_bar_red",
+        "findRegex": "<tp_bar_red>([\\d\\.]+)</tp_bar_red>",
+        "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"突破成功率\">$1%</progress>"
+      },
+      {
+        "id": "blk_res_box_start",
+        "findRegex": "<tp_res_box>",
+        "replaceString": "<div class=\"fr-story-artifact-result\">"
+      },
+      {
+        "id": "blk_foot_start",
+        "findRegex": "<tp_foot>",
+        "replaceString": "<div class=\"fr-story-artifact-result\">"
+      },
+      {
+        "id": "blk_span_ccc_s",
+        "findRegex": "<tp_span_ccc>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "blk_span_888_s",
+        "findRegex": "<tp_span_888>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "blk_span_444_s",
+        "findRegex": "<tp_span_444>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "blk_span_fff_s",
+        "findRegex": "<tp_span_fff>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "blk_span_red_s",
+        "findRegex": "<tp_span_red>",
+        "replaceString": "<span class=\"fr-story-status-note\">"
+      },
+      {
+        "id": "blk_span_gold_s",
+        "findRegex": "<tp_span_gold>",
+        "replaceString": "<span class=\"fr-story-artifact-accent\">"
+      },
+      {
+        "id": "blk_span_cyan_s",
+        "findRegex": "<tp_span_cyan>",
+        "replaceString": "<span class=\"fr-story-artifact-title\">"
+      },
+      {
+        "id": "blk_icon_s",
+        "findRegex": "<tp_icon>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "efee64e4-ae20-4ae9-a985-8677842a64a6",
+        "findRegex": "<c1>",
+        "replaceString": "<div class=\"fr-story-artifact fr-story-divination\">"
+      },
+      {
+        "id": "34b43858-7188-4351-bbd3-f2745b9af5f8",
+        "findRegex": "<c2>",
+        "replaceString": "<div hidden>"
+      },
+      {
+        "id": "f218849a-9200-49ba-85e7-8c124c38350e",
+        "findRegex": "<c3>",
+        "replaceString": "<div class=\"fr-story-artifact-title\">"
+      },
+      {
+        "id": "d1babf7e-96a3-4227-a972-00ef6bfd06c2",
+        "findRegex": "<c4>",
+        "replaceString": "<div class=\"fr-story-artifact-result\">"
+      },
+      {
+        "id": "7ed2f78c-d7d7-4177-bf74-67f715b6da61",
+        "findRegex": "<s>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "167f116f-85e5-41da-9de2-bf2b0941b3dd",
+        "findRegex": "<b1>",
+        "replaceString": "<b class=\"fr-story-artifact-accent\">"
+      },
+      {
+        "id": "db17797b-f363-4c81-8a8c-1b4fb2e09612",
+        "findRegex": "<b2>",
+        "replaceString": "<b class=\"fr-story-artifact-title\">"
+      },
+      {
+        "id": "2407d354-b8ab-44f8-8b2e-cfb7859ff844",
+        "findRegex": "<c5>",
+        "replaceString": "<span>"
+      },
+      {
+        "id": "d22bcc5a-58f9-407d-b726-f6136dbb9d99",
+        "findRegex": "<c6>",
+        "replaceString": "<div class=\"fr-story-artifact-result\">"
+      },
+      {
+        "id": "02e9812f-dbb9-4ba7-96fe-a0372fc36873",
+        "findRegex": "<r_gg>",
+        "replaceString": " <strong class=\"fr-story-artifact-accent\">大吉</strong>"
+      },
+      {
+        "id": "9d1d97d8-eede-4ec8-9aee-c7ce3eac22f4",
+        "findRegex": "<r_g>",
+        "replaceString": " <strong class=\"fr-story-artifact-title\">吉</strong>"
+      },
+      {
+        "id": "84676d0e-1302-48e0-b8cf-d6b2827093bd",
+        "findRegex": "<r_n>",
+        "replaceString": " <strong>平</strong>"
+      },
+      {
+        "id": "1a0f2897-bcd0-45f1-a63f-1faa47996c18",
+        "findRegex": "<r_b>",
+        "replaceString": " <strong class=\"fr-story-status-note\">凶</strong>"
+      },
+      {
+        "id": "37497bbd-bbe2-4628-a913-bc335f256f04",
+        "findRegex": "<r_bb>",
+        "replaceString": " <strong class=\"fr-story-status-note\">大凶</strong>"
+      },
+      {
+        "id": "judgment_desc_open",
+        "findRegex": "<desc>",
+        "replaceString": "<div class=\"fr-story-artifact-result\">"
       }
     ],
     "addedRuleIds": [

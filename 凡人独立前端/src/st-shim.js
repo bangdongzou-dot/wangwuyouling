@@ -232,7 +232,10 @@
     }
     if (options?.proseRequest) {
       var protocol = window.frProseRenderingProtocol();
-      if (protocol) messages.push({ role: 'system', content: protocol });
+      if (protocol) messages.push({
+        role: 'system',
+        content: window.FrNumericRules?.expand(protocol) ?? protocol,
+      });
     }
 
     /* ★★ 2026-11-01 玩家：「是快照也被放在 user 这一块了」

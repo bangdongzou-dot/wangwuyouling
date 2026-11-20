@@ -147,6 +147,113 @@
     return prose;
   }
 
+  function renderCharacterNaming(text, activeGroup, selectGroup) {
+    const sections = [{ title:'', lines:[] }];
+    for (const raw of text.split(/\r?\n/u)) {
+      const line = raw.trim();
+      const heading = line.match(/^#{1,6}\s+(.+)$/u);
+      if (heading) sections.push({ title:heading[1], lines:[] });
+      else if (line) sections.at(-1).lines.push(line);
+    }
+
+    const groups = [
+      { title:'命名须知', sections:[] },
+      { title:'姓氏与用字', headings:['姓氏池','名字字池'], sections:[] },
+      { title:'俗名与乳名', headings:['俗名与乳名参考','本轮俗名示例'], sections:[] },
+      { title:'避用与示例', headings:['禁用名单','本轮随机姓名示例'], sections:[] },
+    ];
+    for (const section of sections) {
+      if (!section.title && !section.lines.length) continue;
+      const group = groups.slice(1).find(group=>group.headings.includes(section.title)) || groups[0];
+      group.sections.push(section);
+    }
+
+    const view = document.createElement('div');
+    view.className = 'fr-naming-view';
+    const buttons = document.createElement('div');
+    buttons.className = 'fr-naming-tabs';
+    buttons.setAttribute('role','group');
+    buttons.setAttribute('aria-label','人物命名分类');
+    const reader = document.createElement('div');
+    reader.id = 'fr-naming-reader';
+    reader.className = 'fr-naming-reader';
+    view.append(buttons,reader);
+
+    function show(group, selectedButton) {
+      selectGroup(group.title);
+      for (const button of buttons.children) button.setAttribute('aria-pressed',String(button===selectedButton));
+      reader.replaceChildren();
+      for (const {title,lines} of group.sections) {
+        const disclosure = ['身份与叙事边界','角色命名触发','组合规则'].includes(title);
+        const entry = document.createElement(disclosure?'details':'section');
+        entry.className = title?'fr-naming-section':'fr-naming-intro';
+        if (title) {
+          const heading = document.createElement(disclosure?'summary':'h4');
+          heading.textContent = title;
+          entry.append(heading);
+        }
+        if (disclosure) entry.open = title==='角色命名触发';
+        const body = document.createElement('div');
+        body.className = 'fr-naming-text';
+        let list;
+        let terms;
+        for (const line of lines) {
+          const bullet = line.match(/^[-*]\s+(.+)$/u);
+          const term = group===groups[1] && bullet?.[1].match(/^([^：:]+)[：:]\s*(.+)$/u);
+          if (term) {
+            list = null;
+            if (!terms) {
+              terms = document.createElement('dl');
+              body.append(terms);
+            }
+            const row = document.createElement('div');
+            const name = document.createElement('dt');
+            const words = document.createElement('dd');
+            name.textContent = term[1];
+            for (const word of term[2].split(/(?<=、)/u)) {
+              const token = document.createElement('span');
+              token.textContent = word;
+              words.append(token);
+            }
+            row.append(name,words);
+            terms.append(row);
+          } else if (bullet) {
+            terms = null;
+            if (!list) {
+              list = document.createElement('ul');
+              body.append(list);
+            }
+            const item = document.createElement('li');
+            item.textContent = bullet[1];
+            list.append(item);
+          } else {
+            list = terms = null;
+            const paragraph = document.createElement('p');
+            paragraph.textContent = title?line:line.replace(/^【正文人物命名】\s*/u,'');
+            body.append(paragraph);
+          }
+        }
+        entry.append(body);
+        reader.append(entry);
+      }
+    }
+
+    let activeButton;
+    for (const group of groups.filter(group=>group.sections.length)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = group.title;
+      button.setAttribute('aria-pressed','false');
+      button.setAttribute('aria-controls',reader.id);
+      button.onclick = () => show(group,button);
+      buttons.append(button);
+      if (group.title===activeGroup) activeButton = button;
+    }
+    (activeButton||buttons.firstElementChild)?.click();
+    buttons.hidden = buttons.childElementCount<2;
+    return view;
+  }
+
   function open() {
     if (document.getElementById('fr-numeric-dialog')?.open) return;
     const dialog = document.createElement('dialog');
@@ -197,10 +304,15 @@
     const drafts = new Map();
     let selected = '';
     let selectedRealm = '';
+    let namingGroup = '';
     const status = text => { message.textContent = text; };
     function renderOverview(rule, editing=false) {
       const overview = find('[data-overview]');
       overview.replaceChildren();
+      if (rule.id==='character-naming') {
+        if (!editing) overview.append(renderCharacterNaming(rule.content,namingGroup,group=>{namingGroup=group;}));
+        return;
+      }
       const { tables, text, lineNumbers } = readOverview(rule);
       if (rule.id==='skill-mana-cost' && !editing) {
         const {skillCost, SKILL_REALM_ANCHORS} = CE_CORE['numeric-skill'];
@@ -311,10 +423,18 @@
       find('[data-edit]').hidden = editing;
       const rule=list().find(row=>row.id===selected);
       if(rule)renderOverview(editing?{...rule,content:content.value}:rule,editing);
-      if (editing) (find('[data-overview] input')||find('form summary'))?.focus();
+      if (selected==='character-naming') {
+        find('form details').open = editing;
+        if (editing) {
+          content.focus();
+          content.setSelectionRange(0,0);
+          content.scrollTop = 0;
+        }
+      } else if (editing) (find('[data-overview] input')||find('form summary'))?.focus();
     }
     function select(id) {
       if (selected && !form.hidden) drafts.set(selected,{content:content.value});
+      if (selected==='character-naming' && selected!==id) find('form details').open = false;
       selected = id;
       const rules = list();
       const saved = rules.find(rule => rule.id === id);
@@ -331,6 +451,7 @@
         nav.append(button);
       }
       content.value = selectedRule?.content || '';
+      find('.fr-numeric-main').dataset.rule = id;
       find('#fr-numeric-rule-name').textContent = entries.find(rule=>rule.id===id)?.name || saved?.name;
       find('[data-reference]').value = reference(id);
       find('[data-reset]').hidden = !core().numericRuleDefaults().some(rule => rule.id === id);

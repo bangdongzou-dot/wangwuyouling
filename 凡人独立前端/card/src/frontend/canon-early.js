@@ -215,7 +215,7 @@ async function frRunCanonNarrativePreparation(record,opts,config,valid){
   }
   var timeline=await frTimelineLoadForCanon('提前补演',record.traceRun),time=ceBridgeReadWorldTime(),ledger=await ceBridgeLoadLedger({worldTime:time}),rows=await ceBridgeReadStoredRows();
   if(!valid()||record.claimed)return;
-  record.timelineText=JSON.stringify(timeline);record.targetTime=time;
+  record.timelineStamp=ceBridgeCore()['canonical-json'].hashCanonicalJson(timeline);record.targetTime=time;
   record.ordinaryReady=new Promise(resolve=>{record.releaseOrdinary=resolve;});
   record.controller.signal.addEventListener('abort',function(){record.releaseOrdinary(null);},{once:true});
   var host=ceBridgeHost(record.controller.signal,record.traceRun),snapshot=typeof currentState==='object'?structuredClone(currentState):{};
@@ -250,7 +250,7 @@ async function frClaimCanonNarrativePreparation(options){
   try{
     var core=ceBridgeCore(),point=core.interval.parseTimePoint;
     matches=matches&&point(record.targetTime)===point(opts.targetTime)&&point(opts.targetTime)!==null;
-    if(matches&&!record.requiredBoundary)matches=record.sourceStamp===await frCanonEarlySourceStamp(true)&&record.timelineText===JSON.stringify(await frTimelineLoadForCanon('接续提前补演',null));
+    if(matches&&!record.requiredBoundary)matches=record.sourceStamp===await frCanonEarlySourceStamp(true)&&record.timelineStamp===ceBridgeCore()['canonical-json'].hashCanonicalJson(await frTimelineLoadForCanon('接续提前补演',null));
   }catch(_){matches=false;}
   if(!matches){if(record.requiredBoundary)throw new Error('当前正文或回合与前置边界不一致，请回到本轮对应记录继续，不能静默重跑整轮边界');frCancelCanonEarlyPreparation(record);return null;}
   record.claimed=true;return record;
@@ -332,7 +332,6 @@ async function frRunRequiredCanonPreparation(record,opts,config,valid){
   var ledger=await ceBridgeLoadLedger({worldTime:start}),rows=structuredClone(ceBridgeGetBeforeState()||await ceBridgeReadStoredRows());
   if(!valid())throw frCanonEarlyAbort();
   if(record.traceRun&&typeof frCanonTracePublish==='function')frCanonTracePublish(record.traceRun,'本轮读取的账本',{kind:'ledgerSnapshot',ledger:ledger});
-  record.timelineText=JSON.stringify(timeline);
   var host=ceBridgeHost(record.controller.signal,record.traceRun),snapshot=structuredClone(typeof currentState==='object'?currentState:{});
   host.storageSet=async function(){throw frCanonEarlyAbort();};host.stateRead=function(){return structuredClone(snapshot);};
   record.ordinaryReady=new Promise(function(resolve){record.releaseOrdinary=resolve;});

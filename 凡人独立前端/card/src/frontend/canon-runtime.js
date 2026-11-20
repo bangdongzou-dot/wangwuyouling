@@ -1846,7 +1846,7 @@ async function frPrepareCanonPrebuiltProposal(payload, input) {
   if (boundary.receipt) return reject('本楼层已经完成账本提交');
   if (commits.some(row=>!input.allowPrebuiltActors||!row.prebuiltActor))
     return reject('本楼层已有其他来源的人物补演回执');
-  var archive = JSON.parse(boundary.archiveText), targets = [], characterDelta = [], itemOperations = [], readback = {}, terminalRows = [], scenePlacements=[];
+  var archive = boundary.archive, targets = [], characterDelta = [], itemOperations = [], readback = {}, terminalRows = [], scenePlacements=[];
   var core = ceBridgeCore()['canon-prebuilt'],details=ceBridgeCore()['canon-event-details'];
   var withdrawals=payload.withdrawalReceipts||[];
   var names = [...payload.actors.map(actor => actor.name),...withdrawals.map(row=>row.name).filter(Boolean)];
@@ -2683,6 +2683,31 @@ async function frPrepareCanonBiographyCompression(input,proposal) {
   }
 }
 
+function frCanonArchiveJsonParts(archive) {
+  // Keep large string values at their JSON visit positions instead of copying
+  // inline portraits into a second, contiguous archive-sized string.
+  const largeValues = [];
+  let position = 0;
+  const json = JSON.stringify(archive, function (_key, value) {
+    // Undefined object properties are absent from JSON; array slots still count.
+    if (value === undefined && !Array.isArray(this)) return value;
+    position++;
+    if (typeof value !== 'string' || value.length < 65536) return value;
+    largeValues.push({ position, value });
+    return '';
+  });
+  return { json, largeValues };
+}
+
+function frCanonSameArchive(left, right) {
+  if (left === right) return true;
+  const a = frCanonArchiveJsonParts(left);
+  const b = frCanonArchiveJsonParts(right);
+  return a.json === b.json && a.largeValues.length === b.largeValues.length &&
+    a.largeValues.every((entry, index) =>
+      entry.position === b.largeValues[index].position && entry.value === b.largeValues[index].value);
+}
+
 async function frCaptureCanonBoundary(logId) {
   var name = currentArchiveName;
   if (!name) throw new Error('原著补演没有可绑定的当前存档');
@@ -2693,7 +2718,7 @@ async function frCaptureCanonBoundary(logId) {
     : logs.slice().reverse().find(function(l) { return l.type === 'ai' && !l.isGhost && !l.isDeepSummary && !l.isSnapshot; });
   if (!log || log.type !== 'ai') throw new Error('原著补演缺少对应的正文楼层');
   if (currentArchiveName !== name) throw new Error('已切换存档');
-  return {archiveName:name,logId:log.id,floorContent:log.content,archiveText:JSON.stringify(archive),stateText:JSON.stringify(currentState),
+  return {archiveName:name,logId:log.id,floorContent:log.content,archive,stateText:JSON.stringify(currentState),
     receipt:log.canonTurnCommit || null,settlementBase:structuredClone(log.canonSettlementBase||null),actorCommits:structuredClone(log.canonActorCommits || {}),
     prebuiltCheckpoints:structuredClone(log.canonPrebuiltCheckpoints||{})};
 }
@@ -2895,7 +2920,7 @@ async function frCommitCanonProposal(input, proposal) {
   var appliedItems = [], ordinaryEventSources = {};
   var savedActors=actorOnly?{}:proposal.prebuiltSavedActors||src.preparedCharacters?.saved||{};
   var savedBiography=Object.fromEntries(Object.entries(structuredClone(src.biography || {})).filter(function(entry){return !savedActors[entry[0]];}));
-  var committedArchiveText='',committedStateText='',committedArchiveForTrace=null,persistedActorReceipts={};
+  var committedArchive=null,committedStateText='',committedArchiveForTrace=null,persistedActorReceipts={};
   var miscReceipt = {requestedDelta:[],noOperations:true,stateChanged:false};
   var traceRun=src.signal&& typeof frCanonTraceSignals!=='undefined'?frCanonTraceSignals.get(src.signal):null;
   if(traceRun)frCanonTraceEvent(traceRun,'stage','应用变量与原子保存',{characterCommands:(proposal.characterDelta||[]).length,itemCommands:(proposal.itemOperations||[]).length,worldCommands:(proposal.miscDelta||[]).length});
@@ -2905,7 +2930,7 @@ async function frCommitCanonProposal(input, proposal) {
       var archive = await db.archives.get(boundary.archiveName);
       if(typeof src.timelineSource==='string')await frTimelineAssertSource(src.timelineSource);
       frAssertCanonInput(src);
-      if (JSON.stringify(archive) !== boundary.archiveText || JSON.stringify(currentState) !== boundary.stateText) {
+      if (!frCanonSameArchive(archive, boundary.archive) || JSON.stringify(currentState) !== boundary.stateText) {
         throw new Error('补演期间存档或正文已变化，拒绝覆盖新状态');
       }
       var log = archive.data.logs.find(function(l) { return l.id === boundary.logId; });
@@ -3200,7 +3225,7 @@ async function frCommitCanonProposal(input, proposal) {
       await db.archives.put(archive);
       frAssertCanonCommit();
       var verifiedArchive=await db.archives.get(boundary.archiveName);
-      if(JSON.stringify(verifiedArchive)!==JSON.stringify(archive)){
+      if(!frCanonSameArchive(verifiedArchive, archive)){
         // 补演与普通演化并行跑，普通线的 db.archives.put 可能落进这次回读里，
         // 回读到的是它刚写的版本。此时只确认本次写入的关键字段确实落库——
         // 其他字段被并行改动属于正常并发，不是补演保存失败。
@@ -3211,9 +3236,8 @@ async function frCommitCanonProposal(input, proposal) {
         const landedActors=Object.entries(persistedActorReceipts).every(([id,receipt])=>JSON.stringify(confirmedLog?.canonActorCommits?.[id])===JSON.stringify(receipt));
         if(!landedLedger||!landedTurn||!landedActors)throw new Error('补演保存回读不一致，拒绝确认完成');
       }
-      // Only actor-by-actor continuation needs a new serialized boundary. Full-turn
-      // tracing can use the already read-back archive instead of stringify + parse.
-      if(actorOnly){committedArchiveText=JSON.stringify(verifiedArchive);committedStateText=JSON.stringify(currentState);}
+      // Keep the verified IndexedDB read for actor continuation or full-turn tracing.
+      if(actorOnly){committedArchive=verifiedArchive;committedStateText=JSON.stringify(currentState);}
       else if(traceRun)committedArchiveForTrace=verifiedArchive;
     });
   } catch (error) {
@@ -3250,7 +3274,7 @@ async function frCommitCanonProposal(input, proposal) {
       frCanonTraceEvent(traceRun,commitTraceType,actorOnly?'人物数据库事务已提交':'数据库事务已提交',{receiptId:receiptId,logId:boundary.logId,actorId:src.actorReceipt?.actorId,name:src.actorReceipt?.name,applied:{items:appliedItems,misc:proposal.miscDelta||[],miscReceipt:miscReceipt,biography:savedBiography,biographyCompression:proposal.biographyCompression?{updatedIds:proposal.biographyCompression.updatedIds || [],names:proposal.biographyCompression.names || []}:null}});
     }catch(recordError){console.warn('[原著补演] 存档已提交，结果记录显示失败:',recordError);}
   }
-  if(actorOnly){boundary.archiveText=committedArchiveText;boundary.stateText=committedStateText;boundary.actorCommits=boundary.actorCommits || {};Object.assign(boundary.actorCommits,persistedActorReceipts);}
+  if(actorOnly){boundary.archive=committedArchive;boundary.stateText=committedStateText;boundary.actorCommits=boundary.actorCommits || {};Object.assign(boundary.actorCommits,persistedActorReceipts);}
   else{_ceCanonLedgerPending = null; window._ceCanonLedgerSnapshot = structuredClone(src.ledger);}
   try {
     var committed = await db.archives.get(boundary.archiveName);

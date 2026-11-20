@@ -3804,7 +3804,7 @@ var FR_MORTAL_NAMING_RULE = {
   "id": "fr-mortal-naming-v1",
   "name": "修仙姓名、俗名与原著身份边界",
   "enabled": true,
-  "content": "【Mortal 角色命名规则】本条仅统一新人物的命名风格，优先于旧命名示例；不改变原著身份、已有角色、阶段权限与实际因果。\n\n## 身份、时态与落库边界\n- 先辨同一人物，再取姓名。当前存档已有正式姓名、稳定俗名/乳名、已确认原著人物的确证姓名或唯一稳定名号均沿用，并复用原ID；原著已知人物（包括禁用名单中的人物）不得为避撞名改名。禁用名单只防无依据的新原创角色冒用知名姓名。\n- 只有本阶段原有权限允许建立、且正文或本节点已确认实际存在的独立新人物才命名；仅提名、传闻、未来登场、尚未出生的胎儿不因本规则创建。姓名库不授权额外造人、强制登场、发放能力或改变剧情。\n- 描述性称呼先与全部角色索引、在场及离场档案核对；若指向已有角色则沿用原姓名和ID，不另建同一人。不知道私名且已有能唯一稳定指向该人的公开名号时保留名号，不因“姓+名”要求臆造私名。\n- 仅对确需建档但尚无具体姓名/稳定俗名/唯一稳定名号的新个体，保留已明示姓氏和身份，组合原创姓名。普通NPC演化、物品管理及返场阶段不借此重新命名；已有旧存档与旧草稿不批量改名。\n- 新生儿以正文已命名、父母明确姓氏与家族习惯优先；无明确取姓习惯时可沿父姓，父不明而母姓明确时沿母姓；两者不明不虚构亲属身份，可用稳定乳名。姓名字风格只作参考，不凭姓名反推性别、立场、身体特征或经历。\n- 新候选名须查全部角色索引、在场人物、离场人物及本轮已选名，避免给不同新人物重名；同一已知人物重复出现属于复用，不是改名理由。当前未提供完整索引时只据可见材料核查，不声称已检索未提供的档案。\n- 命名不泄露真名：后台确证身份不等于角色或玩家已知，正文称呼与人物内心仍遵守各自认知边界。玩家实际影响、已成立事实、原有创建/输出协议及命令白名单不变。\n\n下列命名触发、禁用模式与原创组合要求均服从上面的身份边界，只适用于上述确需命名的新个体；已有姓名、稳定俗名及唯一稳定公开名号不在改名范围。“只给出职务/泛称”不包括已确证唯一身份的稳定公开名号。\n\n## 角色命名触发\n- 新建 NPC、婴儿、临时具名修士、家族成员或需要把描述性称呼落库为角色名时，必须使用具体姓名或稳定俗名。\n- 禁止把“男青年”“神秘老者”“黑衣剑修”“紫袍长老”“某氏”“黄老”“掩月宗女弟子”等描述性称呼直接当作姓名。\n- 若正文或人物档案已经明确给出姓名或二丫、大柱这类具体、稳定的俗名与乳名，则沿用，不因缺少姓氏而改名；若只给出姓氏、泛称、职务、外貌、门派或传闻，则保留已明示事实，重新生成原创姓名。\n\n## 姓氏池\n- 复姓（必须支持）：南宫、慕容、上官、欧阳、公孙、独孤、东方、西门、令狐、诸葛、司徒、司马、皇甫、轩辕、尉迟、澹台、百里、闻人、长孙、宇文、赫连、夏侯、淳于、端木、钟离、公仪、公冶、申屠、仲孙、太叔、宗政、濮阳、巫马、公良、乐正、夹谷、宰父、谷梁、拓跋、呼延、东郭、第五、北乡\n- 单姓：云、风、叶、林、江、苏、白、柳、沈、陆、顾、秦、萧、楚、宋、韩、冷、凌、墨、燕、颜、谢、裴、魏、卫、商、慕、君、戚、傅、钟、严、黄、赵、钱、孙、李、周、吴、郑、王、冯、陈、褚、蒋、杨、朱、许、何、吕、施、张、孔、曹、金、陶、姜、邹、喻、柏、水、窦、章、尤、葛、奚、范、彭、郎、鲁、韦、昌、马、苗、凤、花、方、俞、任、袁、鲍、史、唐、费、廉、岑、薛、雷、贺、倪、汤、滕、殷、罗、毕、郝、邬、安、常、乐、于、时、皮、卞、齐、康、伍、余、元、卜、孟、平、尹、姚、邵、湛、汪、祁、毛、禹、狄、米、贝、明、臧、伏、成、戴、谈、庞、熊、纪、舒、屈、项、祝、董、梁、杜、阮、蓝、闵、席、季、麻、强、贾、路、娄、危、童、翟、宁、仇、裘、缪、解、应、宗、丁、宣、邓、郁、单、杭、洪、包、诸、左、石、崔、吉、龚、程、邢、荣、翁、荀、羊、於、惠、甄、曲、家、封、芮、羿、储、靳、汲、邴、糜、松、井、段、富、巫、乌、焦、巴、弓、牧、隗、山、谷、车、侯、宓、蓬、全、郗、班、仰、秋、仲、伊、宫、仝、栾、暴、甘、钭、厉、戎、祖、武、符、刘、景、詹、束、龙、幸、司、韶、黎、蓟、薄、印、宿、怀、蒲、邰、从、鄂、索、咸、籍、赖、卓、蔺、屠、蒙、池、乔、阴、胥、能、苍、双、闻、莘、党、翦、谭、贡、劳、逄、姬、申、扶、堵、冉、宰、郦、雍、郤、璩、桑、桂、濮、牛、寿、通、边、扈、冀、浦、尚、农、温、别、庄\n\n## 名字字池\n- 天象：星、辰、月、霄、霜、雪、云、雾、岚、虹、霁、晴、曦、昊、旻、曜、晖、晟、景、昭、晏、晞、玄、斗、参、衡、阙、宸、阑\n- 自然：风、雷、电、雨、露、霞、烟、尘、影、光、炎、寒、冰、焰、松、竹、梅、兰、荷、莲、芷、蘅、薇、苓、棠、槿、檀、桂、棂、枫、桑、桐、萤、鹿、鹤、鸿、鸾、翎、羽、素\n- 山水：川、河、溪、泉、渊、峰、岳、崖、岩、澜、涛、潮、澈、泓、洲、沧、溟、淮、洛、湘、沅、潇、汀、屿、岭、峦、嶂、岫、岑、壑\n- 玉石：瑾、瑜、琼、瑶、璃、珀、璧、琅、珏、琰、玦、珩、璟、琛、璇、璎、珞、玑、珑、琬、瑛、琦、璠、瑄、瑟、瑕、琪、琮、璨、玥\n- 品德：清、雅、静、宁、逸、悠、澹、远、默、寂、素、淡、虚、玄、真、明、慎、微、止、观、照、怀、若、知、行、守、衍、朴、和、安、定、诚、谦、恕、允、靖\n- 阴暗/邪修：殇、冥、幽、魄、厄、劫、煞、邪、诡、狱、渊、噬、戮、诛、烬、烛、魇、枭、魁、獠、刃、锋、绝、裂、崩、劾、屠、厉、灭、阴\n- 女性柔雅：婉、嫣、妍、姝、娴、绮、曼、凝、泠、沁、菡、萱、宛、依、纾、韵、歌、舞、盈、柔、怜、惜、念、语、诗、音、黛、绫、霓、含\n- 男性沉雄：钧、衡、岳、铮、峥、嵘、骁、朔、渊、玄、尘、野、阔、沉、砚、渺、舟、策、临、照、弈、衍、澈、昭、庭、砺、嶙、越、苍、闻\n\n## 俗名与乳名参考\n- 不含姓氏的完整词组：铁枪、狗蛋、二狗、大牛、三柱、二丫、大柱、铁柱、石头、黑子、瘸子、胖丫、富贵、来福、平安、满仓、有田\n- 根据人物出身、家族习惯、性别与当前语境选择雅名或俗名。乡村凡人、民间生活与乡土出身人物可参考俗名，修士也可保留原有俗名；不得仅因境界变化改名。\n- 排行 + 事物：如二狗、大牛、三柱；特征 + 称谓：如黑子、瘸子、胖丫；愿望寄托：如富贵、来福、平安。词组按整体使用，不与雅名字池逐字混拼。\n- 特征型称呼须符合已知人物事实及合理的乡里称呼，不因名字凭空添加身体特征或经历；已知正式姓名时继续沿用，绰号只作合适语境下的称呼。\n- 有明确姓氏时沿用姓氏；民间俗名通常可用单姓 + 完整俗名词组。没有明确姓氏时，也可使用二丫、大柱这类具体、稳定的俗名或乳名，不必凭空补姓。\n\n## 组合规则\n- 常规雅名结构为“姓 + 双字名”，高阶修士、前辈、杀伐气重者可用“姓 + 单字名”；神秘人物可另有道号，角色名仍优先具体姓名或稳定俗名。\n- 男性偏天象、山水、品德、沉雄字；女性偏玉石、自然、柔雅、品德字；正派偏清、逸、玄、瑾、琼、霁、澈；邪派偏殇、冥、幽、煞、诛、戮、厄。\n- 创建前必须检查全部角色索引、在场人物、离场人物和本轮候选名，避免完全重复，也避免短期集中出现同一字头或同一姓氏。\n- 内置姓名库、俗名词组与本轮姓名示例只用于参考风格，不是白名单、候选清单或必选列表；不需要从中挑一个，也不得机械照抄。\n- 正式输出必须根据本轮角色身份、性别、立场、门派、父母姓氏和已有姓名自行组合自然的新姓名。\n\n## 禁用名单\n- 未有明确完整姓名证据时，禁止新 NPC 命中：韩立、南宫婉、厉飞雨、墨彩环、紫灵、令狐老祖、元瑶、银月、柳玉、董萱儿、陈巧倩、慕沛灵、宋蒙、曲魂、辛如音、妍丽、文思月、凌玉灵、温青、风希、叶凡、萧炎、林动、唐三、楚枫、云天河、柳如烟、张小凡、王林、方寒、石昊、牧尘、洛璃、云韵、美杜莎\n\n## 本轮随机姓名示例\n1. 澹台诡曦；2. 刘霜和；3. 长孙萱棂；4. 蒙幽清；5. 公孙岩；6. 宗政屿鹤；7. 冉澈砺；8. 宣苍怜；9. 濮影潇；10. 许焰慎；11. 邬砚；12. 夹谷岭；13. 尉迟娴瑾；14. 公冶骁月；15. 北乡珩嶂；16. 寿琬琼；17. 拓跋朴虚；18. 韩远阔；19. 刘含野；20. 成雪恕\n\n## 本轮俗名示例\n鲁大柱、路胖丫、宋大柱、刘黑子、江瘸子"
+  "content": "【Mortal 角色命名规则】\n先核对身份再建档。已有正式姓名、稳定俗名、乳名或能唯一指向该人的公开名号，沿用原称呼并复用原ID。原著已知人物使用确证姓名，不因重名或避用名单改名。无确证私名时，保留稳定名号和原有认知边界。\n依据正文及当前节点已确认的事实建档。描述性称呼先在已知人物索引及在场、离场档案核对；职务、外貌、传闻或未来登场本身不构成新人物。只有原规则已允许建档、确须独立记录且正文未给出姓名的情形，才按已知姓氏和人物背景补一个具体姓名或稳定乳名；不虚构亲属身份。\n同一人物返场时沿用姓名。已有旧存档与旧草稿不批量改名。沿用本阶段创建权限、输出协议与命令白名单。"
 };
 var FR_MORTAL_NAMING_ENTRY_PATCHES = [
   {
@@ -3865,16 +3865,30 @@ function frMortalNamingMatch(text, length, hash) {
 }
 function frAdaptMortalNamingRules(preset) {
   var meta=frPresetCompatMeta(preset);
+  var previousLength=3397;
+  var previousHash='18e096f482855e76a87db0f31ef8134246c0d576604e2f5eb35f5f99ed7d0092';
+  var currentContent=FR_MORTAL_NAMING_RULE.content;
+  var currentHash=frCompatSha256Hex(currentContent);
+  function upgradeExisting(rules, scope) {
+    if(!Array.isArray(rules))return;
+    var matches=rules.filter(function(r){return r&&r.id===FR_MORTAL_NAMING_RULE.id;});
+    var rule=matches[0];
+    if(matches.length!==1||!frMortalNamingMatch(rule.content,previousLength,previousHash))return;
+    frPresetCompatBackup(meta,scope,rule);
+    rule.content=currentContent+rule.content.slice(previousLength);
+  }
   function ensure(rules, anchor, afterId, scope) {
     var existing=rules.filter(function(r){return r&&r.id===FR_MORTAL_NAMING_RULE.id;});
     if(existing.length){
-      var known=existing.length===1&&frMortalNamingMatch(existing[0].content,FR_MORTAL_NAMING_RULE.content.length,frCompatSha256Hex(FR_MORTAL_NAMING_RULE.content));
+      var rule=existing[0];
+      var known=existing.length===1&&frMortalNamingMatch(rule.content,currentContent.length,currentHash);
       if(!known)existing.forEach(function(r){frPresetCompatWarning(meta,scope,r,'mortal_naming_custom_contract_preserved');});
       return known && existing[0].enabled!==false;
     }
     var copy=frPresetCompatCopy(FR_MORTAL_NAMING_RULE);copy.enabled=anchor.enabled!==false;
     var index=rules.findIndex(function(r){return r&&r.id===afterId;});rules.splice(index<0?rules.length:index+1,0,copy);return true;
   }
+  upgradeExisting(preset.entrySharedRules,'entrySharedRules');
   var entry=preset.prompts&&preset.prompts.entry_all_focus,entryRules=entry&&entry.rules;
   if(Array.isArray(entryRules)) {
     var matches=entryRules.filter(function(r){return r&&r.id==='entry-rules-all-focus';});
@@ -3889,12 +3903,13 @@ function frAdaptMortalNamingRules(preset) {
     }else matches.forEach(function(r){frPresetCompatWarning(meta,'entry_all_focus',r,'mortal_naming_ambiguous_anchor_preserved');});
   }
   var merged=preset.prompts&&preset.prompts.merged_variables,mergedRules=merged&&merged.rules;
+  upgradeExisting(mergedRules,'merged_variables');
   if(Array.isArray(mergedRules)){
     var anchors=mergedRules.filter(function(r){return r&&r.id==='mv-3';});
     if(anchors.length===1&&FR_MORTAL_NAMING_MERGED_ANCHORS.some(function(a){return frMortalNamingMatch(anchors[0].content,a.length,a.hash);}))ensure(mergedRules,anchors[0],'mv-3','merged_variables');
     else anchors.forEach(function(r){frPresetCompatWarning(meta,'merged_variables',r,'mortal_naming_unknown_anchor_preserved');});
   }
-  meta.mortalNamingVersion=1;
+  meta.mortalNamingVersion=2;
   return preset;
 }
 

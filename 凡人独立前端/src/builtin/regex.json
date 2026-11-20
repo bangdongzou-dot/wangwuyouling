@@ -229,7 +229,7 @@
       "id": "blk_daily_start",
       "scriptName": "3.7_积木_日常容器_开",
       "findRegex": "<tupo_daily>",
-      "replaceString": "<div class=\"fr-story-artifact fr-story-cultivation\">",
+      "replaceString": "<div class=\"fr-story-cultivation\" style=\"background:linear-gradient(145deg, #151a18 0%, #050505 100%);border:1px solid #3d554d;outline:1px dashed #3d554d;outline-offset:3px;border-radius:2px;padding:8px 12px;margin:10px auto;font-family:'KaiTi',serif;color:#f0fff5;text-shadow:0 1px 1px #000;box-shadow:0 5px 20px rgba(0,0,0,0.8);width:94%;max-width:660px;box-sizing:border-box;line-height:1.3;position:relative;overflow:visible;\"><div class=\"fr-cultivation-seal\" style=\"position:absolute;top:-8px;left:-6px;padding:2px 6px;background:linear-gradient(135deg, #2e8b57, #006400);border:1px solid #98fb98;border-radius:4px;color:#fff;font-size:0.8em;box-shadow:2px 2px 5px rgba(0,0,0,0.5);z-index:10;transform:rotate(-5deg);\">🍵 修行</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -249,7 +249,7 @@
       "id": "blk_break_start",
       "scriptName": "3.7_积木_突破容器_开",
       "findRegex": "<tupo_break>",
-      "replaceString": "<div class=\"fr-story-artifact fr-story-breakthrough\">",
+      "replaceString": "<div style=\"background:linear-gradient(145deg, #1f0f0f 0%, #050000 100%);border:1px solid #8c4d4d;outline:1px solid #8c4d4d;outline-offset:4px;border-radius:2px;padding:8px 12px;margin:10px auto;font-family:'KaiTi',serif;color:#fff0e0;text-shadow:0 1px 1px #000;box-shadow:0 5px 20px rgba(0,0,0,0.8);width:94%;max-width:660px;box-sizing:border-box;line-height:1.3;position:relative;overflow:visible;\"><div style=\"position:absolute;top:-12px;left:-8px;width:36px;height:36px;background:linear-gradient(135deg, #ffd700, #b8860b);border:1px solid #fff;border-radius:2px;transform:rotate(45deg);box-shadow:2px 4px 6px rgba(0,0,0,0.6);z-index:10;display:flex;align-items:center;justify-content:center;\"><div style=\"transform:rotate(-45deg);color:#8b0000;font-weight:bold;font-size:1.1em;\">破</div></div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -269,7 +269,7 @@
       "id": "blk_head_box_start",
       "scriptName": "3.7_积木_头部盒子_灰_开",
       "findRegex": "<tp_head_box>",
-      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "replaceString": "<div style=\"display:flex;justify-content:space-between;border-bottom:1px dashed #333;padding-bottom:2px;margin-bottom:4px;align-items:center;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -289,7 +289,7 @@
       "id": "blk_head_box_red_start",
       "scriptName": "3.7_积木_头部盒子_红_开",
       "findRegex": "<tp_head_box_red>",
-      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "replaceString": "<div style=\"display:flex;justify-content:space-between;border-bottom:1px dashed #5c1818;padding-bottom:8px;margin-bottom:10px;align-items:center;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -309,7 +309,7 @@
       "id": "blk_flex_start",
       "scriptName": "3.7_积木_Flex布局_开",
       "findRegex": "<tp_flex>",
-      "replaceString": "<div class=\"fr-story-artifact-heading\">",
+      "replaceString": "<div style=\"display:contents;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -329,7 +329,7 @@
       "id": "blk_title_green_start",
       "scriptName": "3.7_积木_标题文本_绿_开",
       "findRegex": "<tp_title_green>",
-      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "replaceString": "<span style=\"color:#66cdaa;font-weight:bold;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -349,7 +349,7 @@
       "id": "blk_title_red_start",
       "scriptName": "3.7_积木_标题文本_红_开",
       "findRegex": "<tp_title_red>",
-      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "replaceString": "<span style=\"font-weight:bold;font-size:1.1em;color:#ff4d4d;text-shadow:0 0 4px #500;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -369,7 +369,7 @@
       "id": "blk_sub_start",
       "scriptName": "3.7_积木_副标题_开",
       "findRegex": "<tp_sub>",
-      "replaceString": "<span class=\"fr-story-artifact-accent\">",
+      "replaceString": "<span style=\"font-size:0.8em;color:#aaa;text-shadow:0 1px 1px #000;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -389,7 +389,7 @@
       "id": "blk_grid_gray_start",
       "scriptName": "3.7_积木_Grid布局_灰_开",
       "findRegex": "<tp_grid_gray>",
-      "replaceString": "<div class=\"fr-story-artifact-grid\">",
+      "replaceString": "<div style=\"font-size:1em;line-height:1.4;display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:2px;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -409,7 +409,7 @@
       "id": "blk_grid_red_start",
       "scriptName": "3.7_积木_Grid布局_红_开",
       "findRegex": "<tp_grid_red>",
-      "replaceString": "<div class=\"fr-story-artifact-grid\">",
+      "replaceString": "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:1em;line-height:1.4;background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -429,7 +429,7 @@
       "id": "blk_row_start",
       "scriptName": "3.7_积木_行元素_开",
       "findRegex": "<tp_row>",
-      "replaceString": "<div>",
+      "replaceString": "<div style=\"color:#888;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -449,7 +449,7 @@
       "id": "blk_prog_box_start",
       "scriptName": "3.7_积木_进度条盒子_开",
       "findRegex": "<tp_prog_box>",
-      "replaceString": "<div class=\"fr-story-artifact-progress\">",
+      "replaceString": "<div style=\"grid-column:span 2;margin-top:2px;padding:2px 0;display:block;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -469,7 +469,7 @@
       "id": "blk_visual_bar_cyan",
       "scriptName": "3.7_积木_动态进度条_青",
       "findRegex": "<tp_bar_cyan>([\\d\\.]+)</tp_bar_cyan>",
-      "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"修炼进度\">$1%</progress>",
+      "replaceString": "<div style=\"display:flex;align-items:center;height:30px;margin-top:6px;\"><div style=\"width:24px;height:24px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #fff, #00ffcc, #004d33);box-shadow:0 0 10px #00ffcc, 0 0 2px #fff inset;margin-right:8px;flex-shrink:0;z-index:2;border:1px solid rgba(255,255,255,0.4);\"></div><div style=\"flex-grow:1;height:18px;background:rgba(0,0,0,0.6);border-radius:9px;box-shadow:inset 0 1px 4px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden;\"><div style=\"width:$1%;height:100%;background:linear-gradient(90deg, #004d33, #00ff99);box-shadow:0 0 12px #00ff99;border-radius:9px;transition:width 1s ease;position:relative;\"><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.15) 5px, rgba(255,255,255,0.15) 8px);mix-blend-mode:overlay;\"></div><div style=\"position:absolute;top:0;left:0;right:0;height:40%;background:linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);border-radius:9px 9px 0 0;\"></div></div><div style=\"position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.75em;color:#fff;text-shadow:0 0 2px #000, 0 0 1px #000;font-weight:900;letter-spacing:1px;z-index:5;\">当前进度 $1%</div></div></div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -479,7 +479,7 @@
       "id": "blk_visual_bar_red",
       "scriptName": "3.7_积木_动态进度条_红",
       "findRegex": "<tp_bar_red>([\\d\\.]+)</tp_bar_red>",
-      "replaceString": "<progress max=\"100\" value=\"$1\" aria-label=\"突破成功率\">$1%</progress>",
+      "replaceString": "<div style=\"display:flex;align-items:center;height:30px;margin-top:6px;\"><div style=\"width:24px;height:24px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #fff7cc, #ff4500, #550000);box-shadow:0 0 10px #ff4500, 0 0 2px #fff inset;margin-right:8px;flex-shrink:0;z-index:2;border:1px solid rgba(255,215,0,0.5);\"></div><div style=\"flex-grow:1;height:18px;background:rgba(0,0,0,0.6);border-radius:9px;box-shadow:inset 0 1px 4px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden;\"><div style=\"width:$1%;height:100%;background:linear-gradient(90deg, #550000, #ff3300, #ffcc00);box-shadow:0 0 12px #ff4500;border-radius:9px;transition:width 1s ease;position:relative;\"><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(255,215,0,0.2) 6px, rgba(255,215,0,0.2) 8px);mix-blend-mode:overlay;\"></div><div style=\"position:absolute;top:0;left:0;right:0;height:40%;background:linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);border-radius:9px 9px 0 0;\"></div></div><div style=\"position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.75em;color:#fff;text-shadow:0 0 2px #000, 0 0 1px #000;font-weight:900;letter-spacing:1px;z-index:5;\">突破概率 $1%</div></div></div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -489,7 +489,7 @@
       "id": "blk_res_box_start",
       "scriptName": "3.7_积木_结果条_开",
       "findRegex": "<tp_res_box>",
-      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "replaceString": "<div style=\"margin-top:10px;text-align:center;font-weight:bold;font-size:1.2em;padding:8px;background:linear-gradient(90deg,transparent,rgba(139,0,0,0.3),transparent);border-top:1px solid #5c1818;border-bottom:1px solid #5c1818;color:#ff4d4d;text-shadow:0 0 4px #500;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -509,7 +509,7 @@
       "id": "blk_foot_start",
       "scriptName": "3.7_积木_页脚_开",
       "findRegex": "<tp_foot>",
-      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "replaceString": "<div style=\"margin-top:4px;font-size:0.8em;color:#999;text-shadow:0 1px 1px #000;border-top:1px dashed rgba(255,255,255,0.1);padding-top:2px;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -529,7 +529,7 @@
       "id": "blk_span_ccc_s",
       "scriptName": "3.7_积木_文字CCC_开",
       "findRegex": "<tp_span_ccc>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"color:#ccc;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -549,7 +549,7 @@
       "id": "blk_span_888_s",
       "scriptName": "3.7_积木_文字888_开",
       "findRegex": "<tp_span_888>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"color:#888;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -569,7 +569,7 @@
       "id": "blk_span_444_s",
       "scriptName": "3.7_积木_文字444_开",
       "findRegex": "<tp_span_444>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"font-size:0.9em;color:#bbb;text-shadow:0 1px 1px #000;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -589,7 +589,7 @@
       "id": "blk_span_fff_s",
       "scriptName": "3.7_积木_文字FFF_开",
       "findRegex": "<tp_span_fff>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"color:#fff;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -609,7 +609,7 @@
       "id": "blk_span_red_s",
       "scriptName": "3.7_积木_文字红_开",
       "findRegex": "<tp_span_red>",
-      "replaceString": "<span class=\"fr-story-status-note\">",
+      "replaceString": "<span style=\"color:#ff6666;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -629,7 +629,7 @@
       "id": "blk_span_gold_s",
       "scriptName": "3.7_积木_文字金_开",
       "findRegex": "<tp_span_gold>",
-      "replaceString": "<span class=\"fr-story-artifact-accent\">",
+      "replaceString": "<span style=\"color:#e6c35c;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -649,7 +649,7 @@
       "id": "blk_span_cyan_s",
       "scriptName": "3.7_积木_文字青_开",
       "findRegex": "<tp_span_cyan>",
-      "replaceString": "<span class=\"fr-story-artifact-title\">",
+      "replaceString": "<span style=\"color:#66ffcc;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -669,7 +669,7 @@
       "id": "blk_icon_s",
       "scriptName": "3.7_积木_图标_开",
       "findRegex": "<tp_icon>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"display:inline-block;margin-right:4px;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -709,7 +709,7 @@
       "id": "efee64e4-ae20-4ae9-a985-8677842a64a6",
       "scriptName": "天机推演_主容器",
       "findRegex": "<c1>",
-      "replaceString": "<div class=\"fr-story-artifact fr-story-divination\">",
+      "replaceString": "<div style=\"background:radial-gradient(circle at 50% 30%, #1f1815 0%, #0d0a09 100%);border:1px solid #5c4d3c;outline:1px solid #5c4d3c;outline-offset:4px;padding:10px 12px;margin:20px auto 40px auto;font-family:'KaiTi',serif;color:#e6c35c;box-shadow:0 15px 40px rgba(0,0,0,0.9), 0 0 0 5px #1a1512;position:relative;font-size:1em;line-height:1.3;box-sizing:border-box;width:92%;max-width:660px;text-align:center;overflow:visible;display:block;clear:both;\"><div style=\"position:absolute;top:-10px;left:-10px;width:32px;height:32px;background:radial-gradient(circle at 30% 30%, #d93025, #8b0000);border:2px dashed #ff6b6b;border-radius:50%;box-shadow:2px 4px 8px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;color:#ffd700;font-weight:bold;font-size:1.2em;transform:rotate(-15deg);z-index:10;text-shadow:0 1px 1px #500;\">道</div>",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -732,7 +732,7 @@
       "id": "34b43858-7188-4351-bbd3-f2745b9af5f8",
       "scriptName": "天机推演_装饰性“道”字",
       "findRegex": "<c2>",
-      "replaceString": "<div hidden>",
+      "replaceString": "<div style=\"position:absolute;top:5px;right:10px;font-size:2rem;color:rgba(180,145,65,0.05);font-weight:bold;pointer-events:none\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -755,7 +755,7 @@
       "id": "f218849a-9200-49ba-85e7-8c124c38350e",
       "scriptName": "天机推演_标题栏",
       "findRegex": "<c3>",
-      "replaceString": "<div class=\"fr-story-artifact-title\">",
+      "replaceString": "<div style=\"border-bottom:1px dashed #443c29;padding-bottom:6px;margin-bottom:10px;font-weight:bold;font-size:1.1em\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -778,7 +778,7 @@
       "id": "d1babf7e-96a3-4227-a972-00ef6bfd06c2",
       "scriptName": "天机推演_数值计算区",
       "findRegex": "<c4>",
-      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "replaceString": "<div style=\"background:rgba(0,0,0,0.3);padding:6px;border:1px solid #2e261f;font-family:monospace;text-align:center;border-radius:2px;display:flex;justify-content:center;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.95em;margin-bottom:2px;\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -798,7 +798,7 @@
       "id": "7ed2f78c-d7d7-4177-bf74-67f715b6da61",
       "scriptName": "天机推演_标签文本 (开始)",
       "findRegex": "<s>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"color:#8a7e66;white-space:nowrap\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -824,7 +824,7 @@
       "id": "167f116f-85e5-41da-9de2-bf2b0941b3dd",
       "scriptName": "天机推演_DC数值",
       "findRegex": "<b1>",
-      "replaceString": "<b class=\"fr-story-artifact-accent\">",
+      "replaceString": "<b style=\"color:#d97706;font-size:1.1em\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -850,7 +850,7 @@
       "id": "db17797b-f363-4c81-8a8c-1b4fb2e09612",
       "scriptName": "天机推演_Roll数值",
       "findRegex": "<b2>",
-      "replaceString": "<b class=\"fr-story-artifact-title\">",
+      "replaceString": "<b style=\"color:#e5c07b;font-size:1.1em\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -876,7 +876,7 @@
       "id": "2407d354-b8ab-44f8-8b2e-cfb7859ff844",
       "scriptName": "天机推演_加成详情",
       "findRegex": "<c5>",
-      "replaceString": "<span>",
+      "replaceString": "<span style=\"color:#8a7e66;white-space:nowrap\">",
       "disabled": false,
       "runOnEdit": true,
       "markdownOnly": true,
@@ -899,7 +899,7 @@
       "id": "d22bcc5a-58f9-407d-b726-f6136dbb9d99",
       "scriptName": "天机推演_最终结果",
       "findRegex": "<c6>",
-      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "replaceString": "<div style=\"margin-top:6px;font-size:1.05em;border-top:1px dotted #333;padding-top:4px;text-align:center\">",
       "runOnEdit": true,
       "placement": [
         2
@@ -919,7 +919,7 @@
       "id": "02e9812f-dbb9-4ba7-96fe-a0372fc36873",
       "scriptName": "天机推演_结果：大吉",
       "findRegex": "<r_gg>",
-      "replaceString": " <strong class=\"fr-story-artifact-accent\">大吉</strong>",
+      "replaceString": "<div style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border:2px solid #ffd700;box-shadow:inset 0 0 20px rgba(255,215,0,0.3);background:radial-gradient(circle at 0% 0%, rgba(255,215,0,0.4), transparent 30%), radial-gradient(circle at 100% 0%, rgba(255,215,0,0.4), transparent 30%), radial-gradient(circle at 0% 100%, rgba(255,215,0,0.4), transparent 30%), radial-gradient(circle at 100% 100%, rgba(255,215,0,0.4), transparent 30%);\"></div><div style=\"position:relative;z-index:1;width:100%;margin-top:12px;padding:8px;font-weight:bold;font-size:1.2em;color:#fff;text-shadow:0 0 5px #ffd700, 0 0 10px #ff8800;display:flex;justify-content:center;align-items:center;\"><span style=\"font-size:1.4em;margin-right:8px;filter:drop-shadow(0 0 8px gold);\">✨</span> 大吉 · 鸿运</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -929,7 +929,7 @@
       "id": "9d1d97d8-eede-4ec8-9aee-c7ce3eac22f4",
       "scriptName": "天机推演_结果：吉",
       "findRegex": "<r_g>",
-      "replaceString": " <strong class=\"fr-story-artifact-title\">吉</strong>",
+      "replaceString": "<div style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border:1px solid #4ade80;box-shadow:inset 0 0 20px rgba(74,222,128,0.2);background:radial-gradient(circle at 0% 0%, rgba(74,222,128,0.3), transparent 25%), radial-gradient(circle at 100% 100%, rgba(74,222,128,0.3), transparent 25%);\"></div><div style=\"position:relative;z-index:1;width:100%;margin-top:12px;padding:8px;font-weight:bold;font-size:1.2em;color:#e0ffe0;text-shadow:0 0 8px #4ade80;display:flex;justify-content:center;align-items:center;\"><span style=\"font-size:1.3em;margin-right:8px;\">🌿</span> 吉 · 安泰</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -939,7 +939,7 @@
       "id": "84676d0e-1302-48e0-b8cf-d6b2827093bd",
       "scriptName": "天机推演_结果：平",
       "findRegex": "<r_n>",
-      "replaceString": " <strong>平</strong>",
+      "replaceString": "<div style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border:2px solid #00bfff;box-shadow:inset 0 0 20px rgba(0,191,255,0.3);background:radial-gradient(circle at 0% 0%, rgba(0,191,255,0.4), transparent 30%), radial-gradient(circle at 100% 0%, rgba(0,191,255,0.4), transparent 30%), radial-gradient(circle at 0% 100%, rgba(0,191,255,0.4), transparent 30%), radial-gradient(circle at 100% 100%, rgba(0,191,255,0.4), transparent 30%);\"></div><div style=\"position:relative;z-index:1;width:100%;margin-top:12px;padding:8px;font-weight:bold;font-size:1.2em;color:#e0ffff;text-shadow:0 0 5px #00bfff, 0 0 10px #0088ff;display:flex;justify-content:center;align-items:center;\"><span style=\"font-size:1.4em;margin-right:8px;filter:drop-shadow(0 0 8px #00bfff);\">☁️</span> 平 · 顺遂</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -949,7 +949,7 @@
       "id": "1a0f2897-bcd0-45f1-a63f-1faa47996c18",
       "scriptName": "天机推演_结果：凶",
       "findRegex": "<r_b>",
-      "replaceString": " <strong class=\"fr-story-status-note\">凶</strong>",
+      "replaceString": "<div style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border:1px solid #ff4500;box-shadow:inset 0 0 15px rgba(255,69,0,0.2);background:radial-gradient(circle at 50% 100%, rgba(255,69,0,0.2), transparent 60%);\"></div><div style=\"position:relative;z-index:1;width:100%;margin-top:12px;padding:8px;font-weight:bold;font-size:1.2em;color:#ffe0e0;text-shadow:0 0 8px #ff4500;display:flex;justify-content:center;align-items:center;\"><span style=\"font-size:1.3em;margin-right:8px;\">🔥</span> 小凶 · 波折</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -959,7 +959,7 @@
       "id": "37497bbd-bbe2-4628-a913-bc335f256f04",
       "scriptName": "天机推演_结果：大凶",
       "findRegex": "<r_bb>",
-      "replaceString": " <strong class=\"fr-story-status-note\">大凶</strong>",
+      "replaceString": "<div style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border:2px solid #ff0000;box-shadow:inset 0 0 30px rgba(255,0,0,0.3);background:radial-gradient(circle at 0% 0%, rgba(100,0,0,0.8), transparent 40%), radial-gradient(circle at 100% 0%, rgba(100,0,0,0.8), transparent 40%), radial-gradient(circle at 0% 100%, rgba(100,0,0,0.8), transparent 40%), radial-gradient(circle at 100% 100%, rgba(100,0,0,0.8), transparent 40%);\"></div><div style=\"position:relative;z-index:1;width:100%;margin-top:12px;padding:8px;font-weight:bold;font-size:1.2em;color:#ff3333;text-shadow:0 0 10px #f00;display:flex;justify-content:center;align-items:center;\"><span style=\"font-size:1.4em;margin-right:8px;filter:drop-shadow(0 0 5px red);\">☠</span> 大凶 · 大劫</div>",
       "runOnEdit": true,
       "placement": [
         2
@@ -969,7 +969,7 @@
       "id": "judgment_desc_open",
       "scriptName": "天机推演_结果描述_开",
       "findRegex": "<desc>",
-      "replaceString": "<div class=\"fr-story-artifact-result\">",
+      "replaceString": "<div style=\"margin-top:8px;padding-top:8px;border-top:1px dashed #5c4d3c;color:#aaa;font-size:0.95em;line-height:1.5;text-align:center;\">",
       "runOnEdit": true,
       "placement": [
         2

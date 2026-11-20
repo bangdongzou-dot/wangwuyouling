@@ -48,10 +48,6 @@ async function frRefreshOrdinarySettlementAfterReplay(context, cleared, pendingF
 }
 async function frEnsureCanonSettlementBase(logId,storyText,replay,options){
   var name=options?.archiveName||currentArchiveName;
-  var archive=await db.archives.get(name),log=archive?.data?.logs?.find(row=>row.id===logId);
-  if(!log)throw new Error('结算依据缺少本轮正文楼层');
-  if(replay&& log.canonSettlementBase){if(log.canonSettlementBase.logId!==logId)throw new Error('结算依据楼层不符');return structuredClone(log.canonSettlementBase);}
-  var rows=typeof ceBridgeReadStoredRows==='function'?await ceBridgeReadStoredRows():structuredClone(currentState['0']||{});
   var pending;
   var base=await db.transaction('rw',db.archives,async function(){
     var fresh=await db.archives.get(name),floor=fresh?.data?.logs?.find(row=>row.id===logId);
@@ -59,14 +55,37 @@ async function frEnsureCanonSettlementBase(logId,storyText,replay,options){
     if(!floor)throw new Error('结算依据缺少本轮正文楼层');
     if(options?.floorContent!==undefined&&floor.content!==options.floorContent)throw new Error('补演期间正文已变化，拒绝覆盖新状态');
     options?.signal?.throwIfAborted();
+    if(replay&&floor.canonSettlementBase){
+      if(floor.canonSettlementBase.logId!==logId)throw new Error('结算依据楼层不符');
+      return structuredClone(floor.canonSettlementBase);
+    }
+    var rows=typeof ceBridgeReadStoredRows==='function'?await ceBridgeReadStoredRows(fresh):structuredClone(currentState['0']||{});
     pending=frOrdinarySettlementPending?.archiveName===name&&frOrdinarySettlementPending.logId===logId?frOrdinarySettlementPending:null;
-    var previous=options?.refresh&&floor.canonSettlementBase?.logId===logId?floor.canonSettlementBase:null;
+    var saved=floor.canonSettlementBase;
+    var previous=(options?.refresh||saved?.ordinaryRecorded)&&saved?.logId===logId?saved:null;
     var current={version:1,archiveName:name,logId:logId,storyText:String(storyText||''),ordinaryStory:pending?.storyText||previous?.ordinaryStory||'',records:structuredClone(pending?.records||previous?.records||[]),partial:!!(pending?.partial??previous?.partial),failures:structuredClone(pending?.failures||previous?.failures||[]),afterRows:rows};
+    if(options?.ordinaryRecorded||previous?.ordinaryRecorded)current.ordinaryRecorded=true;
+    options?.signal?.throwIfAborted();
     floor.canonSettlementBase=current;await db.archives.put(fresh);
     return structuredClone(current);
   });
   if(!options?.keepPending&&frOrdinarySettlementPending===pending)frOrdinarySettlementPending=null;
   return base;
+}
+async function frPersistOrdinarySettlement(logId,storyText,{archiveName,signal,error}){
+  if(archiveName!==currentArchiveName)throw Object.assign(new Error('存档已切换'),{name:'AbortError'});
+  signal?.throwIfAborted();
+  let pending=frOrdinarySettlementPending;
+  if(pending?.archiveName!==archiveName||pending.logId!==logId){
+    if(!error)return null;
+    frRecordOrdinarySettlement({error},storyText,logId);
+    pending=frOrdinarySettlementPending;
+  }
+  if(error){
+    pending.partial=true;
+    pending.failures.push({error:String(error.message||error)});
+  }
+  return frEnsureCanonSettlementBase(logId,storyText,false,{archiveName,signal,refresh:true,ordinaryRecorded:true});
 }
 function frCanonSettlementRecords(base,targets){
   if(!base)return [];

@@ -1767,6 +1767,10 @@
       .fr-cultivation-card summary { cursor:pointer; width:fit-content; min-height:1.75rem; color:var(--fr-ui-accent,var(--fr-story-footer-time)); font-size:.82rem; }
       .fr-cultivation-breakdown { margin-block-start:.55rem; }
       .fr-cultivation-note { margin:.55rem 0 0; font-size:.82rem; color:var(--fr-ui-muted,var(--fr-story-footer-detail)); }
+      .fr-story-cultivation[data-fr-cultivation-receipt] details { margin-block-start:.45em; border-block-start:1px solid #3d554d; }
+      .fr-story-cultivation[data-fr-cultivation-receipt] summary { width:fit-content; padding:.45em 0; cursor:pointer; color:#98fbce; }
+      .fr-story-cultivation[data-fr-cultivation-receipt] :is(dt,.fr-cultivation-note) { color:#bdd2c7; }
+      .fr-story-cultivation[data-fr-cultivation-receipt] dd { color:#f0fff5; }
       .fr-story-ending .fr-story-status-details :is(.fr-story-status-mood,.fr-story-status-env) {
         color: inherit;
         font-style: normal;

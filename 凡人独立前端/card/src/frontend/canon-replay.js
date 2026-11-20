@@ -1396,7 +1396,6 @@ var frReplayStampCache=new WeakMap();
 var frReplayStampEpoch=0;
 function frReplayStampBump(){frReplayStampEpoch++;}
 async function frReplayStamp(archive,memory){
-  if(!globalThis.crypto?.subtle)throw new Error('当前运行环境不能计算重跑边界指纹');
   // 同一对象 + 同一 epoch（期间没有任何写回）→ 结果必然相同。
   try{
     var hitMem=frReplayStampCache.get(archive);
@@ -1404,8 +1403,7 @@ async function frReplayStamp(archive,memory){
   }catch(_){}
   // 先让出一帧，保证卡顿前 UI 已经刷新过一次（玩家能看到「正在核对」）。
   await new Promise(function(r){setTimeout(r,0);});
-  // Project only excluded display fields. Do not clone and recursively rebuild the
-  // entire history merely to sort its keys; stringify visits one shallow object at a time.
+  // Project only the same excluded display fields, preserving saved fingerprints.
   var copy=Object.assign({},archive);
   if(archive?.data){
     copy.data=Object.assign({},archive.data);
@@ -1418,17 +1416,7 @@ async function frReplayStamp(archive,memory){
       var projected=Object.assign({},log);delete projected.detailedEvolutionHtml;delete projected.canonPending;return projected;
     });
   }
-  var raw=JSON.stringify([copy,memory.state,memory.map,memory.bonded],function(key,value){
-    // Use the original value to preserve the former ordered() treatment of Dates,
-    // Maps and other structured-clone values (rather than invoking their toJSON).
-    var original=this[key];
-    if(original&&typeof original==='object'&&!Array.isArray(original)){
-      var sorted={};Object.keys(original).sort().forEach(function(k){sorted[k]=original[k];});return sorted;
-    }
-    return original;
-  });
-  var digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
-  var result=Array.from(new Uint8Array(digest)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
+  var result=CE_CORE['canonical-json'].hashCanonicalJson([copy,memory.state,memory.map,memory.bonded]);
   var epochAtStart=frReplayStampEpoch;
   try{frReplayStampCache.set(archive,{epoch:epochAtStart,value:result});}catch(_){}
   return result;
@@ -1476,6 +1464,8 @@ async function frReplayBefore(system,run,args){
       context.afterStamp=await frReplayStamp(archive,context.beforeMemory);
       // 独立开跑检查点不冒充已封存边界；只供主动整轮补跑恢复。
       await dbSet('FR_REPLAY_START_V1:'+key,context);
+      // 保存成功后由检查点持有回合前整档。模型执行期间无需留两份大图历史在内存中。
+      delete context.beforeArchive;
     }
   }catch(error){frCanonTraceEvent(run,'error','本轮局部重跑边界未记录',{reason:String(error.message||error)});}
 }
@@ -1493,16 +1483,24 @@ async function frReplaySealPending(onlySystem){
       if(!log||name!==currentArchiveName||frReplayPending[key]!==context)continue;
       // archives.get already owns an isolated IndexedDB snapshot. Transfer it to the boundary;
       // cloning the full history/images again doubles this snapshot at the sealing peak.
-      context.logId=log.id;context.afterMemory=frTakeCanonMemory();context.afterArchive=archive;context.afterStamp=await frReplayStamp(archive,context.afterMemory);
-      context.sealedAt=Date.now();
-      if(system==='ce'&&run.ceWriteJournal)context.ceWriteJournal=structuredClone(run.ceWriteJournal);
+      const afterMemory=frTakeCanonMemory(),afterStamp=await frReplayStamp(archive,afterMemory);
+      let beforeArchive=context.beforeArchive;
+      if(!beforeArchive){
+        const start=await dbGet('FR_REPLAY_START_V1:'+key);
+        if(start?.sourceRunId!==context.sourceRunId || String(start.logId)!==String(context.logId) || !start.beforeArchive)
+          throw new Error('本轮起始检查点无法读回');
+        beforeArchive=start.beforeArchive;
+      }
+      if(name!==currentArchiveName||frReplayPending[key]!==context)continue;
+      const sealed={...context,logId:log.id,beforeArchive,afterMemory,afterArchive:archive,afterStamp,sealedAt:Date.now()};
+      if(system==='ce'&&run.ceWriteJournal)sealed.ceWriteJournal=structuredClone(run.ceWriteJournal);
       var mergedRun=system==='ce'&&frCanonTraceHistory.find(function(r){return r.id===context.sourceRunId;});
       var executionResult=mergedRun&&frReplayResultOf(mergedRun);
       if(executionResult&&executionResult.mergedReplayReceipt){
-        context.mergedReplayReceipt=structuredClone(executionResult.mergedReplayReceipt);
-        context.pendingFailures=frReplayUpdatePendingFailures(context,{stages:[],scopes:[]},context.mergedReplayReceipt);
+        sealed.mergedReplayReceipt=structuredClone(executionResult.mergedReplayReceipt);
+        sealed.pendingFailures=frReplayUpdatePendingFailures(sealed,{stages:[],scopes:[]},sealed.mergedReplayReceipt);
       }
-      await dbSet('FR_REPLAY_BASE_V1:'+key,context);
+      await dbSet('FR_REPLAY_BASE_V1:'+key,sealed);
       if(frReplayPending[key]===context)delete frReplayPending[key];
       run.logId=log.id;await frCanonTracePersist(run);
       /* ★★★ 2026-11-03 玩家拍板：「补演流程过程中生成的数据在本轮中都应该作为持久性数据资料存在。
@@ -2525,13 +2523,13 @@ function ceHasReplayMaterial(){
 }
 async function frReplayReadContext(system,defaults){
   defaults=defaults||{};await frCanonTraceLoad();
-  var name=currentArchiveName,context=await dbGet('FR_REPLAY_BASE_V1:'+name+':'+system);
+  var name=currentArchiveName,context;
   // The persisted boundary is replaced only at settlement. While that is pending,
   // display this round's recorded requests rather than a deleted previous floor.
   var pendingContext=typeof frReplayPending==='object'&&frReplayPending[name+':'+system];
   if(pendingContext&&pendingContext.archiveName===name&&pendingContext.system===system){
     context={...pendingContext,unsealed:true};
-  }
+  }else context=await dbGet('FR_REPLAY_BASE_V1:'+name+':'+system);
   /* 2026-11-02 玩家：「变量演化的局部重跑只是给他做个前端入口，
    *                    他本身的后端逻辑是闭环自带的」
    *           「变量演化的材料就是玩家的正文剧情……是不存在资料丢失的」

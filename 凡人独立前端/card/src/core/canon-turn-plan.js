@@ -9,6 +9,11 @@ import {loadLedger,mergeEventWatches} from './ledger.js';
 import {withRetry} from './retry.js';
 import {activePrebuiltImpacts,prebuiltBoundaryEvents,routePrebuiltBoundary} from './canon-prebuilt.js';
 import {eventProgressForModel,isOrdinarySourceOnlyNode} from './canon-event-details.js';
+import {hashCanonicalJson} from './canonical-json.js';
+
+function boundaryTimelineSignature(timeline) {
+  return Array.isArray(timeline) ? 'sha256:'+hashCanonicalJson(timeline) : timeline;
+}
 
 const codeOf=event=>String(event.code || event.eventId || eventCodeFromTitle(event.title) || '');
 export function ordinaryUnreachedEvents(events,observed=[],saved=[],until='',storyText=''){
@@ -51,7 +56,7 @@ export function eventWithActualWindow(event,progress=[],until=''){
     content_brief:brief+'\n【实际时序变异】'+timing.reason+'；原著参考 '+start+' → '+end+'。仅推演实际已启动且仍可能继续的部分，不将参考日期当成已发生事实。'};
 }
 export function canonBoundaryInputStamp(src){
-  // 保存完整签名以避免短哈希碰撞使重roll误用旧判断；活跃名册不属于语义输入。
+  // 保留语义字段，完整年表使用 SHA-256 指纹。活跃名册不属于语义输入。
   //
   // 2026-10-31 玩家反馈：「我改一下设置怎么就不行了，那这种情况不就无解了吗？」
   //
@@ -89,7 +94,7 @@ export function canonBoundaryInputStamp(src){
   ));
   // prepareCanonTurnPlanBoundary 只有显式 false 才推断时间，其余均使用给定终点。
   semanticOptions.bodyTimeKnown=options.bodyTimeKnown!==false;
-  return JSON.stringify({version:2,save:src.saveId || src.archiveName || '',branch:src.branchId || '',log:src.logId || '',turn:src.turnNo || options.turnNo,story:src.storyText,start:src.worldTime,end:src.targetTime,timeline:src.timeline,characters:src.characters,before:src.beforeStateRows,progress:src.eventProgress,watches:src.eventWatches,...(src.mutationNotes?.length?{mutationNotes:src.mutationNotes}:{}),open:src.openEvents,debts:src.debts,hooks:src.hooks,material:src.materialState,options:semanticOptions});
+  return JSON.stringify({version:2,save:src.saveId || src.archiveName || '',branch:src.branchId || '',log:src.logId || '',turn:src.turnNo || options.turnNo,story:src.storyText,start:src.worldTime,end:src.targetTime,timeline:boundaryTimelineSignature(src.timeline),characters:src.characters,before:src.beforeStateRows,progress:src.eventProgress,watches:src.eventWatches,...(src.mutationNotes?.length?{mutationNotes:src.mutationNotes}:{}),open:src.openEvents,debts:src.debts,hooks:src.hooks,material:src.materialState,options:semanticOptions});
 }
 
 // 兼容已保存的 v2 签名。旧签名重复收录 options.turnNo，提交后重跑会自行加一；
@@ -98,6 +103,7 @@ function canonicalBoundaryStamp(stamp){
   try{
     const value=JSON.parse(stamp);
     if(value.version!==2)return null;
+    if(Array.isArray(value.timeline))value.timeline=boundaryTimelineSignature(value.timeline);
     if(value.options){
       delete value.options.turnNo;delete value.options.ordinaryIndependent;delete value.options.canonPushBoundaryVersion;
       delete value.options.prebuiltLanding;delete value.options.prebuiltOrdinaryExclusive;
