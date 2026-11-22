@@ -1,10 +1,14 @@
 # 凡人修仙传 · 原著补演
 
-Windows PC 版游戏源码。安装包与更新说明请见仓库的 Releases。
+Windows PC 版游戏安装包、热更新和更新说明。仓库的源码构建说明对应 1.2.1。
 
 ## 从源码构建
 
 进入「凡人独立前端」，运行 `npm ci` 安装依赖，再运行 `npm run dist:win` 生成 Windows x64 安装包。项目采用 Node.js 24 和 Electron 33 完成此次构建。
+
+## 1.2.2 更新方式
+
+已有玩家可在游戏内更新，也可正常退出后用 [1.2.2 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.2) 覆盖安装。新版内置 E-001～E-129 年表及配套预制成品。详见 [PC 版更新日志](发布包/版本更新日志/v1.2.2-PC版对外更新日志.md)。
 
 ## 1.2.1 更新方式
 
