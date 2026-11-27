@@ -6,6 +6,10 @@ Windows PC 版游戏安装包、热更新和更新说明。仓库的源码构建
 
 进入「凡人独立前端」，运行 `npm ci` 安装依赖，再运行 `npm run dist:win` 生成 Windows x64 安装包。项目采用 Node.js 24 和 Electron 33 完成此次构建。
 
+## 1.2.4 更新方式
+
+已有玩家可在游戏内更新，也可正常退出后用 [1.2.4 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.4) 覆盖安装。游戏当前处于测试阶段，内置预制成品覆盖 E-001～E-129。详见 [PC 版更新日志](发布包/版本更新日志/v1.2.4-PC版对外更新日志.md)。
+
 ## 1.2.3 更新方式
 
 已有玩家可在游戏内更新，也可正常退出后用 [1.2.3 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.3) 覆盖安装。游戏当前处于测试阶段，内置预制成品覆盖 E-001～E-129。详见 [PC 版更新日志](发布包/版本更新日志/v1.2.3-PC版对外更新日志.md)。
