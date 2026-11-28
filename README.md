@@ -10,6 +10,8 @@ Windows PC 版游戏安装包、热更新和更新说明。仓库的源码构建
 
 已有玩家可在游戏内更新，也可正常退出后用 [1.2.4 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.4) 覆盖安装。游戏当前处于测试阶段，内置预制成品覆盖 E-001～E-129。详见 [PC 版更新日志](发布包/版本更新日志/v1.2.4-PC版对外更新日志.md)。
 
+2026-11-28 更新了 1.2.4 同版本正文修正。已安装的玩家可在游戏内检查更新，也可下载 [Windows x64 修正版安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/download/v1.2.4/Fanren-Replay-Setup-1.2.4-hotfix-20261128.exe)。
+
 ## 1.2.3 更新方式
 
 已有玩家可在游戏内更新，也可正常退出后用 [1.2.3 安装包](https://github.com/bangdongzou-dot/wangwuyouling/releases/tag/v1.2.3) 覆盖安装。游戏当前处于测试阶段，内置预制成品覆盖 E-001～E-129。详见 [PC 版更新日志](发布包/版本更新日志/v1.2.3-PC版对外更新日志.md)。
